@@ -1,0 +1,48 @@
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+interface EnvConfig {
+  port: number;
+  nodeEnv: string;
+  apiBaseUrl: string;
+  databaseUrl: string;
+  jwtSecret: string;
+  jwtExpiresIn: string;
+  esimAccessApiUrl: string;
+  esimAccessAccessCode: string;
+  esimAccessSecretKey: string;
+  redisUrl: string;
+  corsOrigin: string;
+  resendApiKey: string;
+  resendFromEmail: string;
+  frontendUrl: string;
+  clerkSecretKey: string;
+}
+
+function getEnvVar(key: string, defaultValue?: string): string {
+  const value = process.env[key];
+  if (!value && !defaultValue) {
+    throw new Error(`Missing required environment variable: ${key}`);
+  }
+  return value || defaultValue!;
+}
+
+export const env: EnvConfig = {
+  port: parseInt(getEnvVar('PORT', '3000'), 10),
+  nodeEnv: getEnvVar('NODE_ENV', 'development'),
+  apiBaseUrl: getEnvVar('API_BASE_URL', 'http://localhost:3000'),
+  databaseUrl: getEnvVar('DATABASE_URL'),
+  jwtSecret: getEnvVar('JWT_SECRET'),
+  jwtExpiresIn: getEnvVar('JWT_EXPIRES_IN', '7d'),
+  esimAccessApiUrl: getEnvVar('ESIM_ACCESS_API_URL', 'https://api.esimaccess.com'),
+  esimAccessAccessCode: getEnvVar('ESIM_ACCESS_ACCESS_CODE'),
+  esimAccessSecretKey: getEnvVar('ESIM_ACCESS_SECRET_KEY'),
+  redisUrl: getEnvVar('REDIS_URL', 'redis://localhost:6379'),
+  corsOrigin: getEnvVar('CORS_ORIGIN', 'http://localhost:8080,http://localhost:5173,https://unsynchronous-theresia-indefinite.ngrok-free.dev'),
+  resendApiKey: getEnvVar('RESEND_API_KEY', ''),
+  resendFromEmail: getEnvVar('RESEND_FROM_EMAIL', 'noreply@esimlaunch.com'),
+  frontendUrl: getEnvVar('FRONTEND_URL', 'http://localhost:5173'),
+  clerkSecretKey: getEnvVar('CLERK_SECRET_KEY', ''),
+};
+

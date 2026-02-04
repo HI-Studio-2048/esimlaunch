@@ -1,0 +1,203 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ServiceType {
+  EASY
+  ADVANCED
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WebhookEventType {
+  ORDER_STATUS
+  ESIM_STATUS
+  DATA_USAGE
+  VALIDITY_USAGE
+  BALANCE_LOW
+  SMDP_EVENT
+}
+
+model Merchant {
+  id          String      @id @default(uuid())
+  email       String      @unique
+  password    String      // Hashed password
+  name        String?
+  serviceType ServiceType @default(ADVANCED)
+  isActive    Boolean     @default(true)
+  clerkUserId String?     @unique // Clerk user ID for OAuth
+  emailVerified Boolean   @default(false)
+  emailVerificationToken String? @unique
+  emailVerificationExpires DateTime?
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret String?
+  sessions        Session[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  apiKeys      ApiKey[]
+  orders       Order[]
+  webhookConfigs WebhookConfig[]
+  apiLogs      ApiLog[]
+  stores      Store[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@index([email])
+  @@index([serviceType])
+}
+
+model ApiKey {
+  id          String   @id @default(uuid())
+  key         String   @unique // Hashed API key
+  keyPrefix   String   // First 8 chars for display (e.g., "sk_live_ab")
+  merchantId  String
+  name        String?  // Optional name for the key
+  rateLimit   Int      @default(100) // Requests per minute
+  isActive    Boolean  @default(true)
+  lastUsedAt  DateTime?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+
+  // Relations
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([keyPrefix])
+}
+
+model Order {
+  id                  String      @id @default(uuid())
+  merchantId          String
+  transactionId      String      // Merchant's unique transaction ID
+  esimAccessOrderNo   String?     // Order number from eSIM Access
+  status              OrderStatus @default(PENDING)
+  totalAmount         BigInt?     // Amount in smallest currency unit (price * 10000)
+  packageCount        Int         @default(0)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  // Relations
+  merchant            Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, transactionId])
+  @@index([merchantId])
+  @@index([esimAccessOrderNo])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model WebhookConfig {
+  id          String            @id @default(uuid())
+  merchantId  String
+  url         String
+  events      WebhookEventType[]
+  isActive    Boolean           @default(true)
+  secret      String?           // Optional webhook secret for verification
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  // Relations
+  merchant    Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+}
+
+model ApiLog {
+  id            String   @id @default(uuid())
+  merchantId    String?
+  apiKeyId      String?
+  endpoint      String
+  method        String
+  statusCode    Int
+  responseTime  Int       // Milliseconds
+  ipAddress     String?
+  userAgent     String?
+  requestBody   Json?     // Store request body for debugging
+  responseBody  Json?     // Store response body (truncated if large)
+  errorMessage  String?
+  createdAt     DateTime  @default(now())
+
+  // Relations
+  merchant      Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  @@index([merchantId])
+  @@index([apiKeyId])
+  @@index([endpoint])
+  @@index([createdAt])
+}
+
+model Store {
+  id              String   @id @default(uuid())
+  merchantId      String
+  name            String
+  domain          String?  @unique // Custom domain
+  subdomain       String?  @unique // Subdomain (e.g., "merchant1.esimlaunch.io")
+  
+  // Branding
+  businessName    String
+  primaryColor    String   @default("#6366f1")
+  secondaryColor  String   @default("#8b5cf6")
+  accentColor     String   @default("#22c55e")
+  logoUrl         String?
+  
+  // Configuration
+  selectedPackages Json?    // Array of package codes/slugs to sell
+  pricingMarkup   Json?     // Markup configuration per package or global
+  
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relations
+  merchant        Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([domain])
+  @@index([subdomain])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([merchantId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+
+  @@index([merchantId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
