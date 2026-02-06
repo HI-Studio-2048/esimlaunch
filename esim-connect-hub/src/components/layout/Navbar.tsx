@@ -1,11 +1,20 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, LogOut, User, Settings } from "lucide-react";
+import { Menu, X, LogOut, User, Settings, Rocket, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
+
+// Import Clerk if available (will be undefined if Clerk isn't configured)
+let useClerk: (() => any) | undefined;
+try {
+  const clerkModule = require("@clerk/clerk-react");
+  useClerk = clerkModule.useClerk;
+} catch (e) {
+  // Clerk not available - that's okay
+}
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +39,17 @@ export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuth();
+  
+  // Use Clerk hook if available (must be called unconditionally)
+  let clerk: any = null;
+  try {
+    if (useClerk) {
+      clerk = useClerk();
+    }
+  } catch (e) {
+    // Clerk not available or not in ClerkProvider context
+    clerk = null;
+  }
 
   useEffect(() => {
     const handleScroll = () => {
@@ -114,6 +134,18 @@ export function Navbar() {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
+                      <Link to="/onboarding" className="flex items-center gap-2 cursor-pointer">
+                        <Rocket className="w-4 h-4" />
+                        Onboarding
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link to="/store-preview" className="flex items-center gap-2 cursor-pointer">
+                        <Store className="w-4 h-4" />
+                        Store Preview
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
                       <Link to="/settings" className="flex items-center gap-2 cursor-pointer">
                         <Settings className="w-4 h-4" />
                         Settings
@@ -121,7 +153,16 @@ export function Navbar() {
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={() => {
+                      onClick={async () => {
+                        // Sign out from Clerk if available
+                        if (clerk) {
+                          try {
+                            await clerk.signOut();
+                          } catch (e) {
+                            console.error('Clerk sign out error:', e);
+                          }
+                        }
+                        // Clear local auth state
                         logout();
                         navigate("/");
                       }}
@@ -211,12 +252,27 @@ export function Navbar() {
                         <Link to="/dashboard">Dashboard</Link>
                       </Button>
                       <Button variant="outline" className="w-full" asChild>
+                        <Link to="/onboarding">Onboarding</Link>
+                      </Button>
+                      <Button variant="outline" className="w-full" asChild>
+                        <Link to="/store-preview">Store Preview</Link>
+                      </Button>
+                      <Button variant="outline" className="w-full" asChild>
                         <Link to="/settings">Settings</Link>
                       </Button>
                       <Button
                         variant="destructive"
                         className="w-full"
-                        onClick={() => {
+                        onClick={async () => {
+                          // Sign out from Clerk if available
+                          if (clerk) {
+                            try {
+                              await clerk.signOut();
+                            } catch (e) {
+                              console.error('Clerk sign out error:', e);
+                            }
+                          }
+                          // Clear local auth state
                           logout();
                           navigate("/");
                           setIsMobileMenuOpen(false);

@@ -138,7 +138,7 @@ export default function DemoStorePartners() {
             className="text-white hover:opacity-90"
             asChild
           >
-            <a href="mailto:partners@esimlaunch.io">Contact Partnership Team</a>
+            <a href="mailto:partners@esimlaunch.com">Contact Partnership Team</a>
           </Button>
         </div>
       </section>

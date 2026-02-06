@@ -45,7 +45,7 @@ export default function DemoStoreRefundPolicy() {
               },
               {
                 title: "2. How to Request a Refund",
-                content: "Contact our support team at support@esimlaunch.io with your order number. We'll process your refund within 5-7 business days.",
+                content: "Contact our support team at support@esimlaunch.com with your order number. We'll process your refund within 5-7 business days.",
               },
               {
                 title: "3. Refund Processing",

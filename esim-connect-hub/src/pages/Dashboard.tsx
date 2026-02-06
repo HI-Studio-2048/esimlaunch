@@ -8,9 +8,17 @@ import {
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { AnimatedCounter } from "@/components/shared/AnimatedCounter";
+import { SetupChecklist, SetupStep } from "@/components/shared/SetupChecklist";
 import { cn } from "@/lib/utils";
 import { apiClient, ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { 
+  getOnboardingProgress, 
+  updateOnboardingProgress,
+  getStepCompletionDate,
+  markStepCompleted
+} from "@/lib/onboardingProgress";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +32,7 @@ import { Label } from "@/components/ui/label";
 
 export default function Dashboard() {
   const { toast } = useToast();
+  const { user, isAuthenticated } = useAuth();
   const [stats, setStats] = useState({
     revenue: { total: 0, change: null as number | null },
     orders: { total: 0, completed: 0, pending: 0, change: null as number | null },
@@ -32,10 +41,12 @@ export default function Dashboard() {
   });
   const [orders, setOrders] = useState<any[]>([]);
   const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [newApiKeyName, setNewApiKeyName] = useState("");
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [setupSteps, setSetupSteps] = useState<SetupStep[]>([]);
 
   useEffect(() => {
     loadDashboardData();
@@ -44,10 +55,11 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [statsData, ordersData, apiKeysData] = await Promise.all([
+      const [statsData, ordersData, apiKeysData, storesData] = await Promise.all([
         apiClient.getDashboardStats().catch(() => null),
         apiClient.getOrders(1, 5).catch(() => null),
         apiClient.listApiKeys().catch(() => null),
+        apiClient.listStores().catch(() => null),
       ]);
 
       if (statsData) {
@@ -59,12 +71,96 @@ export default function Dashboard() {
       if (apiKeysData) {
         setApiKeys(apiKeysData);
       }
+      if (storesData) {
+        setStores(storesData);
+      }
+
+      // Update onboarding progress based on actual data
+      const progressUpdates: any = {
+        account: isAuthenticated,
+      };
+      
+      if (storesData && storesData.length > 0) {
+        progressUpdates.store = true;
+        progressUpdates.domain = storesData.some((s: any) => s.domain || s.subdomain);
+      }
+      
+      if (ordersData && ordersData.orders && ordersData.orders.length > 0) {
+        progressUpdates.firstSale = true;
+      }
+      
+      updateOnboardingProgress(progressUpdates);
+      
+      // Mark account as completed if authenticated and not already marked
+      if (isAuthenticated) {
+        const currentProgress = getOnboardingProgress();
+        if (!currentProgress.account) {
+          markStepCompleted('account', new Date().toISOString());
+        }
+      }
+
+      // Build setup steps
+      buildSetupSteps(storesData, ordersData?.orders || []);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
       // Use demo data as fallback
     } finally {
       setLoading(false);
     }
+  };
+
+  const buildSetupSteps = (storesData: any[] | null, ordersData: any[]) => {
+    const progress = getOnboardingProgress();
+    const hasStore = storesData && storesData.length > 0;
+    const hasDomain = storesData && storesData.some((s: any) => s.domain || s.subdomain);
+    const hasFirstSale = ordersData.length > 0;
+
+    const steps: SetupStep[] = [
+      {
+        id: 'account',
+        title: 'Create Account',
+        description: 'Sign up for your esimlaunch.com account',
+        completed: progress.account || isAuthenticated,
+        completedDate: getStepCompletionDate('account') || (isAuthenticated ? new Date().toISOString() : undefined),
+        link: '/signup',
+      },
+      {
+        id: 'subscription',
+        title: 'Choose Subscription',
+        description: 'Select a plan that fits your business',
+        completed: progress.subscription,
+        completedDate: getStepCompletionDate('subscription'),
+        link: '/pricing',
+      },
+      {
+        id: 'store',
+        title: 'Create Your Store',
+        description: 'Deploy your eSIM selling platform',
+        completed: progress.store || hasStore,
+        completedDate: getStepCompletionDate('store') || (hasStore ? new Date().toISOString() : undefined),
+        link: '/onboarding',
+      },
+      {
+        id: 'domain',
+        title: 'Configure Domain',
+        description: 'Set up your custom domain',
+        completed: progress.domain || hasDomain,
+        completedDate: getStepCompletionDate('domain') || (hasDomain ? new Date().toISOString() : undefined),
+        link: '/settings#domain',
+        optional: true,
+      },
+      {
+        id: 'firstSale',
+        title: 'Make First Sale',
+        description: 'Complete your first eSIM transaction',
+        completed: progress.firstSale || hasFirstSale,
+        completedDate: getStepCompletionDate('firstSale') || (hasFirstSale ? new Date().toISOString() : undefined),
+        link: '/store-preview',
+        optional: true,
+      },
+    ];
+
+    setSetupSteps(steps);
   };
 
   const handleCreateApiKey = async () => {
@@ -176,6 +272,11 @@ export default function Dashboard() {
       </div>
 
       <div className="container-custom py-8 relative z-10">
+        {/* Setup Checklist */}
+        {setupSteps.length > 0 && (
+          <SetupChecklist steps={setupSteps} />
+        )}
+
         {/* Notice Banner */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}

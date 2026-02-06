@@ -104,7 +104,7 @@ export default function Cookies() {
               <section>
                 <h2 className="font-display text-2xl font-bold mb-4">Contact Us</h2>
                 <p className="text-muted-foreground">
-                  Questions about our cookie practices? Contact us at privacy@esimlaunch.io.
+                  Questions about our cookie practices? Contact us at privacy@esimlaunch.com.
                 </p>
               </section>
             </div>

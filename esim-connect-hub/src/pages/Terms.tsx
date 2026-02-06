@@ -94,7 +94,7 @@ export default function Terms() {
               <section>
                 <h2 className="font-display text-2xl font-bold mb-4">10. Contact</h2>
                 <p className="text-muted-foreground">
-                  For questions about these Terms, please contact us at legal@esimlaunch.io.
+                  For questions about these Terms, please contact us at legal@esimlaunch.com.
                 </p>
               </section>
             </div>

@@ -79,7 +79,7 @@ export default function DemoStoreCareers() {
                         className="text-white hover:opacity-90"
                         asChild
                       >
-                        <a href={`mailto:careers@esimlaunch.io?subject=Application: ${position.title}`}>
+                        <a href={`mailto:careers@esimlaunch.com?subject=Application: ${position.title}`}>
                           Apply Now
                         </a>
                       </Button>
@@ -104,7 +104,7 @@ export default function DemoStoreCareers() {
             className="text-white hover:opacity-90"
             asChild
           >
-            <a href="mailto:careers@esimlaunch.io">Send Your Resume</a>
+            <a href="mailto:careers@esimlaunch.com">Send Your Resume</a>
           </Button>
         </div>
       </section>

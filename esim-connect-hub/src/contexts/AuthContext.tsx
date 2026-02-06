@@ -129,19 +129,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    // If using Clerk, try to sign out from Clerk
+    // If using Clerk, sign out from Clerk first
     if (clerkPubKey) {
       try {
         const { useClerk } = await import("@clerk/clerk-react");
-        // Clerk sign out will be handled by ClerkProvider
+        // We can't use hooks here, so we'll need to handle Clerk sign out differently
+        // The ClerkProvider's afterSignOutUrl will handle navigation
+        // For now, we'll clear local state and let Clerk handle its own sign out
       } catch (e) {
         // Clerk not available, continue with normal logout
       }
     }
     
+    // Clear all authentication state
     setUser(null);
     localStorage.removeItem('jwt_token');
     sessionStorage.removeItem('jwt_token');
+    localStorage.removeItem('api_key');
     apiClient.setJwtToken(null);
     apiClient.setApiKey(null);
     setError(null);

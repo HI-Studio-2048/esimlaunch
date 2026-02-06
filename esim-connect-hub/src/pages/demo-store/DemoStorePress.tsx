@@ -138,7 +138,7 @@ export default function DemoStorePress() {
             className="text-white hover:opacity-90"
             asChild
           >
-            <a href="mailto:press@esimlaunch.io">Contact Press Team</a>
+            <a href="mailto:press@esimlaunch.com">Contact Press Team</a>
           </Button>
         </div>
       </section>

@@ -267,7 +267,7 @@ export default function StorePreview() {
                 </div>
                 <div className="flex-1 bg-background rounded-lg px-3 py-1.5 text-xs text-muted-foreground flex items-center gap-2">
                   <Globe className="h-3 w-3" />
-                  {config.businessName.toLowerCase().replace(/\s+/g, '')}.esimlaunch.io
+                  {config.businessName.toLowerCase().replace(/\s+/g, '')}.esimlaunch.com
                 </div>
               </div>
 

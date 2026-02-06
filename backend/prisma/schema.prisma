@@ -156,7 +156,7 @@ model Store {
   merchantId      String
   name            String
   domain          String?  @unique // Custom domain
-  subdomain       String?  @unique // Subdomain (e.g., "merchant1.esimlaunch.io")
+  subdomain       String?  @unique // Subdomain (e.g., "merchant1.esimlaunch.com")
   
   // Branding
   businessName    String

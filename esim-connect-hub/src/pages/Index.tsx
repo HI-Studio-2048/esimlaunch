@@ -51,20 +51,20 @@ const dashboardPreviews = [
 const testimonials = [
   { 
     quote: "We launched our eSIM store in under 2 hours. The dashboard is incredibly intuitive.", 
-    author: "Sarah Chen", 
-    role: "CEO, TravelConnect",
+    author: "Daniel Philip", 
+    role: "CEO, Voyo eSIMs",
     rating: 5
   },
   { 
     quote: "The margin controls let us optimize pricing across 50+ destinations. Revenue up 40%.", 
-    author: "Marcus Rodriguez", 
-    role: "Founder, GlobalSIM",
+    author: "Marvs", 
+    role: "Founder, Cheap eSIMs",
     rating: 5
   },
   { 
-    quote: "White label options meant we could brand everything as our own. Customers love it.", 
-    author: "Emma Thompson", 
-    role: "Head of Digital, StayConnected",
+    quote: "i dont know man im just here for the shoutout.", 
+    author: "lil_ran", 
+    role: "some guy",
     rating: 5
   },
 ];

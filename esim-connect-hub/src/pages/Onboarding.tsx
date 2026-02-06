@@ -8,6 +8,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { DNSInstructions } from "@/components/shared/DNSInstructions";
+import { markStepCompleted } from "@/lib/onboardingProgress";
+import { cn } from "@/lib/utils";
 import {
   User,
   Palette,
@@ -19,6 +22,7 @@ import {
   ArrowLeft,
   Upload,
   Globe,
+  AlertCircle,
 } from "lucide-react";
 
 const steps = [
@@ -86,16 +90,46 @@ const Onboarding = () => {
     }
   };
 
-  const handleLaunch = () => {
+  const handleLaunch = async () => {
     setIsLoading(true);
-    setTimeout(() => {
+    
+    try {
+      // Create store via API
+      // Note: This is a placeholder - you may need to adjust based on your actual store creation flow
+      const storeData = {
+        name: profile.businessName || "My Store",
+        businessName: profile.businessName,
+        domain: branding.customDomain || undefined,
+        subdomain: branding.customDomain ? undefined : profile.businessName.toLowerCase().replace(/\s+/g, ''),
+        primaryColor: branding.primaryColor,
+        tagline: branding.tagline,
+      };
+
+      // Mark onboarding steps as completed
+      const completionDate = new Date().toISOString();
+      markStepCompleted('store', completionDate);
+      
+      if (branding.customDomain) {
+        markStepCompleted('domain', completionDate);
+      }
+
+      // Simulate store creation (replace with actual API call)
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
       setIsLoading(false);
       toast({
         title: "🚀 Congratulations!",
         description: "Your eSIM store is now live. Welcome to eSIMLaunch!",
       });
       navigate("/dashboard");
-    }, 2000);
+    } catch (error) {
+      setIsLoading(false);
+      toast({
+        title: "Error",
+        description: "Failed to create store. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   const renderStepContent = () => {
@@ -355,68 +389,105 @@ const BrandingStep = ({
 }: {
   branding: BrandingData;
   setBranding: React.Dispatch<React.SetStateAction<BrandingData>>;
-}) => (
-  <div className="space-y-6">
-    <div>
-      <h2 className="text-2xl font-bold mb-2">Customize your brand</h2>
-      <p className="text-muted-foreground">
-        Make your store reflect your unique identity.
-      </p>
-    </div>
+}) => {
+  const [dnsExpanded, setDnsExpanded] = useState(false);
 
-    <div className="grid md:grid-cols-2 gap-6">
-      <div className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="primaryColor">Brand Color</Label>
-          <div className="flex gap-3">
-            <input
-              type="color"
-              id="primaryColor"
-              value={branding.primaryColor}
-              onChange={(e) => setBranding({ ...branding, primaryColor: e.target.value })}
-              className="w-12 h-12 rounded-lg cursor-pointer border-0"
-            />
+  const validateDomain = (domain: string): boolean => {
+    if (!domain) return true; // Empty is valid (optional)
+    const domainRegex = /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i;
+    return domainRegex.test(domain);
+  };
+
+  const isDomainValid = validateDomain(branding.customDomain);
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Customize your brand</h2>
+        <p className="text-muted-foreground">
+          Make your store reflect your unique identity.
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="primaryColor">Brand Color</Label>
+            <div className="flex gap-3">
+              <input
+                type="color"
+                id="primaryColor"
+                value={branding.primaryColor}
+                onChange={(e) => setBranding({ ...branding, primaryColor: e.target.value })}
+                className="w-12 h-12 rounded-lg cursor-pointer border-0"
+              />
+              <Input
+                value={branding.primaryColor}
+                onChange={(e) => setBranding({ ...branding, primaryColor: e.target.value })}
+                className="flex-1"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="tagline">Tagline</Label>
             <Input
-              value={branding.primaryColor}
-              onChange={(e) => setBranding({ ...branding, primaryColor: e.target.value })}
-              className="flex-1"
+              id="tagline"
+              placeholder="Your catchy tagline..."
+              value={branding.tagline}
+              onChange={(e) => setBranding({ ...branding, tagline: e.target.value })}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="customDomain">
+              Custom Domain <span className="text-muted-foreground text-xs">(optional)</span>
+            </Label>
+            <Input
+              id="customDomain"
+              placeholder="esim.yourcompany.com"
+              value={branding.customDomain}
+              onChange={(e) => setBranding({ ...branding, customDomain: e.target.value })}
+              className={cn(
+                branding.customDomain && !isDomainValid && "border-destructive"
+              )}
+            />
+            {branding.customDomain && !isDomainValid && (
+              <p className="text-xs text-destructive flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                Please enter a valid domain name (e.g., esim.yourcompany.com)
+              </p>
+            )}
+            {branding.customDomain && isDomainValid && (
+              <p className="text-xs text-muted-foreground">
+                Enter your domain without http:// or https://
+              </p>
+            )}
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="tagline">Tagline</Label>
-          <Input
-            id="tagline"
-            placeholder="Your catchy tagline..."
-            value={branding.tagline}
-            onChange={(e) => setBranding({ ...branding, tagline: e.target.value })}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="customDomain">Custom Domain (optional)</Label>
-          <Input
-            id="customDomain"
-            placeholder="esim.yourcompany.com"
-            value={branding.customDomain}
-            onChange={(e) => setBranding({ ...branding, customDomain: e.target.value })}
-          />
+          <Label>Logo Upload</Label>
+          <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
+            <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+            <p className="text-sm text-muted-foreground mb-2">
+              Drag & drop your logo here, or click to browse
+            </p>
+            <p className="text-xs text-muted-foreground">PNG, JPG up to 2MB</p>
+            <input type="file" className="hidden" accept="image/*" />
+          </div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>Logo Upload</Label>
-        <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-          <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground mb-2">
-            Drag & drop your logo here, or click to browse
-          </p>
-          <p className="text-xs text-muted-foreground">PNG, JPG up to 2MB</p>
-          <input type="file" className="hidden" accept="image/*" />
-        </div>
-      </div>
-    </div>
+    {/* DNS Instructions */}
+    {branding.customDomain && isDomainValid && (
+      <DNSInstructions
+        domain={branding.customDomain}
+        targetDomain="yourstore.esimlaunch.com"
+        isExpanded={dnsExpanded}
+        onToggle={() => setDnsExpanded(!dnsExpanded)}
+      />
+    )}
 
     {/* Preview */}
     <div className="p-6 rounded-xl bg-card border">
@@ -437,7 +508,8 @@ const BrandingStep = ({
       </div>
     </div>
   </div>
-);
+  );
+};
 
 // Step 3: Provider
 const ProviderStep = ({

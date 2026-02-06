@@ -24,9 +24,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { User, Lock, Trash2, Eye, EyeOff, Save, Mail, CheckCircle, XCircle, Shield, Monitor, LogOut, Loader2 } from "lucide-react";
+import { User, Lock, Trash2, Eye, EyeOff, Save, Mail, CheckCircle, XCircle, Shield, Monitor, LogOut, Loader2, Globe } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "react-router-dom";
+import { DomainConfiguration } from "@/components/shared/DomainConfiguration";
 
 export default function Settings() {
   const { user, logout } = useAuth();
@@ -63,6 +64,39 @@ export default function Settings() {
 
     loadSessions();
   }, []);
+
+  // Load stores on mount
+  useEffect(() => {
+    const loadStores = async () => {
+      try {
+        const storesData = await apiClient.listStores();
+        setStores(storesData);
+        if (storesData.length > 0) {
+          setSelectedStore(storesData[0]);
+        }
+      } catch (err) {
+        console.error('Failed to load stores:', err);
+      } finally {
+        setIsLoadingStores(false);
+      }
+    };
+
+    loadStores();
+  }, []);
+
+  const handleDomainUpdate = async () => {
+    // Reload stores after domain update
+    try {
+      const storesData = await apiClient.listStores();
+      setStores(storesData);
+      if (storesData.length > 0) {
+        const updatedStore = storesData.find(s => s.id === selectedStore?.id) || storesData[0];
+        setSelectedStore(updatedStore);
+      }
+    } catch (err) {
+      console.error('Failed to reload stores:', err);
+    }
+  };
 
   // Profile state
   const [profileData, setProfileData] = useState({
@@ -106,6 +140,11 @@ export default function Settings() {
   }>>([]);
   const [isLoadingSessions, setIsLoadingSessions] = useState(true);
   const [isDeletingSession, setIsDeletingSession] = useState<string | null>(null);
+
+  // Store/Domain state
+  const [stores, setStores] = useState<any[]>([]);
+  const [isLoadingStores, setIsLoadingStores] = useState(true);
+  const [selectedStore, setSelectedStore] = useState<any | null>(null);
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -402,6 +441,44 @@ export default function Settings() {
                   )}
                 </Button>
               </form>
+            </CardContent>
+          </Card>
+
+          {/* Domain Configuration */}
+          <Card className="mb-6">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Globe className="w-5 h-5 text-primary" />
+                <CardTitle>Domain Configuration</CardTitle>
+              </div>
+              <CardDescription>
+                Configure your custom domain and subdomain settings
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {isLoadingStores ? (
+                <div className="text-center py-4">
+                  <Loader2 className="w-5 h-5 animate-spin text-primary mx-auto" />
+                </div>
+              ) : stores.length === 0 ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-muted-foreground mb-4">
+                    No stores found. Create a store first to configure domain settings.
+                  </p>
+                  <Link to="/onboarding">
+                    <Button variant="gradient" size="sm">
+                      Create Store
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <DomainConfiguration
+                  storeId={selectedStore?.id}
+                  currentDomain={selectedStore?.domain}
+                  currentSubdomain={selectedStore?.subdomain}
+                  onUpdate={handleDomainUpdate}
+                />
+              )}
             </CardContent>
           </Card>
 

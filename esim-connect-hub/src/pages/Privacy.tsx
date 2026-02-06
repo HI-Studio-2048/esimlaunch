@@ -100,7 +100,7 @@ export default function Privacy() {
               <section>
                 <h2 className="font-display text-2xl font-bold mb-4">9. Contact Us</h2>
                 <p className="text-muted-foreground">
-                  For privacy-related questions or to exercise your rights, contact our Data Protection Officer at privacy@esimlaunch.io.
+                  For privacy-related questions or to exercise your rights, contact our Data Protection Officer at privacy@esimlaunch.com.
                 </p>
               </section>
             </div>

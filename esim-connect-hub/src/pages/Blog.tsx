@@ -6,11 +6,11 @@ import { SectionHeader } from "@/components/shared/SectionHeader";
 import { cn } from "@/lib/utils";
 
 const featuredPost = {
-  title: "The Complete Guide to Starting Your eSIM Reselling Business in 2024",
+  title: "The Complete Guide to Starting Your eSIM Reselling Business in 2026",
   excerpt: "Everything you need to know about launching a successful eSIM business, from choosing providers to marketing strategies.",
   category: "Guide",
   readTime: "12 min read",
-  date: "Jan 15, 2024",
+  date: "Jan 15, 2026",
   image: "featured"
 };
 
@@ -20,42 +20,42 @@ const blogPosts = [
     excerpt: "Learn the basics of eSIM technology and how it's revolutionizing mobile connectivity.",
     category: "Technology",
     readTime: "5 min read",
-    date: "Jan 12, 2024",
+    date: "Jan 12, 2026",
   },
   {
     title: "5 Marketing Strategies That Work for eSIM Businesses",
     excerpt: "Proven marketing tactics to grow your eSIM customer base and increase sales.",
     category: "Marketing",
     readTime: "8 min read",
-    date: "Jan 10, 2024",
+    date: "Jan 10, 2026",
   },
   {
     title: "How to Choose the Right eSIM Providers for Your Store",
     excerpt: "A comprehensive comparison of top eSIM providers and what to consider when choosing.",
     category: "Business",
     readTime: "6 min read",
-    date: "Jan 8, 2024",
+    date: "Jan 8, 2026",
   },
   {
     title: "Maximizing Profit Margins: Pricing Strategies for eSIM Resellers",
     excerpt: "Expert tips on setting competitive prices while maintaining healthy profit margins.",
     category: "Business",
     readTime: "7 min read",
-    date: "Jan 5, 2024",
+    date: "Jan 5, 2026",
   },
   {
     title: "The Future of Travel Connectivity: eSIM Trends to Watch",
     excerpt: "Emerging trends in the eSIM industry and what they mean for resellers.",
     category: "Industry",
     readTime: "4 min read",
-    date: "Jan 3, 2024",
+    date: "Jan 3, 2026",
   },
   {
     title: "Customer Support Best Practices for eSIM Businesses",
     excerpt: "How to provide excellent customer support and build lasting relationships.",
     category: "Customer Service",
     readTime: "5 min read",
-    date: "Jan 1, 2024",
+    date: "Jan 1, 2026",
   },
 ];
 

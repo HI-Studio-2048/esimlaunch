@@ -14,12 +14,17 @@ const footerLinks = {
     { name: "Blog", href: "/blog" },
     { name: "Careers", href: "/careers" },
     { name: "Contact", href: "/contact" },
+    { name: "Partners", href: "/partners" },
+    { name: "Case Studies", href: "/case-studies" },
   ],
   resources: [
     { name: "FAQ", href: "/faq" },
     { name: "Help Center", href: "/help-center" },
     { name: "Community", href: "/community" },
     { name: "Status", href: "/status" },
+    { name: "ROI Calculator", href: "/roi-calculator" },
+    { name: "World Coverage", href: "/world-coverage" },
+    { name: "Changelog", href: "/changelog" },
   ],
   legal: [
     { name: "Terms of Service", href: "/terms" },
@@ -139,8 +144,8 @@ export function Footer() {
           </p>
           <div className="flex items-center gap-2 text-sm text-background/60">
             <Mail className="w-4 h-4" />
-            <a href="mailto:hello@esimlaunch.io" className="hover:text-background transition-colors">
-              hello@esimlaunch.io
+            <a href="mailto:hello@esimlaunch.com" className="hover:text-background transition-colors">
+              hello@esimlaunch.com
             </a>
           </div>
         </div>

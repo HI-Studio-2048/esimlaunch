@@ -202,7 +202,7 @@ export default function HelpCenter() {
                 <Link to="/contact">Contact Support</Link>
               </Button>
               <Button variant="outline" size="lg" asChild>
-                <a href="mailto:support@esimlaunch.io">Email Us</a>
+                <a href="mailto:support@esimlaunch.com">Email Us</a>
               </Button>
             </div>
           </div>

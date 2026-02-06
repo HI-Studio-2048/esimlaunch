@@ -57,7 +57,7 @@ export default function DemoStorePrivacy() {
               },
               {
                 title: "5. Your Rights",
-                content: "You have the right to access, update, or delete your personal information. Contact us at privacy@esimlaunch.io to exercise these rights.",
+                content: "You have the right to access, update, or delete your personal information. Contact us at privacy@esimlaunch.com to exercise these rights.",
               },
               {
                 title: "6. Cookies",

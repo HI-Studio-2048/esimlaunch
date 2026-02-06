@@ -506,6 +506,40 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Domain verification endpoints (mock implementations if backend doesn't support)
+  async verifyDomain(domain: string) {
+    // Mock implementation - replace with actual API call when backend supports it
+    // For now, simulate a verification check
+    return new Promise<{ verified: boolean; sslActive: boolean }>((resolve) => {
+      setTimeout(() => {
+        // Mock: assume domain is verified if it's a valid format
+        const isValid = /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i.test(domain);
+        resolve({
+          verified: isValid,
+          sslActive: isValid,
+        });
+      }, 1500);
+    });
+  }
+
+  async getDomainStatus(storeId: string) {
+    // Mock implementation - replace with actual API call when backend supports it
+    try {
+      const store = await this.getStore(storeId);
+      if (store.domain) {
+        return {
+          domain: store.domain,
+          verified: true, // Mock: assume verified if domain exists
+          sslActive: true,
+          subdomain: store.subdomain || null,
+        };
+      }
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
 }
 
 export const apiClient = new ApiClient();

@@ -15,6 +15,7 @@ export function ClerkAuthSync() {
   useEffect(() => {
     const syncClerkUser = async () => {
       // Only sync once per Clerk user session
+      // Don't sync if user is null (logged out)
       if (clerkUser && isLoaded && !hasSynced.current) {
         try {
           const result = await apiClient.clerkSync(clerkUser.id);
@@ -27,11 +28,17 @@ export function ClerkAuthSync() {
         } catch (err) {
           console.error('Failed to sync Clerk user:', err);
         }
+      } else if (!clerkUser && hasSynced.current) {
+        // User logged out from Clerk, clear local state
+        setUser(null);
+        localStorage.removeItem('jwt_token');
+        apiClient.setJwtToken(null);
+        hasSynced.current = false;
       }
     };
 
     syncClerkUser();
-  }, [clerkUser?.id, isLoaded, setUser]);
+  }, [clerkUser?.id, isLoaded, setUser, clerkUser]);
 
   // Reset sync flag when Clerk user signs out
   useEffect(() => {

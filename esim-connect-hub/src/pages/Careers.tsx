@@ -130,7 +130,7 @@ export default function Careers() {
                         <p className="text-muted-foreground">{position.description}</p>
                       </div>
                       <Button variant="gradient" asChild>
-                        <a href={`mailto:careers@esimlaunch.io?subject=Application: ${position.title}`}>
+                        <a href={`mailto:careers@esimlaunch.com?subject=Application: ${position.title}`}>
                           Apply Now
                         </a>
                       </Button>
@@ -191,7 +191,7 @@ export default function Careers() {
               We're always looking for talented people. Send us your resume and we'll keep you in mind for future opportunities.
             </p>
             <Button variant="gradient" size="lg" asChild>
-              <a href="mailto:careers@esimlaunch.io">Send Your Resume</a>
+              <a href="mailto:careers@esimlaunch.com">Send Your Resume</a>
             </Button>
           </div>
         </div>

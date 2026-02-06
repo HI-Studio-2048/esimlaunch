@@ -647,7 +647,7 @@ POST   /api/webhooks/esimaccess        - Receive webhooks from eSIM Access
    REDIS_URL=redis://localhost:6379
    CORS_ORIGIN=http://localhost:5173
    RESEND_API_KEY=your-resend-key
-   RESEND_FROM_EMAIL=onboarding@esimlaunch.io
+   RESEND_FROM_EMAIL=onboarding@esimlaunch.com
    FRONTEND_URL=http://localhost:5173
    CLERK_SECRET_KEY=your-clerk-secret-key (optional)
    ```
@@ -863,7 +863,7 @@ CORS_ORIGIN=http://localhost:5173
 
 # Email (Resend)
 RESEND_API_KEY=your-resend-api-key
-RESEND_FROM_EMAIL=onboarding@esimlaunch.io
+RESEND_FROM_EMAIL=onboarding@esimlaunch.com
 FRONTEND_URL=http://localhost:5173
 
 # Clerk (Optional)

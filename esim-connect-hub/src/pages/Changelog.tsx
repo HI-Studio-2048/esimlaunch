@@ -335,7 +335,7 @@ export default function Changelog() {
             />
             <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
               <Button variant="gradient" size="lg" asChild>
-                <a href="mailto:feedback@esimlaunch.io">
+                <a href="mailto:feedback@esimlaunch.com">
                   Submit Feedback <ArrowRight className="ml-2 h-5 w-5" />
                 </a>
               </Button>
