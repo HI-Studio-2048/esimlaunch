@@ -65,4 +65,7 @@ backend/prisma/migrations/
 # yarn.lock
 # pnpm-lock.yaml
 
+# Nested git repositories (esim-connect-hub has its own repo)
+esim-connect-hub/.git/
+
 
