@@ -2,7 +2,6 @@ import express from 'express';
 import { z } from 'zod';
 import { authenticateJWT } from '../middleware/jwtAuth';
 import { prisma } from '../lib/prisma';
-import { esimAccessService } from '../services/esimAccessService';
 
 const router = express.Router();
 
@@ -54,16 +53,12 @@ router.get('/stats', async (req, res, next) => {
       },
     });
 
-    // Get account balance from eSIM Access
-    let balance = 0;
-    try {
-      const balanceResult = await esimAccessService.checkBalance();
-      if (balanceResult.success && balanceResult.obj?.balance) {
-        balance = balanceResult.obj.balance;
-      }
-    } catch (error) {
-      console.error('Failed to fetch balance:', error);
-    }
+    // Get merchant balance from database
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { balance: true },
+    });
+    const balance = merchant?.balance ? Number(merchant.balance) / 10000 : 0;
 
     res.json({
       success: true,
@@ -81,7 +76,7 @@ router.get('/stats', async (req, res, next) => {
         apiKeys: {
           active: apiKeyCount,
         },
-        balance: balance / 10000, // Convert from smallest unit to USD
+        balance: balance, // Merchant's eSIMLaunch balance in USD
       },
     });
   } catch (error: any) {
@@ -238,4 +233,5 @@ router.get('/analytics', async (req, res, next) => {
 });
 
 export default router;
+
 

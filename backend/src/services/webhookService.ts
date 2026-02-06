@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { prisma } from '../lib/prisma';
-import { WebhookEventType } from '@prisma/client';
+import { WebhookEventType, OrderStatus, BalanceTransactionType } from '@prisma/client';
 
 export interface ESIMAccessWebhook {
   notifyType: 'ORDER_STATUS' | 'ESIM_STATUS' | 'DATA_USAGE' | 'VALIDITY_USAGE' | 'BALANCE_LOW' | 'SMDP_EVENT' | 'CHECK_HEALTH';
@@ -114,6 +114,28 @@ class WebhookService {
   }
 
   /**
+   * Map eSIM Access order status to our OrderStatus enum
+   */
+  private mapOrderStatus(esimAccessStatus: string): OrderStatus | null {
+    // eSIM Access statuses: GOT_RESOURCE, FAILED, CANCELLED, etc.
+    switch (esimAccessStatus) {
+      case 'GOT_RESOURCE':
+        return OrderStatus.PROCESSING;
+      case 'COMPLETED':
+      case 'SUCCESS':
+        return OrderStatus.COMPLETED;
+      case 'FAILED':
+      case 'ERROR':
+        return OrderStatus.FAILED;
+      case 'CANCELLED':
+      case 'CANCELED':
+        return OrderStatus.CANCELLED;
+      default:
+        return null; // Unknown status, don't update
+    }
+  }
+
+  /**
    * Process webhook from eSIM Access
    * This finds the associated merchant and forwards the webhook
    */
@@ -136,12 +158,54 @@ class WebhookService {
         // Forward to merchant
         await this.forwardWebhook(order.merchantId, webhook);
 
-        // Update order status if needed
-        if (webhook.notifyType === 'ORDER_STATUS' && webhook.content.orderStatus === 'GOT_RESOURCE') {
-          await prisma.order.update({
-            where: { id: order.id },
-            data: { status: 'PROCESSING' },
-          });
+        // Handle order status updates and balance refunds
+        if (webhook.notifyType === 'ORDER_STATUS') {
+          const newStatus = this.mapOrderStatus(webhook.content.orderStatus);
+          const oldStatus = order.status;
+
+          // Update order status
+          if (newStatus && newStatus !== oldStatus) {
+            await prisma.$transaction(async (tx) => {
+              // Update order status
+              await tx.order.update({
+                where: { id: order.id },
+                data: { status: newStatus },
+              });
+
+              // Refund balance if order failed or was cancelled
+              // Only refund if order was previously PENDING or PROCESSING (balance was deducted)
+              if (
+                (newStatus === OrderStatus.FAILED || newStatus === OrderStatus.CANCELLED) &&
+                (oldStatus === OrderStatus.PENDING || oldStatus === OrderStatus.PROCESSING) &&
+                order.totalAmount
+              ) {
+                const refundAmount = Number(order.totalAmount);
+
+                // Refund balance to merchant
+                await tx.merchant.update({
+                  where: { id: order.merchantId },
+                  data: {
+                    balance: {
+                      increment: BigInt(refundAmount),
+                    },
+                  },
+                });
+
+                // Create balance transaction record for audit
+                await tx.balanceTransaction.create({
+                  data: {
+                    merchantId: order.merchantId,
+                    orderId: order.id,
+                    amount: BigInt(refundAmount), // Positive for refund
+                    type: BalanceTransactionType.REFUND,
+                    description: `Refund for ${newStatus === OrderStatus.FAILED ? 'failed' : 'cancelled'} order ${orderNo}`,
+                  },
+                });
+
+                console.log(`Refunded ${refundAmount / 10000} USD to merchant ${order.merchantId} for order ${orderNo}`);
+              }
+            });
+          }
         }
       } else {
         console.warn(`Order ${orderNo} not found in database`);
@@ -181,4 +245,5 @@ class WebhookService {
 }
 
 export const webhookService = new WebhookService();
+
 

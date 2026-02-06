@@ -32,6 +32,13 @@ enum WebhookEventType {
   SMDP_EVENT
 }
 
+enum BalanceTransactionType {
+  ORDER
+  REFUND
+  TOPUP
+  ADJUSTMENT
+}
+
 model Merchant {
   id          String      @id @default(uuid())
   email       String      @unique
@@ -45,6 +52,7 @@ model Merchant {
   emailVerificationExpires DateTime?
   twoFactorEnabled Boolean @default(false)
   twoFactorSecret String?
+  balance         BigInt   @default(0) // Balance in smallest currency unit (balance * 10000 = USD)
   sessions        Session[]
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
@@ -56,6 +64,7 @@ model Merchant {
   apiLogs      ApiLog[]
   stores      Store[]
   passwordResetTokens PasswordResetToken[]
+  balanceTransactions BalanceTransaction[]
 
   @@index([email])
   @@index([serviceType])
@@ -93,6 +102,7 @@ model Order {
 
   // Relations
   merchant            Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  balanceTransactions BalanceTransaction[]
 
   @@unique([merchantId, transactionId])
   @@index([merchantId])
@@ -199,5 +209,24 @@ model Session {
   @@index([merchantId])
   @@index([token])
   @@index([expiresAt])
+}
+
+model BalanceTransaction {
+  id          String                @id @default(uuid())
+  merchantId  String
+  orderId     String?               // Link to order if applicable
+  amount      BigInt                 // Can be negative (deductions) or positive (refunds/topups)
+  type        BalanceTransactionType
+  description String?
+  createdAt   DateTime               @default(now())
+
+  // Relations
+  merchant    Merchant               @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  order       Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([merchantId])
+  @@index([orderId])
+  @@index([type])
+  @@index([createdAt])
 }
 

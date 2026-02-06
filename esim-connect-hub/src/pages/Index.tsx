@@ -11,7 +11,6 @@ import { SectionHeader } from "@/components/shared/SectionHeader";
 import { FeatureCard } from "@/components/shared/FeatureCard";
 import { AnimatedCounter } from "@/components/shared/AnimatedCounter";
 import { TrustBadges } from "@/components/shared/TrustBadges";
-import { ExitIntentPopup } from "@/components/shared/ExitIntentPopup";
 import {
   Accordion,
   AccordionContent,
@@ -99,8 +98,6 @@ const stats = [
 export default function Index() {
   return (
     <div className="relative overflow-hidden">
-      {/* Exit Intent Popup */}
-      <ExitIntentPopup />
       {/* Hero Section */}
       <section className="relative min-h-screen flex items-center pt-20" style={{ background: 'var(--gradient-hero)' }}>
         {/* Background Elements */}

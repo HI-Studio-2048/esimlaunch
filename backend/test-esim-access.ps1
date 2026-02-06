@@ -146,3 +146,4 @@ Write-Host ""
 Write-Host "If all tests show SUCCESS, your eSIM Access integration is working!" -ForegroundColor Green
 Write-Host ""
 
+

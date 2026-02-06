@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { esimAccessService } from '../services/esimAccessService';
 import { authenticateApiKey, logApiRequest, createRateLimiter } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
-import { OrderStatus } from '@prisma/client';
+import { OrderStatus, BalanceTransactionType } from '@prisma/client';
 
 const router = express.Router();
 
@@ -97,23 +97,93 @@ router.get('/packages', async (req, res, next) => {
 router.post('/orders', async (req, res, next) => {
   try {
     const data = orderProfilesSchema.parse(req.body);
-    
-    // Call eSIM Access API
-    const result = await esimAccessService.orderProfiles(data);
+    const merchantId = req.merchant!.id;
 
-    if (result.success && result.obj?.orderNo) {
-      // Store order in database
-      await prisma.order.create({
-        data: {
-          merchantId: req.merchant!.id,
-          transactionId: data.transactionId,
-          esimAccessOrderNo: result.obj.orderNo,
-          status: OrderStatus.PENDING,
-          totalAmount: data.amount ? BigInt(data.amount) : null,
-          packageCount: data.packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0),
-        },
+    // Calculate order amount if not provided
+    // TODO: If amount is not provided, fetch package prices from eSIM Access API
+    let orderAmount = data.amount;
+    if (!orderAmount) {
+      // For now, require amount to be provided
+      // In the future, we can fetch package prices and calculate
+      return res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: 'Order amount is required',
       });
     }
+
+    // Check merchant balance
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { balance: true },
+    });
+
+    if (!merchant) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'MERCHANT_NOT_FOUND',
+        errorMessage: 'Merchant not found',
+      });
+    }
+
+    const currentBalance = Number(merchant.balance);
+    if (currentBalance < orderAmount) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'INSUFFICIENT_BALANCE',
+        errorMessage: `Insufficient balance. Current balance: ${currentBalance / 10000} USD, Required: ${orderAmount / 10000} USD`,
+      });
+    }
+
+    // Use database transaction to ensure atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      // Call eSIM Access API
+      const esimResult = await esimAccessService.orderProfiles(data);
+
+      if (esimResult.success && esimResult.obj?.orderNo) {
+        // Create order in database
+        const order = await tx.order.create({
+          data: {
+            merchantId,
+            transactionId: data.transactionId,
+            esimAccessOrderNo: esimResult.obj.orderNo,
+            status: OrderStatus.PENDING,
+            totalAmount: BigInt(orderAmount),
+            packageCount: data.packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0),
+          },
+        });
+
+        // Deduct balance from merchant
+        const updatedMerchant = await tx.merchant.update({
+          where: { id: merchantId },
+          data: {
+            balance: {
+              decrement: BigInt(orderAmount),
+            },
+          },
+        });
+
+        // Verify balance didn't go negative (shouldn't happen due to check above, but safety check)
+        if (Number(updatedMerchant.balance) < 0) {
+          throw new Error('Balance would be negative');
+        }
+
+        // Create balance transaction record for audit
+        await tx.balanceTransaction.create({
+          data: {
+            merchantId,
+            orderId: order.id,
+            amount: BigInt(-orderAmount), // Negative for deduction
+            type: BalanceTransactionType.ORDER,
+            description: `Order ${esimResult.obj.orderNo} - ${data.packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0)} package(s)`,
+          },
+        });
+
+        return { ...esimResult, orderId: order.id };
+      }
+
+      return esimResult;
+    });
 
     res.json(result);
   } catch (error: any) {
@@ -124,6 +194,7 @@ router.post('/orders', async (req, res, next) => {
         errorMessage: error.errors[0].message,
       });
     } else {
+      console.error('Order creation error:', error);
       res.status(500).json({
         success: false,
         errorCode: 'ORDER_FAILED',
@@ -340,12 +411,23 @@ router.post('/profiles/usage', async (req, res, next) => {
 
 /**
  * GET /api/v1/balance
- * Check account balance
+ * Check merchant's eSIMLaunch account balance
  */
 router.get('/balance', async (req, res, next) => {
   try {
-    const result = await esimAccessService.checkBalance();
-    res.json(result);
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: req.merchant!.id },
+      select: { balance: true },
+    });
+
+    const balance = merchant?.balance ? Number(merchant.balance) : 0;
+
+    res.json({
+      success: true,
+      data: {
+        balance: balance, // Balance in smallest currency unit
+      },
+    });
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -495,4 +577,5 @@ router.get('/webhooks', async (req, res, next) => {
 });
 
 export default router;
+
 
