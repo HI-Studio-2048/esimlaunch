@@ -151,7 +151,7 @@ export default function Index() {
                   </Link>
                 </Button>
                 <Button variant="hero-outline" size="xl" asChild>
-                  <Link to="/dashboard">View Demo</Link>
+                  <Link to="/demo-store">View Demo</Link>
                 </Button>
               </div>
 

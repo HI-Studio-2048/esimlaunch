@@ -1,90 +1,84 @@
 
-# Bring the Website to Life: Replace All Placeholders with Real Visuals + Fix Build Errors
+# Phases 2-4: Complete Missing Features and Flows
 
-## Overview
-Replace every empty placeholder, generic gradient box, and dull container across the entire site with relevant Unsplash images, meaningful icon compositions, and rich visual mock-ups. Also fix 3 build errors blocking deployment.
-
----
-
-## Build Error Fixes (Priority)
-
-### 1. DNSInstructions.tsx - Line 54: `setIsExpanded` called with argument
-The `setIsExpanded` fallback is `() => setInternalExpanded(!internalExpanded)` which takes 0 args, but is called with `!isExpanded`. Fix by making the fallback accept a parameter.
-
-### 2. Login.tsx - Line 126: `authenticateWithRedirect` does not exist on `LoadedClerk`
-Remove the direct `useClerk()` import and `clerk.authenticateWithRedirect` call. Replace with Clerk's `SignInButton` component for OAuth, or simply show a "Coming Soon" toast since Clerk isn't configured.
-
-### 3. Signup.tsx - Line 103: Same `authenticateWithRedirect` issue
-Same fix as Login.tsx.
+Since Phase 1 (backend/auth) works in your local environment, this plan covers all remaining gaps to make the site fully functional.
 
 ---
 
-## Visual Enhancements by Page
+## Phase 2: Connect Core User Flows
 
-### Features Page (`src/pages/Features.tsx`)
-Each of the 6 feature sections currently shows an identical grid of empty gradient squares. Replace each with a **unique, contextual visual**:
+### 1. Fix Navbar Clerk `require()` call
+**File:** `src/components/layout/Navbar.tsx`
+- Replace the `require("@clerk/clerk-react")` (lines 11-17) with a conditional check using `import.meta.env.VITE_CLERK_PUBLISHABLE_KEY` -- same pattern as Login/Signup pages
+- This prevents Vite ESM crashes even when Clerk IS configured
 
-- **Multi-Provider Integration**: Show a mock UI with provider logo cards (Airalo, eSIM Go, etc.) arranged in a connected grid with status indicators
-- **Smart Pricing Engine**: Show a mock pricing table/slider UI with currency symbols and percentage badges
-- **Built-in SEO Tools**: Show a mock search console view with ranking charts and keyword badges
-- **Powerful User Dashboard**: Show a mini dashboard mockup with charts, stats cards, and activity feed
-- **Enterprise Security**: Show a shield icon with lock indicators, encryption badges, and compliance checkmarks
-- **Automatic Updates**: Show a deployment pipeline visual with version badges and checkmarks
+### 2. Connect Onboarding to Store Preview
+**File:** `src/pages/Onboarding.tsx`
+- Import `useDemoStore` from `DemoStoreContext`
+- When the user completes onboarding (the `handleLaunch` function), save business name, primary color, and logo to the `DemoStoreContext` so `/store-preview` auto-populates with the values they already entered
 
-Each visual will be built with Tailwind-styled mock UI elements (not just images) to look like real product screenshots.
+### 3. Pricing CTA buttons
+**File:** `src/pages/Pricing.tsx`
+- "Start Free Trial" buttons --> wrap with `Link to="/signup"`
+- "Contact Sales" button --> wrap with `Link to="/contact"`
 
-### Blog Page (`src/pages/Blog.tsx`)
-- **Featured post image**: Replace the empty gradient box with a relevant Unsplash image (person using phone while traveling)
-- **Blog post thumbnails**: Add unique Unsplash images per category:
-  - Technology: circuit board / tech imagery
-  - Marketing: social media / growth charts
-  - Business: office / meeting imagery
-  - Industry: airplane / travel imagery
-  - Customer Service: support / headset imagery
+### 4. Blog post detail page
+**New file:** `src/pages/BlogPost.tsx`
+- Create a mock blog post detail page with full article content, author info, related posts sidebar, and share buttons
+- Uses the URL slug to match blog post title from the existing `blogPosts` array
+**File:** `src/pages/Blog.tsx`
+- Wrap each blog card and the featured post with `Link to={/blog/${slug}}`
+**File:** `src/App.tsx`
+- Add route: `/blog/:slug` pointing to `BlogPost`
 
-### Homepage (`src/pages/Index.tsx`)
-- The hero dashboard mockup is already decent with skeleton UI elements -- enhance it with more realistic labels and mini-chart data
-- Add images to the testimonial cards (avatar photos already referenced but not shown)
-
-### Community Page (`src/pages/Community.tsx`)
-- Already uses Unsplash images for avatars -- looks good, no changes needed
-
-### About Page (`src/pages/About.tsx`)
-- Already uses Unsplash images for team and story -- looks good, no changes needed
-
-### Case Studies Page (`src/pages/CaseStudies.tsx`)
-- Currently uses only Lucide icons for company logos -- no image placeholders to fix, already well-structured
-
-### Partners Page (`src/pages/Partners.tsx`)
-- Uses gradient icon boxes for providers -- replace with more distinctive visual identifiers (emoji or styled initials per provider)
-
-### Pricing Page (`src/pages/Pricing.tsx`)
-- Already clean with icon + text cards -- no empty placeholders
-
-### Dashboard Page (`src/pages/Dashboard.tsx`)
-- Uses skeleton loading states appropriately -- no empty placeholders
+### 5. Fix "View Demo" hero button
+**File:** `src/pages/Index.tsx`
+- Change `Link to="/dashboard"` (line 154) to `Link to="/demo-store"` so unauthenticated users see the demo store instead of being bounced to login
 
 ---
 
-## Technical Approach
+## Phase 3: Navigation Improvements
 
-### Images
-Use high-quality Unsplash URLs with appropriate `w=` and `q=` parameters for performance:
-- Blog thumbnails: `w=600&q=80`
-- Featured images: `w=800&q=80`
-- All images use `object-cover` with proper `aspect-ratio` containers
+### 6. Add "Resources" dropdown to Navbar
+**File:** `src/components/layout/Navbar.tsx`
+- Add a "Resources" dropdown menu item between FAQ and Blog containing:
+  - Coverage Checker (`/coverage`)
+  - World Coverage (`/world-coverage`)
+  - ROI Calculator (`/roi-calculator`)
+  - Case Studies (`/case-studies`)
+  - Partners (`/partners`)
+  - Changelog (`/changelog`)
 
-### Feature Visuals
-Build custom mini-UI mockups using Tailwind classes rather than external images. This keeps them theme-aware (works in dark/light mode) and eliminates loading delays. Each feature section will have a unique composition of:
-- Mock cards, badges, and status indicators
-- Relevant Lucide icons
-- Progress bars, charts, and data visualizations
-- All styled to look like actual product screenshots
+### 7. Make API Docs publicly accessible
+**File:** `src/App.tsx`
+- Remove the `ProtectedRoute` wrapper from the `/api-docs` route so developers can browse documentation without signing up
 
-### Files Modified
-1. `src/pages/Features.tsx` -- Replace generic grid with 6 unique feature visuals
-2. `src/pages/Blog.tsx` -- Add Unsplash images to featured post and all blog cards
-3. `src/pages/Index.tsx` -- Minor enhancements to hero mockup realism
-4. `src/pages/Login.tsx` -- Fix Clerk `authenticateWithRedirect` build error
-5. `src/pages/Signup.tsx` -- Fix Clerk `authenticateWithRedirect` build error
-6. `src/components/shared/DNSInstructions.tsx` -- Fix `setIsExpanded` argument error
+---
+
+## Phase 4: Polish
+
+### 8. Contact and Demo form mock submissions
+**Files:** `src/pages/Contact.tsx`, `src/pages/Demo.tsx`
+- Verify forms show a toast success message on submit rather than failing silently against a missing API
+- If not, add mock `onSubmit` handlers that show a success toast and reset the form
+
+### 9. Update social media footer links
+**File:** `src/components/layout/Footer.tsx`
+- Replace `href="#"` on Twitter, LinkedIn, GitHub, YouTube with placeholder URLs or add a tooltip saying "Coming soon" to prevent dead clicks
+
+---
+
+## Summary of Files
+
+| Action | File |
+|--------|------|
+| Edit | `src/components/layout/Navbar.tsx` -- fix require(), add Resources dropdown |
+| Edit | `src/pages/Onboarding.tsx` -- connect to DemoStoreContext |
+| Edit | `src/pages/Pricing.tsx` -- add CTA links |
+| Edit | `src/pages/Blog.tsx` -- make posts clickable |
+| Create | `src/pages/BlogPost.tsx` -- blog detail page |
+| Edit | `src/pages/Index.tsx` -- fix View Demo link |
+| Edit | `src/App.tsx` -- add BlogPost route, make API Docs public |
+| Edit | `src/pages/Contact.tsx` -- mock form submission |
+| Edit | `src/pages/Demo.tsx` -- mock form submission |
+| Edit | `src/components/layout/Footer.tsx` -- fix social links |

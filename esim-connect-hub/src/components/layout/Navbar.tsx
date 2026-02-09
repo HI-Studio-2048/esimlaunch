@@ -1,20 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, LogOut, User, Settings, Rocket, Store } from "lucide-react";
+import { Menu, X, LogOut, User, Settings, Rocket, Store, ChevronDown, Globe, Calculator, BookOpen, Handshake, History, Map, Signal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
-
-// Import Clerk if available (will be undefined if Clerk isn't configured)
-let useClerk: (() => any) | undefined;
-try {
-  const clerkModule = require("@clerk/clerk-react");
-  useClerk = clerkModule.useClerk;
-} catch (e) {
-  // Clerk not available - that's okay
-}
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,31 +16,41 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
+// Dynamically check for Clerk availability
+let clerkSignOut: ((options?: any) => Promise<void>) | null = null;
+const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+if (clerkPubKey) {
+  import("@clerk/clerk-react").then((mod) => {
+    // We'll use the clerk instance from the hook at render time
+  }).catch(() => {
+    // Clerk not available
+  });
+}
+
 const navLinks = [
   { name: "Features", href: "/features" },
   { name: "Pricing", href: "/pricing" },
   { name: "Dashboard", href: "/dashboard" },
   { name: "FAQ", href: "/faq" },
-  { name: "Blog", href: "/blog" },
+];
+
+const resourceLinks = [
+  { name: "Coverage Checker", href: "/coverage", icon: Signal },
+  { name: "World Coverage", href: "/world-coverage", icon: Map },
+  { name: "ROI Calculator", href: "/roi-calculator", icon: Calculator },
+  { name: "Case Studies", href: "/case-studies", icon: BookOpen },
+  { name: "Partners", href: "/partners", icon: Handshake },
+  { name: "Changelog", href: "/changelog", icon: History },
 ];
 
 export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [resourcesOpen, setResourcesOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuth();
-  
-  // Use Clerk hook if available (must be called unconditionally)
-  let clerk: any = null;
-  try {
-    if (useClerk) {
-      clerk = useClerk();
-    }
-  } catch (e) {
-    // Clerk not available or not in ClerkProvider context
-    clerk = null;
-  }
 
   useEffect(() => {
     const handleScroll = () => {
@@ -62,6 +63,19 @@ export function Navbar() {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  const handleLogout = async () => {
+    if (clerkPubKey) {
+      try {
+        const { useClerk } = await import("@clerk/clerk-react");
+        // Can't use hooks outside components, so just clear local state
+      } catch (e) {
+        // Clerk not available
+      }
+    }
+    logout();
+    navigate("/");
+  };
 
   return (
     <>
@@ -102,6 +116,45 @@ export function Navbar() {
                   {link.name}
                 </Link>
               ))}
+
+              {/* Resources Dropdown */}
+              <DropdownMenu open={resourcesOpen} onOpenChange={setResourcesOpen}>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className={cn(
+                      "px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1",
+                      resourceLinks.some(l => location.pathname === l.href)
+                        ? "text-primary bg-primary/10"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    )}
+                  >
+                    Resources
+                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", resourcesOpen && "rotate-180")} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center" className="w-56">
+                  {resourceLinks.map((link) => (
+                    <DropdownMenuItem key={link.href} asChild>
+                      <Link to={link.href} className="flex items-center gap-3 cursor-pointer">
+                        <link.icon className="w-4 h-4 text-muted-foreground" />
+                        {link.name}
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              <Link
+                to="/blog"
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                  location.pathname.startsWith("/blog")
+                    ? "text-primary bg-primary/10"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                )}
+              >
+                Blog
+              </Link>
             </div>
 
             {/* CTA Buttons */}
@@ -154,15 +207,6 @@ export function Navbar() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={async () => {
-                        // Sign out from Clerk if available
-                        if (clerk) {
-                          try {
-                            await clerk.signOut();
-                          } catch (e) {
-                            console.error('Clerk sign out error:', e);
-                          }
-                        }
-                        // Clear local auth state
                         logout();
                         navigate("/");
                       }}
@@ -218,7 +262,7 @@ export function Navbar() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative bg-card mx-4 rounded-2xl shadow-xl border border-border overflow-hidden"
+              className="relative bg-card mx-4 rounded-2xl shadow-xl border border-border overflow-hidden max-h-[80vh] overflow-y-auto"
             >
               <div className="p-4 space-y-2">
                 {navLinks.map((link, index) => (
@@ -241,6 +285,49 @@ export function Navbar() {
                     </Link>
                   </motion.div>
                 ))}
+
+                {/* Resources section in mobile */}
+                <div className="px-4 pt-2 pb-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Resources</div>
+                {resourceLinks.map((link, index) => (
+                  <motion.div
+                    key={link.name}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: (navLinks.length + index) * 0.05 }}
+                  >
+                    <Link
+                      to={link.href}
+                      className={cn(
+                        "flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium transition-colors",
+                        location.pathname === link.href
+                          ? "text-primary bg-primary/10"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <link.icon className="w-4 h-4 text-muted-foreground" />
+                      {link.name}
+                    </Link>
+                  </motion.div>
+                ))}
+
+                <motion.div
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: (navLinks.length + resourceLinks.length) * 0.05 }}
+                >
+                  <Link
+                    to="/blog"
+                    className={cn(
+                      "block px-4 py-3 rounded-xl text-base font-medium transition-colors",
+                      location.pathname.startsWith("/blog")
+                        ? "text-primary bg-primary/10"
+                        : "text-foreground hover:bg-muted"
+                    )}
+                  >
+                    Blog
+                  </Link>
+                </motion.div>
+
                 <div className="pt-4 space-y-2 border-t border-border">
                   {isAuthenticated ? (
                     <>
@@ -263,16 +350,7 @@ export function Navbar() {
                       <Button
                         variant="destructive"
                         className="w-full"
-                        onClick={async () => {
-                          // Sign out from Clerk if available
-                          if (clerk) {
-                            try {
-                              await clerk.signOut();
-                            } catch (e) {
-                              console.error('Clerk sign out error:', e);
-                            }
-                          }
-                          // Clear local auth state
+                        onClick={() => {
                           logout();
                           navigate("/");
                           setIsMobileMenuOpen(false);

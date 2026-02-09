@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Check, Zap, Rocket, Building2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -158,9 +159,12 @@ export default function Pricing() {
                   variant={plan.highlighted ? "gradient" : "outline"}
                   className="w-full mb-8"
                   size="lg"
+                  asChild
                 >
-                  {plan.cta}
-                  <ArrowRight className="w-5 h-5" />
+                  <Link to={plan.cta === "Contact Sales" ? "/contact" : "/signup"}>
+                    {plan.cta}
+                    <ArrowRight className="w-5 h-5" />
+                  </Link>
                 </Button>
 
                 <ul className="space-y-3">
@@ -255,11 +259,11 @@ export default function Pricing() {
             Check out our FAQ or contact our sales team for personalized help.
           </p>
           <div className="flex gap-4 justify-center">
-            <Button variant="outline" size="lg">
-              View FAQ
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/faq">View FAQ</Link>
             </Button>
-            <Button variant="gradient" size="lg">
-              Contact Sales
+            <Button variant="gradient" size="lg" asChild>
+              <Link to="/contact">Contact Sales</Link>
             </Button>
           </div>
         </div>

@@ -34,10 +34,10 @@ const footerLinks = {
 };
 
 const socialLinks = [
-  { icon: Twitter, href: "#", label: "Twitter" },
-  { icon: Linkedin, href: "#", label: "LinkedIn" },
-  { icon: Github, href: "#", label: "GitHub" },
-  { icon: Youtube, href: "#", label: "YouTube" },
+  { icon: Twitter, href: "https://twitter.com/esimlaunch", label: "Twitter" },
+  { icon: Linkedin, href: "https://linkedin.com/company/esimlaunch", label: "LinkedIn" },
+  { icon: Github, href: "https://github.com/esimlaunch", label: "GitHub" },
+  { icon: Youtube, href: "https://youtube.com/@esimlaunch", label: "YouTube" },
 ];
 
 export function Footer() {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useDemoStore } from "@/contexts/DemoStoreContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ const Onboarding = () => {
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setConfig } = useDemoStore();
 
   // Form states
   const [profile, setProfile] = useState({
@@ -115,13 +117,22 @@ const Onboarding = () => {
 
       // Simulate store creation (replace with actual API call)
       await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // Save branding to DemoStoreContext for store preview
+      setConfig({
+        businessName: profile.businessName || "Your eSIM Store",
+        primaryColor: branding.primaryColor,
+        secondaryColor: "#8b5cf6",
+        accentColor: "#22c55e",
+        logo: null,
+      });
       
       setIsLoading(false);
       toast({
         title: "🚀 Congratulations!",
         description: "Your eSIM store is now live. Welcome to eSIMLaunch!",
       });
-      navigate("/dashboard");
+      navigate("/store-preview");
     } catch (error) {
       setIsLoading(false);
       toast({

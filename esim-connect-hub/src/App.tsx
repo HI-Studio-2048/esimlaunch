@@ -47,6 +47,7 @@ import Onboarding from "./pages/Onboarding";
 import CoverageChecker from "./pages/CoverageChecker";
 import StorePreview from "./pages/StorePreview";
 import WorldCoverage from "./pages/WorldCoverage";
+import BlogPost from "./pages/BlogPost";
 import NotFound from "./pages/NotFound";
 import DemoStoreHome from "./pages/demo-store/DemoStoreHome";
 import DemoStoreDestinations from "./pages/demo-store/DemoStoreDestinations";
@@ -110,19 +111,13 @@ const AppRoutes = () => (
                 />
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="/blog" element={<Blog />} />
+                <Route path="/blog/:slug" element={<BlogPost />} />
                 <Route path="/terms" element={<Terms />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/cookies" element={<Cookies />} />
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/about" element={<About />} />
-                <Route 
-                  path="/api-docs" 
-                  element={
-                    <ProtectedRoute>
-                      <APIDocs />
-                    </ProtectedRoute>
-                  } 
-                />
+                <Route path="/api-docs" element={<APIDocs />} />
                 <Route path="/careers" element={<Careers />} />
                 <Route path="/help-center" element={<HelpCenter />} />
                 <Route path="/community" element={<Community />} />

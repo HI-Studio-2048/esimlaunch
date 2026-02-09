@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { cn } from "@/lib/utils";
 
+function slugify(title: string) {
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
 const featuredPost = {
   title: "The Complete Guide to Starting Your eSIM Reselling Business in 2026",
   excerpt: "Everything you need to know about launching a successful eSIM business, from choosing providers to marketing strategies.",
@@ -100,48 +104,50 @@ export default function Blog() {
       {/* Featured Post */}
       <section className="section-padding">
         <div className="container-custom">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative bg-card rounded-3xl overflow-hidden shadow-card-hover group cursor-pointer"
-          >
-            <div className="grid lg:grid-cols-2">
-              {/* Image */}
-              <div className="aspect-video lg:aspect-auto bg-muted relative overflow-hidden">
-                <img 
-                  src={featuredPost.image} 
-                  alt={featuredPost.title}
-                  className="absolute inset-0 w-full h-full object-cover"
-                  loading="lazy"
-                />
-                <div className="absolute inset-0 gradient-bg opacity-20" />
-              </div>
+          <Link to={`/blog/${slugify(featuredPost.title)}`}>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="relative bg-card rounded-3xl overflow-hidden shadow-card-hover group cursor-pointer"
+            >
+              <div className="grid lg:grid-cols-2">
+                {/* Image */}
+                <div className="aspect-video lg:aspect-auto bg-muted relative overflow-hidden">
+                  <img 
+                    src={featuredPost.image} 
+                    alt={featuredPost.title}
+                    className="absolute inset-0 w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 gradient-bg opacity-20" />
+                </div>
 
-              {/* Content */}
-              <div className="p-8 lg:p-12 flex flex-col justify-center">
-                <div className="flex items-center gap-3 mb-4">
-                  <span className={cn("px-3 py-1 rounded-full text-xs font-medium", categoryColors[featuredPost.category])}>
-                    {featuredPost.category}
-                  </span>
-                  <span className="text-sm text-muted-foreground">{featuredPost.date}</span>
-                </div>
-                <h2 className="font-display text-2xl lg:text-3xl font-bold mb-4 group-hover:gradient-text transition-all">
-                  {featuredPost.title}
-                </h2>
-                <p className="text-muted-foreground mb-6">{featuredPost.excerpt}</p>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Clock className="w-4 h-4" />
-                    {featuredPost.readTime}
+                {/* Content */}
+                <div className="p-8 lg:p-12 flex flex-col justify-center">
+                  <div className="flex items-center gap-3 mb-4">
+                    <span className={cn("px-3 py-1 rounded-full text-xs font-medium", categoryColors[featuredPost.category])}>
+                      {featuredPost.category}
+                    </span>
+                    <span className="text-sm text-muted-foreground">{featuredPost.date}</span>
                   </div>
-                  <Button variant="gradient" size="sm">
-                    Read Article
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
+                  <h2 className="font-display text-2xl lg:text-3xl font-bold mb-4 group-hover:gradient-text transition-all">
+                    {featuredPost.title}
+                  </h2>
+                  <p className="text-muted-foreground mb-6">{featuredPost.excerpt}</p>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Clock className="w-4 h-4" />
+                      {featuredPost.readTime}
+                    </div>
+                    <Button variant="gradient" size="sm">
+                      Read Article
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          </Link>
         </div>
       </section>
 
@@ -189,43 +195,44 @@ export default function Blog() {
             <div className="lg:col-span-3">
               <div className="grid sm:grid-cols-2 gap-6">
                 {blogPosts.map((post, index) => (
-                  <motion.article
-                    key={post.title}
-                    initial={{ opacity: 0, y: 30 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true }}
-                    transition={{ delay: index * 0.1 }}
-                    className="bg-background rounded-2xl overflow-hidden shadow-card hover:shadow-card-hover transition-all duration-300 group cursor-pointer hover:-translate-y-1"
-                  >
-                    {/* Thumbnail */}
-                    <div className="aspect-video bg-muted relative overflow-hidden">
-                      <img
-                        src={post.image}
-                        alt={post.title}
-                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        loading="lazy"
-                      />
-                      <div className="absolute inset-0 gradient-bg opacity-10 group-hover:opacity-20 transition-opacity" />
-                    </div>
+                  <Link key={post.title} to={`/blog/${slugify(post.title)}`}>
+                    <motion.article
+                      initial={{ opacity: 0, y: 30 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true }}
+                      transition={{ delay: index * 0.1 }}
+                      className="bg-background rounded-2xl overflow-hidden shadow-card hover:shadow-card-hover transition-all duration-300 group cursor-pointer hover:-translate-y-1 h-full"
+                    >
+                      {/* Thumbnail */}
+                      <div className="aspect-video bg-muted relative overflow-hidden">
+                        <img
+                          src={post.image}
+                          alt={post.title}
+                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 gradient-bg opacity-10 group-hover:opacity-20 transition-opacity" />
+                      </div>
 
-                    {/* Content */}
-                    <div className="p-6">
-                      <div className="flex items-center gap-3 mb-3">
-                        <span className={cn("px-2.5 py-0.5 rounded-full text-xs font-medium", categoryColors[post.category])}>
-                          {post.category}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{post.date}</span>
+                      {/* Content */}
+                      <div className="p-6">
+                        <div className="flex items-center gap-3 mb-3">
+                          <span className={cn("px-2.5 py-0.5 rounded-full text-xs font-medium", categoryColors[post.category])}>
+                            {post.category}
+                          </span>
+                          <span className="text-xs text-muted-foreground">{post.date}</span>
+                        </div>
+                        <h3 className="font-semibold text-lg mb-2 group-hover:text-primary transition-colors line-clamp-2">
+                          {post.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{post.excerpt}</p>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Clock className="w-4 h-4" />
+                          {post.readTime}
+                        </div>
                       </div>
-                      <h3 className="font-semibold text-lg mb-2 group-hover:text-primary transition-colors line-clamp-2">
-                        {post.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{post.excerpt}</p>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Clock className="w-4 h-4" />
-                        {post.readTime}
-                      </div>
-                    </div>
-                  </motion.article>
+                    </motion.article>
+                  </Link>
                 ))}
               </div>
 
