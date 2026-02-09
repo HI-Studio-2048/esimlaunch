@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Globe, Wifi, Clock, DollarSign } from "lucide-react";
+import { X, Globe, Wifi, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -210,47 +210,99 @@ const countriesData: Record<string, CountryData> = {
   },
 };
 
-// Simplified world map SVG paths for major regions/countries
-const mapPaths: Record<string, { d: string; transform?: string }> = {
-  US: { d: "M 55 95 L 130 95 L 135 120 L 120 140 L 50 140 L 40 120 Z" },
-  CA: { d: "M 50 40 L 140 40 L 145 80 L 130 95 L 55 95 L 40 80 Z" },
-  MX: { d: "M 50 140 L 90 140 L 95 180 L 70 190 L 45 170 Z" },
-  BR: { d: "M 115 200 L 160 180 L 180 220 L 160 280 L 110 270 L 100 230 Z" },
-  AR: { d: "M 100 280 L 130 280 L 135 350 L 110 370 L 90 340 Z" },
-  GB: { d: "M 210 75 L 220 70 L 225 85 L 215 90 Z" },
-  FR: { d: "M 210 95 L 235 90 L 240 115 L 220 125 L 205 110 Z" },
-  DE: { d: "M 235 80 L 260 75 L 265 100 L 245 105 L 230 95 Z" },
-  ES: { d: "M 195 115 L 220 110 L 225 140 L 200 145 L 190 130 Z" },
-  IT: { d: "M 245 105 L 260 100 L 270 145 L 255 155 L 240 130 Z" },
-  ZA: { d: "M 265 290 L 295 275 L 310 310 L 285 335 L 260 315 Z" },
-  EG: { d: "M 280 160 L 310 150 L 320 185 L 295 195 L 275 180 Z" },
-  AE: { d: "M 330 170 L 355 165 L 360 185 L 340 190 L 325 180 Z" },
-  IN: { d: "M 350 150 L 395 130 L 410 195 L 380 230 L 345 200 Z" },
-  CN: { d: "M 395 80 L 480 60 L 500 140 L 450 170 L 390 150 Z" },
-  JP: { d: "M 500 100 L 520 90 L 530 130 L 515 145 L 495 130 Z" },
-  KR: { d: "M 485 115 L 500 110 L 505 135 L 490 140 Z" },
-  TH: { d: "M 420 175 L 440 170 L 450 210 L 430 225 L 415 200 Z" },
-  SG: { d: "M 430 235 L 445 230 L 450 245 L 435 250 Z" },
-  AU: { d: "M 440 280 L 520 260 L 540 320 L 500 360 L 440 340 Z" },
-  NZ: { d: "M 545 340 L 560 335 L 565 370 L 550 380 L 540 360 Z" },
+// Helper function to get coverage color based on coverage status
+const getCoverageFill = (coverage: "full" | "partial" | "none"): string => {
+  switch (coverage) {
+    case "full":
+      return "hsl(var(--primary) / 0.8)";
+    case "partial":
+      return "hsl(var(--primary) / 0.4)";
+    default:
+      return "hsl(var(--muted))";
+  }
+};
+
+const getCoverageHoverFill = (coverage: "full" | "partial" | "none"): string => {
+  switch (coverage) {
+    case "full":
+      return "hsl(var(--primary))";
+    case "partial":
+      return "hsl(var(--primary) / 0.6)";
+    default:
+      return "hsl(var(--muted-foreground) / 0.2)";
+  }
 };
 
 export function WorldMap() {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [hoveredCountry, setHoveredCountry] = useState<string | null>(null);
-
-  const getCoverageColor = (coverage: "full" | "partial" | "none") => {
-    switch (coverage) {
-      case "full":
-        return "fill-primary/80 hover:fill-primary";
-      case "partial":
-        return "fill-primary/40 hover:fill-primary/60";
-      default:
-        return "fill-muted hover:fill-muted-foreground/20";
-    }
-  };
+  const [svgContent, setSvgContent] = useState<string>("");
+  const svgRef = useRef<HTMLDivElement>(null);
 
   const selectedData = selectedCountry ? countriesData[selectedCountry] : null;
+
+  // Load SVG content from public folder
+  useEffect(() => {
+    fetch('/world-map.svg')
+      .then((res) => res.text())
+      .then((text) => {
+        setSvgContent(text);
+      })
+      .catch((err) => {
+        console.error('Failed to load world map SVG:', err);
+        // Fallback: create a simple SVG structure
+        setSvgContent('<svg viewBox="0 0 1009 652"><g></g></svg>');
+      });
+  }, []);
+
+  // Apply coverage colors to SVG paths based on country codes
+  useEffect(() => {
+    if (!svgRef.current || !svgContent) return;
+
+    const svgElement = svgRef.current.querySelector("svg");
+    if (!svgElement) return;
+
+    const paths = svgElement.querySelectorAll("path");
+    paths.forEach((path) => {
+      const countryCode = path.getAttribute("class");
+      if (!countryCode) return;
+
+      const country = countriesData[countryCode];
+      const coverage = country?.coverage || "none";
+      
+      // Set base fill color
+      path.setAttribute("fill", getCoverageFill(coverage));
+      path.setAttribute("stroke", "hsl(var(--border))");
+      path.setAttribute("stroke-width", "0.5");
+      path.setAttribute("data-coverage", coverage);
+      path.setAttribute("data-country-code", countryCode);
+      
+      // Add cursor pointer for countries with data
+      if (country) {
+        path.style.cursor = "pointer";
+        path.style.transition = "fill 0.2s ease";
+      }
+
+      // Add hover effect
+      path.addEventListener("mouseenter", () => {
+        if (country) {
+          path.setAttribute("fill", getCoverageHoverFill(coverage));
+          setHoveredCountry(countryCode);
+        }
+      });
+
+      path.addEventListener("mouseleave", () => {
+        path.setAttribute("fill", getCoverageFill(coverage));
+        setHoveredCountry(null);
+      });
+
+      path.addEventListener("click", () => {
+        if (country) {
+          setSelectedCountry(countryCode);
+        }
+      });
+    });
+  }, [svgContent]);
 
   return (
     <div className="relative w-full">
@@ -283,67 +335,32 @@ export function WorldMap() {
           </div>
         </div>
 
-        {/* SVG Map */}
-        <svg
-          viewBox="0 0 600 400"
-          className="w-full h-auto min-h-[300px] md:min-h-[400px]"
-          style={{ maxHeight: '500px' }}
-        >
-          {/* Ocean background */}
-          <rect x="0" y="0" width="600" height="400" className="fill-muted/30" rx="12" />
-          
-          {/* Countries */}
-          {Object.entries(mapPaths).map(([code, path]) => {
-            const country = countriesData[code];
-            const isHovered = hoveredCountry === code;
-            const isSelected = selectedCountry === code;
-            
-            return (
-              <motion.path
-                key={code}
-                d={path.d}
-                transform={path.transform}
-                className={cn(
-                  "cursor-pointer transition-all duration-200 stroke-background stroke-1",
-                  country ? getCoverageColor(country.coverage) : "fill-muted"
-                )}
-                initial={false}
-                animate={{
-                  scale: isHovered || isSelected ? 1.02 : 1,
-                  filter: isSelected ? "drop-shadow(0 0 8px hsl(var(--primary) / 0.5))" : "none"
-                }}
-                style={{ transformOrigin: "center", transformBox: "fill-box" }}
-                onMouseEnter={() => setHoveredCountry(code)}
-                onMouseLeave={() => setHoveredCountry(null)}
-                onClick={() => country && setSelectedCountry(code)}
-              />
-            );
-          })}
+        {/* SVG Map - Using the provided design with viewBox 0 0 1009 652 */}
+        <div className="relative w-full overflow-hidden rounded-lg">
+          <div
+            ref={svgRef}
+            className="world-map-container"
+            style={{ 
+              maxHeight: '600px',
+              backgroundColor: 'hsl(var(--muted) / 0.3)'
+            }}
+            dangerouslySetInnerHTML={{ __html: svgContent }}
+          />
 
           {/* Hover Tooltip */}
           {hoveredCountry && countriesData[hoveredCountry] && !selectedCountry && (
-            <g>
-              <foreignObject
-                x="0"
-                y="0"
-                width="200"
-                height="60"
-                style={{
-                  transform: `translate(${mapPaths[hoveredCountry]?.d.match(/M\s*(\d+)/)?.[1] || 0}px, ${(parseInt(mapPaths[hoveredCountry]?.d.match(/M\s*\d+\s+(\d+)/)?.[1] || "0") - 50)}px)`
-                }}
-              >
-                <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
-                  <p className="text-sm font-medium text-foreground">
-                    {countriesData[hoveredCountry].name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {countriesData[hoveredCountry].plans.length} plans available
-                  </p>
-                </div>
-              </foreignObject>
-            </g>
+            <div className="absolute pointer-events-none z-20">
+              <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
+                <p className="text-sm font-medium text-foreground">
+                  {countriesData[hoveredCountry].name}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {countriesData[hoveredCountry].plans.length} plans available
+                </p>
+              </div>
+            </div>
           )}
-        </svg>
+        </div>
 
         {/* Quick Stats */}
         <div className="flex flex-wrap justify-center gap-6 mt-6 relative z-10">

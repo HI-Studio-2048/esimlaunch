@@ -1,6 +1,10 @@
 import { motion } from "framer-motion";
 import { Shield, Lock, Award, CheckCircle, CreditCard, Globe } from "lucide-react";
 import { AnimatedCounter } from "./AnimatedCounter";
+import { useEffect, useRef } from "react";
+import { Swiper } from "swiper";
+import { Autoplay } from "swiper/modules";
+import "swiper/css";
 
 const certifications = [
   { icon: Shield, label: "PCI-DSS Compliant", description: "Payment card security" },
@@ -17,14 +21,95 @@ const partners = [
   { name: "GigSky", logo: "✈️" },
 ];
 
-const pressLogos = [
-  "TechCrunch",
-  "Forbes",
-  "Wired",
-  "The Verge",
+// Popular international mobile network providers with eSIM support
+// Logos are stored locally in /public/logos/
+const mobileProviders = [
+  { name: "T-Mobile", country: "USA", logo: "/logos/t-mobile.svg" },
+  { name: "Vodafone", country: "UK/Europe", logo: "/logos/vodafone.svg" },
+  { name: "Orange", country: "France", logo: "/logos/orange.svg" },
+  { name: "EE", country: "UK", logo: "/logos/ee.svg" },
+  { name: "Three", country: "UK/Hong Kong", logo: "/logos/three.svg" },
+  { name: "O2", country: "UK/Europe", logo: "/logos/o2.svg" },
+  { name: "Airtel", country: "India", logo: "/logos/airtel.svg" },
+  { name: "Jio", country: "India", logo: "/logos/jio.svg" },
+  { name: "SoftBank", country: "Japan", logo: "/logos/softbank.svg" },
+  { name: "NTT Docomo", country: "Japan", logo: "/logos/ntt-docomo.svg" },
+  { name: "Telstra", country: "Australia", logo: "/logos/telstra.svg" },
+  { name: "Optus", country: "Australia", logo: "/logos/optus.svg" },
+  { name: "Rogers", country: "Canada", logo: "/logos/rogers.svg" },
+  { name: "Bell", country: "Canada", logo: "/logos/bell.svg" },
+  { name: "TIM", country: "Italy", logo: "/logos/tim.svg" },
+  { name: "Movistar", country: "Spain/Latin America", logo: "/logos/movistar.svg" },
+  { name: "Claro", country: "Latin America", logo: "/logos/claro.svg" },
+  { name: "Globe", country: "Philippines", logo: "/logos/globe.svg" },
+  { name: "Singtel", country: "Singapore", logo: "/logos/singtel.svg" },
+  { name: "StarHub", country: "Singapore", logo: "/logos/starhub.svg" },
 ];
 
 export function TrustBadges() {
+  const rtlSliderRef = useRef<HTMLDivElement>(null);
+  const ltrSliderRef = useRef<HTMLDivElement>(null);
+  const slidersRef = useRef<Swiper[]>([]);
+
+  useEffect(() => {
+    const isDesktop = () => window.innerWidth > 767.9;
+    let gap = 15;
+
+    if (isDesktop()) gap = 0.0285 * window.innerWidth;
+
+    const sliders: Swiper[] = [];
+
+    if (rtlSliderRef.current && ltrSliderRef.current) {
+      // Initialize RTL slider
+      const rtlSlider = new Swiper(rtlSliderRef.current, {
+        modules: [Autoplay],
+        loop: true,
+        slidesPerView: "auto",
+        spaceBetween: gap,
+        speed: 8000,
+        allowTouchMove: false,
+        autoplay: {
+          delay: 0,
+          reverseDirection: true,
+          disableOnInteraction: false,
+        },
+      });
+
+      // Initialize LTR slider
+      const ltrSlider = new Swiper(ltrSliderRef.current, {
+        modules: [Autoplay],
+        loop: true,
+        slidesPerView: "auto",
+        spaceBetween: gap,
+        speed: 8000,
+        allowTouchMove: false,
+        autoplay: {
+          delay: 0,
+          reverseDirection: false,
+          disableOnInteraction: false,
+        },
+      });
+
+      sliders.push(rtlSlider, ltrSlider);
+      slidersRef.current = sliders;
+
+      const handleResize = () => {
+        const newGap = isDesktop() ? 0.0285 * window.innerWidth : 15;
+        sliders.forEach((slider) => {
+          slider.params.spaceBetween = newGap;
+          slider.update();
+        });
+      };
+
+      window.addEventListener("resize", handleResize);
+
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        sliders.forEach((slider) => slider.destroy());
+      };
+    }
+  }, []);
+
   return (
     <section className="section-padding bg-muted/30">
       <div className="container-custom">
@@ -126,27 +211,123 @@ export function TrustBadges() {
           </div>
         </motion.div>
 
-        {/* Press Mentions */}
+        {/* Press Mentions - Horizontal Ticker */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.3 }}
         >
-          <p className="text-center text-sm text-muted-foreground mb-6">As seen in</p>
-          <div className="flex flex-wrap justify-center items-center gap-8 md:gap-12">
-            {pressLogos.map((press, index) => (
-              <motion.span
-                key={press}
-                initial={{ opacity: 0 }}
-                whileInView={{ opacity: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.4 + index * 0.1 }}
-                className="text-xl md:text-2xl font-display font-bold text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-              >
-                {press}
-              </motion.span>
-            ))}
+          <h1 className="text-center text-2xl md:text-3xl font-display font-bold mb-4">
+            A World of Trusted Brands
+          </h1>
+          <div className="text-center text-sm text-muted-foreground mb-8">
+            The power of partnership connecting you globally
+          </div>
+
+          <div className="horizontal-ticker">
+            {/* Horizontal Ticker: Slider RTL */}
+            <div ref={rtlSliderRef} className="swiper horizontal-ticker__slider">
+              <div className="swiper-wrapper">
+                {mobileProviders.slice(0, 10).map((provider, index) => (
+                  <div key={`rtl-${index}`} className="swiper-slide horizontal-ticker__slide">
+                    <div className={`provider-logo ${!provider.logo ? 'provider-logo-text-only' : ''}`}>
+                      {provider.logo && (
+                        <img 
+                          src={provider.logo} 
+                          alt={provider.name}
+                          className="provider-logo-img"
+                          onError={(e) => {
+                            // Fallback to text if image fails to load
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.classList.add('provider-logo-text-only');
+                            }
+                          }}
+                        />
+                      )}
+                      <span className="provider-name">{provider.name}</span>
+                    </div>
+                  </div>
+                ))}
+                {/* slides copies for seamless loop */}
+                {mobileProviders.slice(0, 10).map((provider, index) => (
+                  <div key={`rtl-copy-${index}`} className="swiper-slide horizontal-ticker__slide">
+                    <div className={`provider-logo ${!provider.logo ? 'provider-logo-text-only' : ''}`}>
+                      {provider.logo && (
+                        <img 
+                          src={provider.logo} 
+                          alt={provider.name}
+                          className="provider-logo-img"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.classList.add('provider-logo-text-only');
+                            }
+                          }}
+                        />
+                      )}
+                      <span className="provider-name">{provider.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Horizontal Ticker: Slider LTR */}
+            <div ref={ltrSliderRef} className="swiper horizontal-ticker__slider">
+              <div className="swiper-wrapper">
+                {mobileProviders.slice(10).map((provider, index) => (
+                  <div key={`ltr-${index}`} className="swiper-slide horizontal-ticker__slide">
+                    <div className={`provider-logo ${!provider.logo ? 'provider-logo-text-only' : ''}`}>
+                      {provider.logo && (
+                        <img 
+                          src={provider.logo} 
+                          alt={provider.name}
+                          className="provider-logo-img"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.classList.add('provider-logo-text-only');
+                            }
+                          }}
+                        />
+                      )}
+                      <span className="provider-name">{provider.name}</span>
+                    </div>
+                  </div>
+                ))}
+                {/* slides copies for seamless loop */}
+                {mobileProviders.slice(10).map((provider, index) => (
+                  <div key={`ltr-copy-${index}`} className="swiper-slide horizontal-ticker__slide">
+                    <div className={`provider-logo ${!provider.logo ? 'provider-logo-text-only' : ''}`}>
+                      {provider.logo && (
+                        <img 
+                          src={provider.logo} 
+                          alt={provider.name}
+                          className="provider-logo-img"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.style.display = 'none';
+                            const parent = target.parentElement;
+                            if (parent) {
+                              parent.classList.add('provider-logo-text-only');
+                            }
+                          }}
+                        />
+                      )}
+                      <span className="provider-name">{provider.name}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </motion.div>
       </div>
