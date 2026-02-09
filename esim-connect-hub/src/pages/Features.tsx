@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { FeatureCard } from "@/components/shared/FeatureCard";
+import { featureVisualMap } from "@/components/features/FeatureVisuals";
 import { cn } from "@/lib/utils";
 
 const mainFeatures = [
@@ -67,6 +68,7 @@ const FeatureSection = ({
   reverse?: boolean;
 }) => {
   const Icon = feature.icon;
+  const VisualComponent = featureVisualMap[feature.image];
 
   return (
     <motion.div
@@ -95,27 +97,16 @@ const FeatureSection = ({
 
       <div className={cn("relative", reverse && "lg:order-1")}>
         <motion.div
-          className="bg-card rounded-3xl shadow-xl border border-border/50 p-6 md:p-8"
+          className="bg-card rounded-3xl shadow-xl border border-border/50 overflow-hidden"
           whileHover={{ scale: 1.02 }}
           transition={{ duration: 0.3 }}
         >
-          {/* Mock Feature Visual */}
-          <div className="aspect-video bg-muted/30 rounded-2xl flex items-center justify-center relative overflow-hidden">
-            <div className="absolute inset-0 gradient-bg opacity-5" />
-            <div className="grid grid-cols-3 gap-4 p-8 w-full">
-              {[...Array(6)].map((_, i) => (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.1 }}
-                  className="aspect-square bg-card rounded-xl shadow-md flex items-center justify-center"
-                >
-                  <div className="w-8 h-8 rounded-lg gradient-bg opacity-60" />
-                </motion.div>
-              ))}
-            </div>
+          <div className="aspect-video bg-muted/30 rounded-2xl relative overflow-hidden">
+            {VisualComponent ? <VisualComponent /> : (
+              <div className="flex items-center justify-center h-full">
+                <Icon className="w-16 h-16 text-muted-foreground/30" />
+              </div>
+            )}
           </div>
         </motion.div>
 

@@ -11,7 +11,7 @@ const featuredPost = {
   category: "Guide",
   readTime: "12 min read",
   date: "Jan 15, 2026",
-  image: "featured"
+  image: "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b?w=800&q=80"
 };
 
 const blogPosts = [
@@ -21,6 +21,7 @@ const blogPosts = [
     category: "Technology",
     readTime: "5 min read",
     date: "Jan 12, 2026",
+    image: "https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&q=80",
   },
   {
     title: "5 Marketing Strategies That Work for eSIM Businesses",
@@ -28,6 +29,7 @@ const blogPosts = [
     category: "Marketing",
     readTime: "8 min read",
     date: "Jan 10, 2026",
+    image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&q=80",
   },
   {
     title: "How to Choose the Right eSIM Providers for Your Store",
@@ -35,6 +37,7 @@ const blogPosts = [
     category: "Business",
     readTime: "6 min read",
     date: "Jan 8, 2026",
+    image: "https://images.unsplash.com/photo-1553877522-43269d4ea984?w=600&q=80",
   },
   {
     title: "Maximizing Profit Margins: Pricing Strategies for eSIM Resellers",
@@ -42,6 +45,7 @@ const blogPosts = [
     category: "Business",
     readTime: "7 min read",
     date: "Jan 5, 2026",
+    image: "https://images.unsplash.com/photo-1579532537598-459ecdaf39cc?w=600&q=80",
   },
   {
     title: "The Future of Travel Connectivity: eSIM Trends to Watch",
@@ -49,6 +53,7 @@ const blogPosts = [
     category: "Industry",
     readTime: "4 min read",
     date: "Jan 3, 2026",
+    image: "https://images.unsplash.com/photo-1436491865332-7a61a109db05?w=600&q=80",
   },
   {
     title: "Customer Support Best Practices for eSIM Businesses",
@@ -56,6 +61,7 @@ const blogPosts = [
     category: "Customer Service",
     readTime: "5 min read",
     date: "Jan 1, 2026",
+    image: "https://images.unsplash.com/photo-1556745757-8d76bdb6984b?w=600&q=80",
   },
 ];
 
@@ -102,10 +108,13 @@ export default function Blog() {
             <div className="grid lg:grid-cols-2">
               {/* Image */}
               <div className="aspect-video lg:aspect-auto bg-muted relative overflow-hidden">
+                <img 
+                  src={featuredPost.image} 
+                  alt={featuredPost.title}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  loading="lazy"
+                />
                 <div className="absolute inset-0 gradient-bg opacity-20" />
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="w-24 h-24 rounded-3xl gradient-bg opacity-60 animate-float" />
-                </div>
               </div>
 
               {/* Content */}
@@ -190,10 +199,13 @@ export default function Blog() {
                   >
                     {/* Thumbnail */}
                     <div className="aspect-video bg-muted relative overflow-hidden">
+                      <img
+                        src={post.image}
+                        alt={post.title}
+                        className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
                       <div className="absolute inset-0 gradient-bg opacity-10 group-hover:opacity-20 transition-opacity" />
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-12 h-12 rounded-xl gradient-bg opacity-40 group-hover:scale-110 transition-transform" />
-                      </div>
                     </div>
 
                     {/* Content */}

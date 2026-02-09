@@ -23,7 +23,7 @@ export function DNSInstructions({
   const { toast } = useToast();
 
   const isExpanded = controlledExpanded !== undefined ? controlledExpanded : internalExpanded;
-  const setIsExpanded = onToggle || (() => setInternalExpanded(!internalExpanded));
+  const setIsExpanded = onToggle || ((_val?: boolean) => setInternalExpanded(prev => !prev));
 
   const cnameRecord = domain;
   const targetRecord = targetDomain;
@@ -161,4 +161,6 @@ export function DNSInstructions({
     </div>
   );
 }
+
+
 

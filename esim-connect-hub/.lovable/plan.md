@@ -1,130 +1,90 @@
 
-# Features to Make Your eSIMPanel Site Stand Out
+# Bring the Website to Life: Replace All Placeholders with Real Visuals + Fix Build Errors
 
-## 1. Interactive Elements & Engagement
-
-### Coverage Checker / Destination Finder
-- Search-by-country interactive tool showing available eSIM plans
-- Interactive world map with clickable regions
-- Compare plans by data, validity, and price
-- "Popular destinations" carousel with quick-access cards
-
-### Live Activity Feed
-- Real-time animated ticker showing "John from London just purchased Europe 10GB"
-- Creates social proof and urgency
-- Floating notification-style popup in corner
-
-### Interactive Product Comparison Tool
-- Side-by-side plan comparison with drag-and-drop cards
-- Filter by region, data amount, or price
-- "Recommend best plan for me" quiz
-
-## 2. Trust & Credibility Boosters
-
-### Customer Success Stories Video Section
-- Video testimonials carousel with play buttons
-- Customer logos with hover-to-play previews
-- Metrics overlay on each video thumbnail
-
-### Trust Badges & Certifications Section
-- Security certifications (PCI-DSS, GDPR compliant)
-- Partner badges (Stripe verified, etc.)
-- "Trusted by X businesses" animated counter
-- Press mentions / "As seen in" logos
-
-### Live Stats Dashboard Widget
-- Real-time counters: "X eSIMs activated today"
-- Animated globe showing recent activations by location
-- Updates every few seconds for dynamism
-
-## 3. Advanced UX Features
-
-### Sticky Progress-Based CTA
-- As users scroll, show personalized CTA based on section
-- "Ready to start?" appears after viewing pricing
-- Subtle but effective conversion nudge
-
-### AI-Powered Help Assistant
-- Floating chatbot icon (ready for Lovable AI integration later)
-- Pre-populated FAQ responses
-- "Ask about coverage in [country]" quick prompts
-
-### Dark/Light Mode with Custom Themes
-- Already have toggle - could add brand color customization preview
-- "Preview your store in dark mode" interactive demo
-
-### Micro-interactions & Polish
-- Skeleton loading states for all data sections
-- Success confetti on form submissions
-- Smooth page transitions with shared element animations
-- Hover states with subtle 3D transforms
-
-## 4. Conversion Optimization
-
-### Exit-Intent Popup
-- Triggers when mouse moves toward browser close
-- "Wait! Get 20% off your first month" offer
-- Email capture for abandoned visitors
-
-### Pricing Calculator with Custom Quote
-- Beyond ROI - let prospects input their expected volume
-- Generate personalized pricing recommendation
-- "Your estimated monthly cost: $X" with plan suggestion
-
-### Interactive Timeline / Roadmap
-- Public product roadmap showing upcoming features
-- Users can upvote features they want
-- Builds trust and community engagement
-
-## 5. Content & Resources
-
-### Resource Library / Downloads Hub
-- Whitepapers, eSIM guides, business templates
-- Gated content for lead generation
-- "Getting Started Kit" download bundle
-
-### Interactive Knowledge Base
-- Searchable help center with categories
-- Video tutorials embedded
-- "Was this helpful?" feedback buttons
-
-### Affiliate/Referral Program Page
-- Explain commission structure
-- Referral link generator (mock)
-- Leaderboard of top affiliates
-
-## 6. Technical Differentiators
-
-### API Playground / Developer Docs
-- Interactive API documentation
-- "Try it now" with sample requests
-- Code snippets in multiple languages
-
-### Store Preview Generator
-- "See what your store could look like"
-- Input brand colors, logo, name
-- Generate live preview mockup
-
-### Speed/Performance Metrics Display
-- "Our platform loads in under 2 seconds"
-- Animated performance benchmarks
-- Uptime status indicator
+## Overview
+Replace every empty placeholder, generic gradient box, and dull container across the entire site with relevant Unsplash images, meaningful icon compositions, and rich visual mock-ups. Also fix 3 build errors blocking deployment.
 
 ---
 
-## Recommended Priority Order
+## Build Error Fixes (Priority)
 
-**Quick Wins (1-2 hours each):**
-1. Live Activity Feed - Social proof that creates urgency
-2. Trust Badges Section - Instant credibility boost
-3. Exit-Intent Popup - Capture leaving visitors
+### 1. DNSInstructions.tsx - Line 54: `setIsExpanded` called with argument
+The `setIsExpanded` fallback is `() => setInternalExpanded(!internalExpanded)` which takes 0 args, but is called with `!isExpanded`. Fix by making the fallback accept a parameter.
 
-**Medium Effort (2-4 hours each):**
-4. Coverage Checker - Interactive destination search tool
-5. Store Preview Generator - Let users visualize their brand
-6. Resource Library - Lead generation content hub
+### 2. Login.tsx - Line 126: `authenticateWithRedirect` does not exist on `LoadedClerk`
+Remove the direct `useClerk()` import and `clerk.authenticateWithRedirect` call. Replace with Clerk's `SignInButton` component for OAuth, or simply show a "Coming Soon" toast since Clerk isn't configured.
 
-**Larger Features (4-6 hours each):**
-7. Interactive World Map - Stunning visual for coverage
-8. AI Help Assistant - Prepare for chatbot integration
-9. API Playground - Developer-focused differentiation
+### 3. Signup.tsx - Line 103: Same `authenticateWithRedirect` issue
+Same fix as Login.tsx.
+
+---
+
+## Visual Enhancements by Page
+
+### Features Page (`src/pages/Features.tsx`)
+Each of the 6 feature sections currently shows an identical grid of empty gradient squares. Replace each with a **unique, contextual visual**:
+
+- **Multi-Provider Integration**: Show a mock UI with provider logo cards (Airalo, eSIM Go, etc.) arranged in a connected grid with status indicators
+- **Smart Pricing Engine**: Show a mock pricing table/slider UI with currency symbols and percentage badges
+- **Built-in SEO Tools**: Show a mock search console view with ranking charts and keyword badges
+- **Powerful User Dashboard**: Show a mini dashboard mockup with charts, stats cards, and activity feed
+- **Enterprise Security**: Show a shield icon with lock indicators, encryption badges, and compliance checkmarks
+- **Automatic Updates**: Show a deployment pipeline visual with version badges and checkmarks
+
+Each visual will be built with Tailwind-styled mock UI elements (not just images) to look like real product screenshots.
+
+### Blog Page (`src/pages/Blog.tsx`)
+- **Featured post image**: Replace the empty gradient box with a relevant Unsplash image (person using phone while traveling)
+- **Blog post thumbnails**: Add unique Unsplash images per category:
+  - Technology: circuit board / tech imagery
+  - Marketing: social media / growth charts
+  - Business: office / meeting imagery
+  - Industry: airplane / travel imagery
+  - Customer Service: support / headset imagery
+
+### Homepage (`src/pages/Index.tsx`)
+- The hero dashboard mockup is already decent with skeleton UI elements -- enhance it with more realistic labels and mini-chart data
+- Add images to the testimonial cards (avatar photos already referenced but not shown)
+
+### Community Page (`src/pages/Community.tsx`)
+- Already uses Unsplash images for avatars -- looks good, no changes needed
+
+### About Page (`src/pages/About.tsx`)
+- Already uses Unsplash images for team and story -- looks good, no changes needed
+
+### Case Studies Page (`src/pages/CaseStudies.tsx`)
+- Currently uses only Lucide icons for company logos -- no image placeholders to fix, already well-structured
+
+### Partners Page (`src/pages/Partners.tsx`)
+- Uses gradient icon boxes for providers -- replace with more distinctive visual identifiers (emoji or styled initials per provider)
+
+### Pricing Page (`src/pages/Pricing.tsx`)
+- Already clean with icon + text cards -- no empty placeholders
+
+### Dashboard Page (`src/pages/Dashboard.tsx`)
+- Uses skeleton loading states appropriately -- no empty placeholders
+
+---
+
+## Technical Approach
+
+### Images
+Use high-quality Unsplash URLs with appropriate `w=` and `q=` parameters for performance:
+- Blog thumbnails: `w=600&q=80`
+- Featured images: `w=800&q=80`
+- All images use `object-cover` with proper `aspect-ratio` containers
+
+### Feature Visuals
+Build custom mini-UI mockups using Tailwind classes rather than external images. This keeps them theme-aware (works in dark/light mode) and eliminates loading delays. Each feature section will have a unique composition of:
+- Mock cards, badges, and status indicators
+- Relevant Lucide icons
+- Progress bars, charts, and data visualizations
+- All styled to look like actual product screenshots
+
+### Files Modified
+1. `src/pages/Features.tsx` -- Replace generic grid with 6 unique feature visuals
+2. `src/pages/Blog.tsx` -- Add Unsplash images to featured post and all blog cards
+3. `src/pages/Index.tsx` -- Minor enhancements to hero mockup realism
+4. `src/pages/Login.tsx` -- Fix Clerk `authenticateWithRedirect` build error
+5. `src/pages/Signup.tsx` -- Fix Clerk `authenticateWithRedirect` build error
+6. `src/components/shared/DNSInstructions.tsx` -- Fix `setIsExpanded` argument error

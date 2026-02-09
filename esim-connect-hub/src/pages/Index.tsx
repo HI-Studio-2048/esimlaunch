@@ -200,14 +200,18 @@ export default function Index() {
                   {/* Dashboard Content */}
                   <div className="p-6 space-y-4">
                     <div className="flex items-center justify-between">
-                      <div className="h-6 w-32 bg-muted rounded-lg" />
-                      <div className="h-8 w-24 gradient-bg rounded-lg" />
+                      <div className="text-sm font-semibold">Dashboard Overview</div>
+                      <div className="h-8 w-24 gradient-bg rounded-lg flex items-center justify-center text-xs text-primary-foreground font-medium">+ New Plan</div>
                     </div>
                     <div className="grid grid-cols-3 gap-4">
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} className="p-4 bg-muted/50 rounded-xl">
-                          <div className="h-4 w-16 bg-muted rounded mb-2" />
-                          <div className="h-6 w-20 bg-primary/20 rounded" />
+                      {[
+                        { label: "Revenue", value: "$12,450" },
+                        { label: "Orders", value: "384" },
+                        { label: "Active Users", value: "1,247" },
+                      ].map((stat) => (
+                        <div key={stat.label} className="p-4 bg-muted/50 rounded-xl">
+                          <div className="text-xs text-muted-foreground mb-1">{stat.label}</div>
+                          <div className="text-sm font-bold">{stat.value}</div>
                         </div>
                       ))}
                     </div>
