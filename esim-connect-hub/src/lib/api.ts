@@ -430,6 +430,13 @@ class ApiClient {
     return this.request<any>('/api/v1/webhooks');
   }
 
+  async testWebhook(url: string, secret?: string) {
+    return this.request<{ success: boolean; message?: string; statusCode?: number }>('/api/v1/webhooks/test', {
+      method: 'POST',
+      body: JSON.stringify({ url, secret }),
+    });
+  }
+
   // Dashboard endpoints
   async getDashboardStats() {
     return this.request<{
@@ -507,41 +514,254 @@ class ApiClient {
     });
   }
 
-  // Domain verification endpoints (mock implementations if backend doesn't support)
-  async verifyDomain(domain: string) {
-    // Mock implementation - replace with actual API call when backend supports it
-    // For now, simulate a verification check
-    return new Promise<{ verified: boolean; sslActive: boolean }>((resolve) => {
-      setTimeout(() => {
-        // Mock: assume domain is verified if it's a valid format
-        const isValid = /^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$/i.test(domain);
-        resolve({
-          verified: isValid,
-          sslActive: isValid,
-        });
-      }, 1500);
+  // Domain verification endpoints
+  async verifyDomain(storeId: string, domain: string, method: 'dns' | 'cname' = 'dns') {
+    return this.request<{
+      domain: string;
+      verificationToken: string;
+      instructions: {
+        txtRecord: { type: string; name: string; value: string };
+        cnameRecord: { type: string; name: string; value: string };
+      };
+      method: string;
+    }>(`/api/stores/${storeId}/verify-domain`, {
+      method: 'POST',
+      body: JSON.stringify({ domain, method }),
     });
   }
 
   async getDomainStatus(storeId: string) {
-    // Mock implementation - replace with actual API call when backend supports it
-    try {
-      const store = await this.getStore(storeId);
-      if (store.domain) {
-        return {
-          domain: store.domain,
-          verified: true, // Mock: assume verified if domain exists
-          sslActive: true,
-          subdomain: store.subdomain || null,
-        };
-      }
-      return null;
-    } catch (error) {
-      return null;
+    return this.request<{
+      domain: string | null;
+      verified: boolean;
+      method: string | null;
+      error?: string;
+      instructions?: {
+        txtRecord: { type: string; name: string; value: string };
+        cnameRecord: { type: string; name: string; value: string };
+      } | null;
+    }>(`/api/stores/${storeId}/domain-status`);
+  }
+
+  async verifyDNS(storeId: string, method: 'dns' | 'cname' = 'dns') {
+    return this.request<{
+      verified: boolean;
+      method: string | null;
+      error?: string;
+    }>(`/api/stores/${storeId}/verify-dns`, {
+      method: 'POST',
+      body: JSON.stringify({ method }),
+    });
+  }
+
+  // Payment endpoints
+  async createPaymentIntent(data: {
+    amount: number;
+    currency?: string;
+    metadata?: Record<string, string>;
+    storeId?: string;
+  }) {
+    return this.request<{
+      clientSecret: string;
+      id: string;
+      amount: number;
+      currency: string;
+      status: string;
+    }>('/api/payments/create-intent', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async confirmPayment(
+    paymentIntentId: string, 
+    data?: {
+      metadata?: Record<string, string>;
+      customerEmail?: string;
+      customerName?: string;
+      customerId?: string; // Link to customer account
+      storeId?: string;
+      packageInfoList?: Array<{
+        packageCode?: string;
+        slug?: string;
+        count: number;
+        price?: number;
+      }>;
     }
+  ) {
+    return this.request<{
+      id: string;
+      status: string;
+      amount: number;
+      currency: string;
+      customerOrderId?: string;
+    }>('/api/payments/confirm', {
+      method: 'POST',
+      body: JSON.stringify({ 
+        paymentIntentId, 
+        ...data 
+      }),
+    });
+  }
+
+  async refundPayment(paymentIntentId: string, amount?: number) {
+    return this.request<{
+      id: string;
+      amount: number;
+      status: string;
+      paymentIntentId: string;
+    }>('/api/payments/refund', {
+      method: 'POST',
+      body: JSON.stringify({ paymentIntentId, amount }),
+    });
+  }
+
+  // Customer order endpoints
+  async getCustomerOrder(orderId: string) {
+    return this.request<any>(`/api/customer-orders/${orderId}`);
+  }
+
+  async getCustomerOrdersByEmail(email: string) {
+    return this.request<any[]>(`/api/customer-orders?email=${encodeURIComponent(email)}`);
+  }
+
+  async getCustomerOrderByPaymentIntent(paymentIntentId: string) {
+    return this.request<any>(`/api/customer-orders/payment-intent/${paymentIntentId}`);
+  }
+
+  async resendESIMEmail(orderId: string) {
+    return this.request<{ message: string }>(`/api/customer-orders/${orderId}/resend-email`, {
+      method: 'POST',
+    });
+  }
+
+  // Currency endpoints
+  async getAvailableCurrencies() {
+    return this.request<Array<{ code: string; symbol: string; name: string }>>('/api/currency/list');
+  }
+
+  async convertCurrency(amount: number, from: string, to: string, storeId?: string) {
+    return this.request<{
+      originalAmount: number;
+      originalCurrency: string;
+      convertedAmount: number;
+      targetCurrency: string;
+      exchangeRate: number;
+    }>('/api/currency/convert', {
+      method: 'POST',
+      body: JSON.stringify({ amount, from, to, storeId }),
+    });
+  }
+
+  async getStoreCurrency(storeId: string) {
+    return this.request<{
+      default: string;
+      supported: string[];
+    }>(`/api/currency/store/${storeId}`);
+  }
+
+  async updateStoreCurrency(storeId: string, defaultCurrency: string, supportedCurrencies: string[]) {
+    return this.request(`/api/currency/store/${storeId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ defaultCurrency, supportedCurrencies }),
+    });
+  }
+
+  // Analytics endpoints
+  async getRevenueAnalytics(filters?: {
+    storeId?: string;
+    startDate?: string;
+    endDate?: string;
+    groupBy?: 'day' | 'week' | 'month';
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.storeId) params.append('storeId', filters.storeId);
+    if (filters?.startDate) params.append('startDate', filters.startDate);
+    if (filters?.endDate) params.append('endDate', filters.endDate);
+    if (filters?.groupBy) params.append('groupBy', filters.groupBy);
+    
+    return this.request<{
+      totalRevenue: number;
+      totalOrders: number;
+      revenueByPeriod: Array<{ period: string; revenue: number; orders: number }>;
+    }>(`/api/analytics/revenue?${params.toString()}`);
+  }
+
+  async getOrderAnalytics(filters?: {
+    storeId?: string;
+    startDate?: string;
+    endDate?: string;
+    groupBy?: 'day' | 'week' | 'month';
+  }) {
+    const params = new URLSearchParams();
+    if (filters?.storeId) params.append('storeId', filters.storeId);
+    if (filters?.startDate) params.append('startDate', filters.startDate);
+    if (filters?.endDate) params.append('endDate', filters.endDate);
+    if (filters?.groupBy) params.append('groupBy', filters.groupBy);
+    
+    return this.request<{
+      byStatus: Array<{ status: string; count: number }>;
+      overTime: Array<Record<string, any>>;
+    }>(`/api/analytics/orders?${params.toString()}`);
+  }
+
+  async getDashboardSummary(storeId?: string) {
+    const params = new URLSearchParams();
+    if (storeId) params.append('storeId', storeId);
+    
+    return this.request<{
+      revenue: { last30Days: number; last7Days: number; growth: number };
+      orders: { last30Days: number; last7Days: number };
+      customers: { totalCustomers: number; repeatCustomers: number; newCustomers: number };
+    }>(`/api/analytics/summary?${params.toString()}`);
   }
 }
 
 export const apiClient = new ApiClient();
+
+// Export currency service for direct use
+export const currencyService = {
+  getAvailableCurrencies: () => apiClient.getAvailableCurrencies(),
+  convertCurrency: (amount: number, from: string, to: string, storeId?: string) =>
+    apiClient.convertCurrency(amount, from, to, storeId),
+  getStoreCurrency: (storeId: string) => apiClient.getStoreCurrency(storeId),
+  updateStoreCurrency: (storeId: string, defaultCurrency: string, supportedCurrencies: string[]) =>
+    apiClient.updateStoreCurrency(storeId, defaultCurrency, supportedCurrencies),
+};
+
+// Extend apiClient with additional methods
+(apiClient as any).getStoreSEO = function(storeId: string) {
+  return this.request(`/api/seo/store/${storeId}`);
+};
+
+(apiClient as any).updateStoreSEO = function(storeId: string, config: any) {
+  return this.request(`/api/seo/store/${storeId}`, {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
+};
+
+(apiClient as any).getEmailTemplates = function() {
+  return this.request('/api/email-templates');
+};
+
+(apiClient as any).getEmailTemplate = function(templateId: string) {
+  return this.request(`/api/email-templates/${templateId}`);
+};
+
+(apiClient as any).updateEmailTemplate = function(templateId: string, updates: any) {
+  return this.request(`/api/email-templates/${templateId}`, {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+};
+
+(apiClient as any).previewEmailTemplate = function(templateId: string, sampleVariables: Record<string, string>) {
+  return this.request(`/api/email-templates/${templateId}/preview`, {
+    method: 'POST',
+    body: JSON.stringify({ sampleVariables }),
+  });
+};
+
 export { ApiError };
 

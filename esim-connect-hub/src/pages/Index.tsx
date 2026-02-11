@@ -62,7 +62,7 @@ const testimonials = [
     rating: 5
   },
   { 
-    quote: "i dont know man im just here for the shoutout.", 
+    quote: "i dont know man i just code y'alls sites and make it look nice", 
     author: "lil_ran", 
     role: "some guy",
     rating: 5

@@ -1,6 +1,9 @@
 import axios from 'axios';
 import { prisma } from '../lib/prisma';
 import { WebhookEventType, OrderStatus, BalanceTransactionType } from '@prisma/client';
+import { emailService } from './emailService';
+import { qrCodeService } from './qrCodeService';
+import { esimAccessService } from './esimAccessService';
 
 export interface ESIMAccessWebhook {
   notifyType: 'ORDER_STATUS' | 'ESIM_STATUS' | 'DATA_USAGE' | 'VALIDITY_USAGE' | 'BALANCE_LOW' | 'SMDP_EVENT' | 'CHECK_HEALTH';
@@ -172,6 +175,18 @@ class WebhookService {
                 data: { status: newStatus },
               });
 
+              // If order is completed, trigger eSIM delivery
+              if (newStatus === OrderStatus.COMPLETED) {
+                // Process eSIM delivery asynchronously (don't block webhook response)
+                setImmediate(async () => {
+                  try {
+                    await this.deliverESIMs(order.id);
+                  } catch (error) {
+                    console.error('Error delivering eSIMs:', error);
+                  }
+                });
+              }
+
               // Refund balance if order failed or was cancelled
               // Only refund if order was previously PENDING or PROCESSING (balance was deducted)
               if (
@@ -241,6 +256,74 @@ class WebhookService {
     );
 
     await Promise.allSettled(promises);
+  }
+
+  /**
+   * Deliver eSIMs to customer after order completion
+   */
+  async deliverESIMs(orderId: string): Promise<void> {
+    try {
+      // Find customer order linked to this merchant order
+      const customerOrder = await prisma.customerOrder.findFirst({
+        where: { orderId },
+        include: {
+          store: true,
+        },
+      });
+
+      if (!customerOrder || !customerOrder.esimAccessOrderNo) {
+        console.log(`No customer order found for merchant order ${orderId}`);
+        return;
+      }
+
+      // Fetch eSIM profiles from eSIM Access
+      const profilesResult = await esimAccessService.queryProfiles({
+        orderNo: customerOrder.esimAccessOrderNo,
+      });
+
+      if (!profilesResult.success || !profilesResult.obj?.esimList) {
+        console.error('Failed to fetch eSIM profiles:', profilesResult.errorMessage);
+        return;
+      }
+
+      const profiles = profilesResult.obj.esimList;
+
+      // Generate QR codes for each profile
+      const qrCodes = await Promise.all(
+        profiles.map(async (profile) => {
+          return qrCodeService.generateQRCode({
+            esimTranNo: profile.esimTranNo,
+            iccid: profile.iccid,
+            imsi: profile.imsi,
+            qrCodeUrl: profile.qrCodeUrl,
+          });
+        })
+      );
+
+      // Send delivery email
+      await emailService.sendESIMDeliveryEmail({
+        email: customerOrder.customerEmail,
+        order: {
+          id: customerOrder.id,
+          totalAmount: Number(customerOrder.totalAmount),
+          esimAccessOrderNo: customerOrder.esimAccessOrderNo,
+        },
+        qrCodes,
+        profiles: profiles.map(p => ({
+          esimTranNo: p.esimTranNo,
+          iccid: p.iccid,
+          data: `${(p.totalVolume / (1024 * 1024 * 1024)).toFixed(1)}GB`,
+          validity: `${p.totalDuration} ${p.durationUnit}`,
+        })),
+        customerName: customerOrder.customerName || undefined,
+        storeName: customerOrder.store.businessName || customerOrder.store.name,
+      });
+
+      console.log(`eSIM delivery email sent for order ${customerOrder.id}`);
+    } catch (error: any) {
+      console.error('Error in deliverESIMs:', error);
+      throw error;
+    }
   }
 }
 

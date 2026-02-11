@@ -278,7 +278,7 @@ export function DomainConfiguration({
       {domain && validateDomain(domain) && (
         <DNSInstructions
           domain={domain}
-          targetDomain={subdomain ? `${subdomain}.esimlaunch.com` : "yourstore.esimlaunch.com"}
+          targetDomain="esimlaunch.com" // Custom domains point to esimlaunch.com (where stores are hosted)
           isExpanded={dnsExpanded}
           onToggle={() => setDnsExpanded(!dnsExpanded)}
         />

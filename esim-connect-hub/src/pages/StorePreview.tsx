@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { 
@@ -34,11 +34,18 @@ const samplePlans = [
 ];
 
 export default function StorePreview() {
-  const [config, setConfigState] = useState<BrandConfig>(defaultConfig);
+  const { config: savedConfig, setConfig: setDemoStoreConfig } = useDemoStore();
+  const [config, setConfigState] = useState<BrandConfig>(savedConfig || defaultConfig);
   const [viewMode, setViewMode] = useState<"desktop" | "mobile">("desktop");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
-  const { setConfig: setDemoStoreConfig } = useDemoStore();
+  
+  // Update local state when saved config changes
+  useEffect(() => {
+    if (savedConfig) {
+      setConfigState(savedConfig);
+    }
+  }, [savedConfig]);
 
   const handleLaunchDemo = () => {
     setDemoStoreConfig(config);
@@ -46,11 +53,16 @@ export default function StorePreview() {
   };
 
   const setConfig = (updater: BrandConfig | ((prev: BrandConfig) => BrandConfig)) => {
+    let newConfig: BrandConfig;
     if (typeof updater === "function") {
-      setConfigState(updater);
+      newConfig = updater(config);
+      setConfigState(newConfig);
     } else {
-      setConfigState(updater);
+      newConfig = updater;
+      setConfigState(newConfig);
     }
+    // Also update the context so it persists
+    setDemoStoreConfig(newConfig);
   };
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

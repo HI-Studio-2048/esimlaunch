@@ -13,8 +13,10 @@ import { CookieBanner } from "@/components/CookieBanner";
 import { DemoStoreProvider } from "@/contexts/DemoStoreContext";
 import { DemoStoreLayout } from "@/components/demo-store/DemoStoreLayout";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ClerkAuthSync } from "@/components/ClerkAuthSync";
+import { ScrollToTop } from "@/components/ScrollToTop";
 import Index from "./pages/Index";
 import Pricing from "./pages/Pricing";
 import Features from "./pages/Features";
@@ -40,6 +42,24 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import Checkout from "./pages/Checkout";
+import OrderTracking from "./pages/OrderTracking";
+import PackageSelector from "./pages/PackageSelector";
+import PricingConfig from "./pages/PricingConfig";
+import WebhookSettings from "./pages/WebhookSettings";
+import DomainVerification from "./pages/DomainVerification";
+import CustomerLogin from "./pages/customer/Login";
+import CustomerSignup from "./pages/customer/Signup";
+import CustomerDashboard from "./pages/customer/Dashboard";
+import Billing from "./pages/Billing";
+import CreateSupportTicket from "./pages/CreateSupportTicket";
+import SupportTicket from "./pages/SupportTicket";
+import SupportDashboard from "./pages/SupportDashboard";
+import Analytics from "./pages/Analytics";
+import CurrencySettings from "./pages/CurrencySettings";
+import SEOSettings from "./pages/SEOSettings";
+import EmailTemplates from "./pages/EmailTemplates";
+import AffiliateDashboard from "./pages/AffiliateDashboard";
 import VerifyEmail from "./pages/VerifyEmail";
 import TwoFactorSetup from "./pages/TwoFactorSetup";
 import Settings from "./pages/Settings";
@@ -52,6 +72,7 @@ import NotFound from "./pages/NotFound";
 import DemoStoreHome from "./pages/demo-store/DemoStoreHome";
 import DemoStoreDestinations from "./pages/demo-store/DemoStoreDestinations";
 import DemoStoreCountry from "./pages/demo-store/DemoStoreCountry";
+import DemoStoreCheckout from "./pages/demo-store/DemoStoreCheckout";
 import DemoStoreAbout from "./pages/demo-store/DemoStoreAbout";
 import DemoStoreContact from "./pages/demo-store/DemoStoreContact";
 import DemoStoreHelpCenter from "./pages/demo-store/DemoStoreHelpCenter";
@@ -69,13 +90,15 @@ const queryClient = new QueryClient();
 
 // Shared routes component
 const AppRoutes = () => (
-  <BrowserRouter>
+  <>
+    <ScrollToTop />
     <Routes>
       {/* Demo Store Routes - separate layout, no main navbar/footer */}
       <Route path="/demo-store" element={<DemoStoreLayout />}>
         <Route index element={<DemoStoreHome />} />
         <Route path="destinations" element={<DemoStoreDestinations />} />
         <Route path="country/:countrySlug" element={<DemoStoreCountry />} />
+        <Route path="checkout" element={<DemoStoreCheckout />} />
         <Route path="about" element={<DemoStoreAbout />} />
         <Route path="contact" element={<DemoStoreContact />} />
         <Route path="help-center" element={<DemoStoreHelpCenter />} />
@@ -131,6 +154,22 @@ const AppRoutes = () => (
                 <Route path="/signup" element={<Signup />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/checkout" element={<Checkout />} />
+                <Route path="/order-tracking" element={<OrderTracking />} />
+                <Route path="/package-selector" element={<PackageSelector />} />
+                <Route path="/pricing-config" element={<PricingConfig />} />
+                <Route path="/customer/login" element={<CustomerLogin />} />
+                <Route path="/customer/signup" element={<CustomerSignup />} />
+                <Route path="/support/create" element={<CreateSupportTicket />} />
+                <Route path="/support/tickets/:ticketId" element={<SupportTicket />} />
+                <Route 
+                  path="/customer/dashboard" 
+                  element={
+                    <ProtectedRoute>
+                      <CustomerDashboard />
+                    </ProtectedRoute>
+                  } 
+                />
                 <Route path="/verify-email" element={<VerifyEmail />} />
                 <Route 
                   path="/2fa/setup" 
@@ -145,6 +184,86 @@ const AppRoutes = () => (
                   element={
                     <ProtectedRoute>
                       <Settings />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/settings/webhooks" 
+                  element={
+                    <ProtectedRoute>
+                      <WebhookSettings />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/settings/billing" 
+                  element={
+                    <ProtectedRoute>
+                      <Billing />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/support" 
+                  element={
+                    <ProtectedRoute>
+                      <SupportDashboard />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/support/tickets/:ticketId" 
+                  element={
+                    <ProtectedRoute>
+                      <SupportTicket />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/analytics" 
+                  element={
+                    <ProtectedRoute>
+                      <Analytics />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/stores/:storeId/currency" 
+                  element={
+                    <ProtectedRoute>
+                      <CurrencySettings />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/stores/:storeId/seo" 
+                  element={
+                    <ProtectedRoute>
+                      <SEOSettings />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/settings/email-templates" 
+                  element={
+                    <ProtectedRoute>
+                      <EmailTemplates />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/affiliates" 
+                  element={
+                    <ProtectedRoute>
+                      <AffiliateDashboard />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/stores/:storeId/domain" 
+                  element={
+                    <ProtectedRoute>
+                      <DomainVerification />
                     </ProtectedRoute>
                   } 
                 />
@@ -175,7 +294,7 @@ const AppRoutes = () => (
         }
       />
     </Routes>
-  </BrowserRouter>
+  </>
 );
 
 const App = () => {
@@ -186,14 +305,18 @@ const App = () => {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
         <TooltipProvider>
-          <AuthProvider>
-            {clerkPubKey && <ClerkAuthSync />}
-            <DemoStoreProvider>
-              <Toaster />
-              <Sonner />
-              <AppRoutes />
-            </DemoStoreProvider>
-          </AuthProvider>
+          <BrowserRouter>
+            <AuthProvider>
+              {clerkPubKey && <ClerkAuthSync />}
+              <CustomerAuthProvider>
+                <DemoStoreProvider>
+                  <Toaster />
+                  <Sonner />
+                  <AppRoutes />
+                </DemoStoreProvider>
+              </CustomerAuthProvider>
+            </AuthProvider>
+          </BrowserRouter>
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

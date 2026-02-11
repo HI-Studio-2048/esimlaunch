@@ -24,8 +24,14 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   exposedHeaders: ['Content-Type', 'Authorization'],
 }));
+// Note: Webhook routes need raw body, so they're handled in the route itself
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Store router middleware (detects domain/subdomain and loads store)
+// Note: This is optional - can be handled on frontend or via reverse proxy
+// import { storeRouter } from './middleware/storeRouter';
+// app.use(storeRouter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -39,6 +45,16 @@ import apiRoutes from './routes/api';
 import webhookRoutes from './routes/webhooks';
 import dashboardRoutes from './routes/dashboard';
 import storeRoutes from './routes/stores';
+import paymentRoutes from './routes/payments';
+import customerOrderRoutes from './routes/customerOrders';
+import customerRoutes from './routes/customers';
+import subscriptionRoutes from './routes/subscriptions';
+import supportRoutes from './routes/support';
+import currencyRoutes from './routes/currency';
+import analyticsRoutes from './routes/analytics';
+import seoRoutes from './routes/seo';
+import emailTemplateRoutes from './routes/emailTemplates';
+import affiliateRoutes from './routes/affiliates';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/api-keys', apiKeyRoutes);
@@ -46,6 +62,16 @@ app.use('/api/v1', apiRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/stores', storeRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/customer-orders', customerOrderRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/support', supportRoutes);
+app.use('/api/currency', currencyRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/seo', seoRoutes);
+app.use('/api/email-templates', emailTemplateRoutes);
+app.use('/api/affiliates', affiliateRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

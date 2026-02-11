@@ -18,6 +18,15 @@ interface EnvConfig {
   resendFromEmail: string;
   frontendUrl: string;
   clerkSecretKey: string;
+  stripeSecretKey: string;
+  stripePublishableKey: string;
+  stripeWebhookSecret: string;
+  stripeStarterPriceIdMonthly: string;
+  stripeGrowthPriceIdMonthly: string;
+  stripeScalePriceIdMonthly: string;
+  stripeStarterPriceIdYearly: string;
+  stripeGrowthPriceIdYearly: string;
+  stripeScalePriceIdYearly: string;
 }
 
 function getEnvVar(key: string, defaultValue?: string): string {
@@ -44,5 +53,14 @@ export const env: EnvConfig = {
   resendFromEmail: getEnvVar('RESEND_FROM_EMAIL', 'noreply@esimlaunch.com'),
   frontendUrl: getEnvVar('FRONTEND_URL', 'http://localhost:5173'),
   clerkSecretKey: getEnvVar('CLERK_SECRET_KEY', ''),
+  stripeSecretKey: getEnvVar('STRIPE_SECRET_KEY', ''),
+  stripePublishableKey: getEnvVar('STRIPE_PUBLISHABLE_KEY', ''),
+  stripeWebhookSecret: getEnvVar('STRIPE_WEBHOOK_SECRET', ''),
+  stripeStarterPriceIdMonthly: getEnvVar('STRIPE_STARTER_PRICE_ID_MONTHLY', ''),
+  stripeGrowthPriceIdMonthly: getEnvVar('STRIPE_GROWTH_PRICE_ID_MONTHLY', ''),
+  stripeScalePriceIdMonthly: getEnvVar('STRIPE_SCALE_PRICE_ID_MONTHLY', ''),
+  stripeStarterPriceIdYearly: getEnvVar('STRIPE_STARTER_PRICE_ID_YEARLY', ''),
+  stripeGrowthPriceIdYearly: getEnvVar('STRIPE_GROWTH_PRICE_ID_YEARLY', ''),
+  stripeScalePriceIdYearly: getEnvVar('STRIPE_SCALE_PRICE_ID_YEARLY', ''),
 };
 

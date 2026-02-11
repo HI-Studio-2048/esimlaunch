@@ -13,7 +13,7 @@ const pricingPlans = [
     icon: Zap,
     description: "Perfect for getting started with your eSIM business",
     monthlyPrice: 29,
-    yearlyPrice: 290,
+    yearlyPrice: 288,
     features: [
       "Up to 100 orders/month",
       "1 Provider integration",
@@ -30,7 +30,7 @@ const pricingPlans = [
     icon: Rocket,
     description: "For growing businesses ready to scale",
     monthlyPrice: 79,
-    yearlyPrice: 790,
+    yearlyPrice: 786,
     features: [
       "Up to 1,000 orders/month",
       "5 Provider integrations",
@@ -50,7 +50,7 @@ const pricingPlans = [
     icon: Building2,
     description: "Enterprise features for high-volume sellers",
     monthlyPrice: 199,
-    yearlyPrice: 1990,
+    yearlyPrice: 1982,
     features: [
       "Unlimited orders",
       "Unlimited providers",
@@ -84,6 +84,12 @@ const comparisonFeatures = [
 export default function Pricing() {
   const [isYearly, setIsYearly] = useState(false);
 
+  // Calculate actual savings percentage (using first plan as reference)
+  const samplePlan = pricingPlans[0];
+  const annualCost = samplePlan.monthlyPrice * 12;
+  const yearlyCost = samplePlan.yearlyPrice;
+  const savingsPercent = Math.round(((annualCost - yearlyCost) / annualCost) * 100);
+
   return (
     <div className="pt-20">
       {/* Hero Section */}
@@ -109,7 +115,7 @@ export default function Pricing() {
             <span className={cn("text-sm font-medium", isYearly && "text-foreground", !isYearly && "text-muted-foreground")}>
               Yearly
               <span className="ml-2 px-2 py-0.5 text-xs rounded-full gradient-bg text-primary-foreground">
-                Save 17%
+                Save {savingsPercent}%
               </span>
             </span>
           </motion.div>
@@ -150,9 +156,14 @@ export default function Pricing() {
 
                 <div className="mb-6">
                   <span className="font-display text-5xl font-bold">
-                    ${isYearly ? plan.yearlyPrice : plan.monthlyPrice}
+                    ${isYearly ? Math.round(plan.yearlyPrice / 12) : plan.monthlyPrice}
                   </span>
-                  <span className="text-muted-foreground">/{isYearly ? "year" : "month"}</span>
+                  <span className="text-muted-foreground">/month</span>
+                  {isYearly && (
+                    <span className="text-sm text-muted-foreground block mt-1">
+                      Billed annually (${plan.yearlyPrice}/year)
+                    </span>
+                  )}
                 </div>
 
                 <Button
@@ -161,7 +172,7 @@ export default function Pricing() {
                   size="lg"
                   asChild
                 >
-                  <Link to={plan.cta === "Contact Sales" ? "/contact" : "/signup"}>
+                  <Link to={plan.cta === "Contact Sales" ? "/contact" : "/signup"} className="flex items-center justify-center gap-2">
                     {plan.cta}
                     <ArrowRight className="w-5 h-5" />
                   </Link>

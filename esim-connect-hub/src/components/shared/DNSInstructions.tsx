@@ -14,7 +14,7 @@ interface DNSInstructionsProps {
 
 export function DNSInstructions({ 
   domain, 
-  targetDomain = "yourstore.esimlaunch.com",
+  targetDomain = "esimlaunch.com", // Custom domains point to esimlaunch.com (where stores are hosted)
   isExpanded: controlledExpanded,
   onToggle
 }: DNSInstructionsProps) {

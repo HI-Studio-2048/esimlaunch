@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,8 +10,9 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { DNSInstructions } from "@/components/shared/DNSInstructions";
-import { markStepCompleted } from "@/lib/onboardingProgress";
+import { markStepCompleted, getOnboardingProgress } from "@/lib/onboardingProgress";
 import { cn } from "@/lib/utils";
+import { apiClient } from "@/lib/api";
 import {
   User,
   Palette,
@@ -35,10 +36,13 @@ const steps = [
 ];
 
 const providers = [
-  { id: "airalo", name: "Airalo", description: "Global eSIM marketplace", popular: true },
-  { id: "esimgo", name: "eSIM Go", description: "Enterprise-grade solutions" },
-  { id: "gigsky", name: "GigSky", description: "Premium travel eSIMs" },
-  { id: "truphone", name: "Truphone", description: "Business connectivity" },
+  { 
+    id: "esimaccess", 
+    name: "eSIMAccess", 
+    description: "Your eSIM provider", 
+    popular: false,
+    logo: "https://i0.wp.com/esimaccess.com/wp-content/uploads/2023/05/esimaccess.png?fit=768%2C215&ssl=1"
+  },
 ];
 
 const Onboarding = () => {
@@ -47,6 +51,15 @@ const Onboarding = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { setConfig } = useDemoStore();
+
+  // Check if onboarding is already completed
+  useEffect(() => {
+    const progress = getOnboardingProgress();
+    if (progress.store) {
+      // Store setup is already completed, redirect to store preview
+      navigate("/store-preview", { replace: true });
+    }
+  }, [navigate]);
 
   // Form states
   const [profile, setProfile] = useState({
@@ -67,7 +80,7 @@ const Onboarding = () => {
   const [selectedProvider, setSelectedProvider] = useState("");
   
   const [payment, setPayment] = useState({
-    plan: "professional",
+    plan: "growth", // Default to Growth plan
     cardNumber: "",
     expiryDate: "",
     cvv: "",
@@ -96,27 +109,49 @@ const Onboarding = () => {
     setIsLoading(true);
     
     try {
+      // Convert logo file to data URL if present
+      let logoDataUrl: string | null = null;
+      if (branding.logo) {
+        logoDataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(branding.logo!);
+        });
+      }
+
       // Create store via API
-      // Note: This is a placeholder - you may need to adjust based on your actual store creation flow
       const storeData = {
         name: profile.businessName || "My Store",
         businessName: profile.businessName,
         domain: branding.customDomain || undefined,
-        subdomain: branding.customDomain ? undefined : profile.businessName.toLowerCase().replace(/\s+/g, ''),
+        subdomain: branding.customDomain ? undefined : profile.businessName.toLowerCase().replace(/\s+/g, '-').substring(0, 50),
         primaryColor: branding.primaryColor,
-        tagline: branding.tagline,
+        secondaryColor: "#8b5cf6",
+        accentColor: "#22c55e",
+        logoUrl: logoDataUrl || undefined,
+        selectedPackages: [], // Will be populated when package selection is implemented
+        pricingMarkup: {}, // Will be populated when pricing config is implemented
       };
+
+      // Call API to create store
+      const createdStore = await apiClient.createStore(storeData);
 
       // Mark onboarding steps as completed
       const completionDate = new Date().toISOString();
       markStepCompleted('store', completionDate);
       
+      // Save selected plan to localStorage
+      localStorage.setItem('user_plan', payment.plan);
+      
+      // Store the created store ID
+      if (createdStore?.id) {
+        localStorage.setItem('current_store_id', createdStore.id);
+      }
+      
       if (branding.customDomain) {
         markStepCompleted('domain', completionDate);
       }
-
-      // Simulate store creation (replace with actual API call)
-      await new Promise(resolve => setTimeout(resolve, 1500));
 
       // Save branding to DemoStoreContext for store preview
       setConfig({
@@ -124,22 +159,24 @@ const Onboarding = () => {
         primaryColor: branding.primaryColor,
         secondaryColor: "#8b5cf6",
         accentColor: "#22c55e",
-        logo: null,
+        logo: logoDataUrl,
       });
       
       setIsLoading(false);
       toast({
         title: "🚀 Congratulations!",
-        description: "Your eSIM store is now live. Welcome to eSIMLaunch!",
+        description: `Your eSIM store "${createdStore?.name || profile.businessName}" has been created successfully!`,
       });
       navigate("/store-preview");
-    } catch (error) {
+    } catch (error: any) {
       setIsLoading(false);
+      const errorMessage = error?.message || error?.errorMessage || "Failed to create store. Please try again.";
       toast({
         title: "Error",
-        description: "Failed to create store. Please try again.",
+        description: errorMessage,
         variant: "destructive",
       });
+      console.error("Store creation error:", error);
     }
   };
 
@@ -148,7 +185,7 @@ const Onboarding = () => {
       case 1:
         return <ProfileStep profile={profile} setProfile={setProfile} />;
       case 2:
-        return <BrandingStep branding={branding} setBranding={setBranding} />;
+        return <BrandingStep branding={branding} setBranding={setBranding} selectedPlan={payment.plan} businessName={profile.businessName} />;
       case 3:
         return (
           <ProviderStep
@@ -397,11 +434,18 @@ interface BrandingData {
 const BrandingStep = ({
   branding,
   setBranding,
+  selectedPlan,
+  businessName,
 }: {
   branding: BrandingData;
   setBranding: React.Dispatch<React.SetStateAction<BrandingData>>;
+  selectedPlan?: string;
+  businessName?: string;
 }) => {
   const [dnsExpanded, setDnsExpanded] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const validateDomain = (domain: string): boolean => {
     if (!domain) return true; // Empty is valid (optional)
@@ -410,6 +454,58 @@ const BrandingStep = ({
   };
 
   const isDomainValid = validateDomain(branding.customDomain);
+  
+  // Check if custom domain is allowed (only for Scale plan)
+  const isCustomDomainAllowed = selectedPlan === "scale" || selectedPlan === "enterprise";
+  const planName = selectedPlan === "scale" || selectedPlan === "enterprise" ? "Scale" : 
+                   selectedPlan === "growth" || selectedPlan === "professional" ? "Growth" : "Starter";
+
+  const handleFileSelect = (file: File) => {
+    if (file.size > 2 * 1024 * 1024) {
+      alert("File size must be less than 2MB");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      alert("Please select an image file");
+      return;
+    }
+
+    setBranding({ ...branding, logo: file });
+    
+    // Create preview
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setLogoPreview(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleFileSelect(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -454,38 +550,106 @@ const BrandingStep = ({
             <Label htmlFor="customDomain">
               Custom Domain <span className="text-muted-foreground text-xs">(optional)</span>
             </Label>
-            <Input
-              id="customDomain"
-              placeholder="esim.yourcompany.com"
-              value={branding.customDomain}
-              onChange={(e) => setBranding({ ...branding, customDomain: e.target.value })}
-              className={cn(
-                branding.customDomain && !isDomainValid && "border-destructive"
-              )}
-            />
-            {branding.customDomain && !isDomainValid && (
-              <p className="text-xs text-destructive flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" />
-                Please enter a valid domain name (e.g., esim.yourcompany.com)
-              </p>
-            )}
-            {branding.customDomain && isDomainValid && (
-              <p className="text-xs text-muted-foreground">
-                Enter your domain without http:// or https://
-              </p>
+            {!isCustomDomainAllowed ? (
+              <div className="space-y-2">
+                <Input
+                  id="customDomain"
+                  placeholder="esim.yourcompany.com"
+                  value=""
+                  disabled
+                  className="opacity-50 cursor-not-allowed"
+                />
+                <div className="p-3 rounded-lg bg-muted/50 border border-border">
+                  <p className="text-xs text-muted-foreground flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      Custom domains are only available on the <strong>Scale</strong> plan. 
+                      Your {planName} plan includes a free subdomain: <strong>{(businessName?.toLowerCase().replace(/\s+/g, '') || 'yourstore')}.esimlaunch.com</strong>
+                    </span>
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <Input
+                  id="customDomain"
+                  placeholder="esim.yourcompany.com"
+                  value={branding.customDomain}
+                  onChange={(e) => setBranding({ ...branding, customDomain: e.target.value })}
+                  className={cn(
+                    branding.customDomain && !isDomainValid && "border-destructive"
+                  )}
+                />
+                {branding.customDomain && !isDomainValid && (
+                  <p className="text-xs text-destructive flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    Please enter a valid domain name (e.g., esim.yourcompany.com)
+                  </p>
+                )}
+                {branding.customDomain && isDomainValid && (
+                  <p className="text-xs text-muted-foreground">
+                    Enter your domain without http:// or https://
+                  </p>
+                )}
+              </>
             )}
           </div>
         </div>
 
         <div className="space-y-2">
           <Label>Logo Upload</Label>
-          <div className="border-2 border-dashed border-border rounded-xl p-8 text-center hover:border-primary/50 transition-colors cursor-pointer">
-            <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
-            <p className="text-sm text-muted-foreground mb-2">
-              Drag & drop your logo here, or click to browse
-            </p>
-            <p className="text-xs text-muted-foreground">PNG, JPG up to 2MB</p>
-            <input type="file" className="hidden" accept="image/*" />
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            className={cn(
+              "border-2 border-dashed rounded-xl p-8 text-center transition-colors cursor-pointer",
+              isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
+            )}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept="image/png,image/jpeg,image/jpg"
+              onChange={handleFileInputChange}
+            />
+            {logoPreview || branding.logo ? (
+              <div className="space-y-2">
+                <img
+                  src={logoPreview || (branding.logo ? URL.createObjectURL(branding.logo) : "")}
+                  alt="Logo preview"
+                  className="h-20 mx-auto object-contain"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {branding.logo?.name || "Logo uploaded"}
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setBranding({ ...branding, logo: null });
+                    setLogoPreview(null);
+                    if (fileInputRef.current) {
+                      fileInputRef.current.value = "";
+                    }
+                  }}
+                >
+                  Remove
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Upload className="w-10 h-10 mx-auto text-muted-foreground mb-3" />
+                <p className="text-sm text-muted-foreground mb-2">
+                  Drag & drop your logo here, or click to browse
+                </p>
+                <p className="text-xs text-muted-foreground">PNG, JPG up to 2MB</p>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -494,7 +658,7 @@ const BrandingStep = ({
     {branding.customDomain && isDomainValid && (
       <DNSInstructions
         domain={branding.customDomain}
-        targetDomain="yourstore.esimlaunch.com"
+        targetDomain="esimlaunch.com" // Custom domains point to esimlaunch.com (where stores are hosted)
         isExpanded={dnsExpanded}
         onToggle={() => setDnsExpanded(!dnsExpanded)}
       />
@@ -504,12 +668,20 @@ const BrandingStep = ({
     <div className="p-6 rounded-xl bg-card border">
       <p className="text-sm text-muted-foreground mb-3">Preview</p>
       <div className="flex items-center gap-3">
-        <div
-          className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-xl"
-          style={{ backgroundColor: branding.primaryColor }}
-        >
-          {branding.tagline?.[0] || "E"}
-        </div>
+        {logoPreview || branding.logo ? (
+          <img
+            src={logoPreview || (branding.logo ? URL.createObjectURL(branding.logo) : "")}
+            alt="Logo"
+            className="w-12 h-12 rounded-xl object-contain"
+          />
+        ) : (
+          <div
+            className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-xl"
+            style={{ backgroundColor: branding.primaryColor }}
+          >
+            {branding.tagline?.[0] || "E"}
+          </div>
+        )}
         <div>
           <p className="font-bold">Your eSIM Store</p>
           <p className="text-sm text-muted-foreground">
@@ -565,8 +737,16 @@ const ProviderStep = ({
                   {provider.description}
                 </p>
               </div>
-              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center">
-                <Wifi className="w-6 h-6 text-muted-foreground" />
+              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center p-2">
+                {provider.logo ? (
+                  <img 
+                    src={provider.logo} 
+                    alt={provider.name}
+                    className="w-full h-full object-contain"
+                  />
+                ) : (
+                  <Wifi className="w-6 h-6 text-muted-foreground" />
+                )}
               </div>
             </div>
           </div>
@@ -611,9 +791,9 @@ const PaymentStep = ({
     <RadioGroup value={payment.plan} onValueChange={(val) => setPayment({ ...payment, plan: val })}>
       <div className="grid md:grid-cols-3 gap-4">
         {[
-          { id: "starter", name: "Starter", price: "$49", features: ["1,000 eSIMs/mo", "Basic analytics"] },
-          { id: "professional", name: "Professional", price: "$99", features: ["10,000 eSIMs/mo", "Advanced analytics"], recommended: true },
-          { id: "enterprise", name: "Enterprise", price: "$299", features: ["Unlimited eSIMs", "Priority support"] },
+          { id: "starter", name: "Starter", price: "$29", features: ["Up to 100 orders/month", "Basic analytics"] },
+          { id: "growth", name: "Growth", price: "$79", features: ["Up to 1,000 orders/month", "Advanced analytics"], recommended: true },
+          { id: "scale", name: "Scale", price: "$199", features: ["Unlimited orders", "Custom domains"] },
         ].map((plan) => (
           <div
             key={plan.id}

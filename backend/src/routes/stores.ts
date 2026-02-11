@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authenticateJWT } from '../middleware/jwtAuth';
 import { prisma } from '../lib/prisma';
 import { ServiceType } from '@prisma/client';
+import { domainVerificationService } from '../services/domainVerificationService';
 
 const router = express.Router();
 
@@ -284,6 +285,204 @@ router.delete('/:storeId', async (req, res, next) => {
       errorCode: 'DELETE_FAILED',
       errorMessage: error.message || 'Failed to delete store',
     });
+  }
+});
+
+/**
+ * POST /api/stores/:storeId/verify-domain
+ * Start domain verification process
+ */
+router.post('/:storeId/verify-domain', async (req, res, next) => {
+  try {
+    const storeId = req.params.storeId;
+    const { domain, method } = z.object({
+      domain: z.string().min(1, 'Domain is required'),
+      method: z.enum(['dns', 'cname']).default('dns'),
+    }).parse(req.body);
+
+    // Verify store belongs to merchant
+    const store = await prisma.store.findFirst({
+      where: {
+        id: storeId,
+        merchantId: req.merchant!.id,
+      },
+    });
+
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'STORE_NOT_FOUND',
+        errorMessage: 'Store not found',
+      });
+    }
+
+    // Update store domain
+    await prisma.store.update({
+      where: { id: storeId },
+      data: { domain },
+    });
+
+    // Generate verification token
+    const verificationToken = await domainVerificationService.generateVerificationToken(storeId);
+
+    // Get DNS instructions
+    const instructions = domainVerificationService.getDNSInstructions(domain, verificationToken, storeId);
+
+    res.json({
+      success: true,
+      data: {
+        domain,
+        verificationToken,
+        instructions,
+        method,
+      },
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: error.errors[0].message,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        errorCode: 'VERIFICATION_START_FAILED',
+        errorMessage: error.message || 'Failed to start domain verification',
+      });
+    }
+  }
+});
+
+/**
+ * GET /api/stores/:storeId/domain-status
+ * Get domain verification status
+ */
+router.get('/:storeId/domain-status', async (req, res, next) => {
+  try {
+    const storeId = req.params.storeId;
+
+    // Verify store belongs to merchant
+    const store = await prisma.store.findFirst({
+      where: {
+        id: storeId,
+        merchantId: req.merchant!.id,
+      },
+      select: {
+        domain: true,
+        domainVerified: true,
+        domainVerificationMethod: true,
+        domainVerificationToken: true,
+      },
+    });
+
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'STORE_NOT_FOUND',
+        errorMessage: 'Store not found',
+      });
+    }
+
+    if (!store.domain) {
+      return res.json({
+        success: true,
+        data: {
+          domain: null,
+          verified: false,
+          method: null,
+        },
+      });
+    }
+
+    // Check verification status
+    const verificationResult = await domainVerificationService.checkVerification(storeId, store.domain);
+
+    res.json({
+      success: true,
+      data: {
+        domain: store.domain,
+        verified: verificationResult.verified,
+        method: verificationResult.method,
+        error: verificationResult.error,
+        instructions: store.domainVerificationToken
+          ? domainVerificationService.getDNSInstructions(
+              store.domain,
+              store.domainVerificationToken,
+              storeId
+            )
+          : null,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'FETCH_FAILED',
+      errorMessage: error.message || 'Failed to fetch domain status',
+    });
+  }
+});
+
+/**
+ * POST /api/stores/:storeId/verify-dns
+ * Verify DNS records and complete verification
+ */
+router.post('/:storeId/verify-dns', async (req, res, next) => {
+  try {
+    const storeId = req.params.storeId;
+    const { method } = z.object({
+      method: z.enum(['dns', 'cname']).default('dns'),
+    }).parse(req.body);
+
+    // Verify store belongs to merchant
+    const store = await prisma.store.findFirst({
+      where: {
+        id: storeId,
+        merchantId: req.merchant!.id,
+      },
+    });
+
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'STORE_NOT_FOUND',
+        errorMessage: 'Store not found',
+      });
+    }
+
+    if (!store.domain) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'NO_DOMAIN',
+        errorMessage: 'No domain configured for this store',
+      });
+    }
+
+    // Verify domain
+    const result = await domainVerificationService.verifyDomain(storeId, store.domain, method);
+
+    res.json({
+      success: result.verified,
+      data: {
+        verified: result.verified,
+        method: result.method,
+        error: result.error,
+      },
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: error.errors[0].message,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        errorCode: 'VERIFICATION_FAILED',
+        errorMessage: error.message || 'Failed to verify domain',
+      });
+    }
   }
 });
 

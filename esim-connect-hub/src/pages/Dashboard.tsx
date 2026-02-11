@@ -17,7 +17,8 @@ import {
   getOnboardingProgress, 
   updateOnboardingProgress,
   getStepCompletionDate,
-  markStepCompleted
+  markStepCompleted,
+  resetOnboardingProgress
 } from "@/lib/onboardingProgress";
 import {
   Dialog,
@@ -114,6 +115,10 @@ export default function Dashboard() {
     const hasStore = storesData && storesData.length > 0;
     const hasDomain = storesData && storesData.some((s: any) => s.domain || s.subdomain);
     const hasFirstSale = ordersData.length > 0;
+    
+    // Get user's plan from localStorage (set during onboarding)
+    const userPlan = typeof window !== 'undefined' ? localStorage.getItem('user_plan') : null;
+    const isScalePlan = userPlan === 'scale' || userPlan === 'enterprise';
 
     const steps: SetupStep[] = [
       {
@@ -140,7 +145,8 @@ export default function Dashboard() {
         completedDate: getStepCompletionDate('store') || (hasStore ? new Date().toISOString() : undefined),
         link: '/onboarding',
       },
-      {
+      // Only show domain step for Scale plan
+      ...(isScalePlan ? [{
         id: 'domain',
         title: 'Configure Domain',
         description: 'Set up your custom domain',
@@ -148,7 +154,7 @@ export default function Dashboard() {
         completedDate: getStepCompletionDate('domain') || (hasDomain ? new Date().toISOString() : undefined),
         link: '/settings#domain',
         optional: true,
-      },
+      }] : []),
       {
         id: 'firstSale',
         title: 'Make First Sale',
@@ -205,6 +211,20 @@ export default function Dashboard() {
       title: "Copied!",
       description: "API key copied to clipboard",
     });
+  };
+
+  const handleResetOnboarding = () => {
+    if (confirm("Are you sure you want to reset onboarding progress? This will allow you to go through the setup process again.")) {
+      resetOnboardingProgress();
+      // Also clear the saved plan
+      localStorage.removeItem('user_plan');
+      toast({
+        title: "Onboarding Reset",
+        description: "Onboarding progress has been cleared. You can now start over.",
+      });
+      // Reload to reflect changes
+      setTimeout(() => window.location.reload(), 1000);
+    }
   };
 
   const displayStats = [
@@ -296,6 +316,22 @@ export default function Dashboard() {
             View Analytics
           </Button>
         </motion.div>
+
+        {/* Developer/Reset Section - Only show if onboarding is completed */}
+        {getOnboardingProgress().store && (
+          <div className="mb-4 p-3 rounded-lg bg-muted/50 border border-border flex items-center justify-between">
+            <div className="text-sm text-muted-foreground">
+              <strong>Developer Mode:</strong> Reset onboarding to start over
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={handleResetOnboarding}
+            >
+              Reset Onboarding
+            </Button>
+          </div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

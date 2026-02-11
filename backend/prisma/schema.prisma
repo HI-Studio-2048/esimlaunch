@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,6 +5,304 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Merchant {
+  id                       String                @id @default(uuid())
+  email                    String                @unique
+  password                 String
+  name                     String?
+  serviceType              ServiceType           @default(ADVANCED)
+  isActive                 Boolean               @default(true)
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
+  clerkUserId              String?               @unique
+  emailVerificationExpires DateTime?
+  emailVerificationToken   String?               @unique
+  emailVerified            Boolean               @default(false)
+  twoFactorEnabled         Boolean               @default(false)
+  twoFactorSecret          String?
+  balance                  BigInt                @default(0)
+  apiKeys                  ApiKey[]
+  apiLogs                  ApiLog[]
+  balanceTransactions      BalanceTransaction[]
+  customerOrders           CustomerOrder[]
+  invoices                 Invoice[]
+  orders                   Order[]
+  passwordResetTokens      PasswordResetToken[]
+  paymentIntents           PaymentIntent[]
+  sessions                 Session[]
+  stores                   Store[]
+  subscription             Subscription?
+  webhookConfigs           WebhookConfig[]
+  supportTickets           SupportTicket[]
+  affiliateCode            String?               @unique // Unique affiliate code
+  referredBy               String? // Merchant ID who referred this merchant
+  referralCode             String?               @unique // Referral code for this merchant
+  affiliateCommissions     AffiliateCommission[] @relation("AffiliateCommissions")
+  referredMerchants        AffiliateCommission[] @relation("ReferredBy")
+
+  @@index([email])
+  @@index([serviceType])
+}
+
+model ApiKey {
+  id         String    @id @default(uuid())
+  key        String    @unique
+  keyPrefix  String
+  merchantId String
+  name       String?
+  rateLimit  Int       @default(100)
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+  merchant   Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([keyPrefix])
+}
+
+model Order {
+  id                  String               @id @default(uuid())
+  merchantId          String
+  transactionId       String
+  esimAccessOrderNo   String?
+  status              OrderStatus          @default(PENDING)
+  totalAmount         BigInt?
+  packageCount        Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  customerOrderId     String?              @unique
+  balanceTransactions BalanceTransaction[]
+  customerOrder       CustomerOrder?       @relation(fields: [customerOrderId], references: [id])
+  merchant            Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, transactionId])
+  @@index([merchantId])
+  @@index([esimAccessOrderNo])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Customer {
+  id            String          @id @default(uuid())
+  email         String          @unique
+  password      String?
+  name          String?
+  phone         String?
+  emailVerified Boolean         @default(false)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  orders        CustomerOrder[]
+  tickets       SupportTicket[]
+
+  @@index([email])
+}
+
+model CustomerOrder {
+  id                   String                @id @default(uuid())
+  customerEmail        String
+  customerName         String?
+  storeId              String
+  merchantId           String
+  paymentIntentId      String?               @unique
+  orderId              String?               @unique
+  esimAccessOrderNo    String?
+  status               OrderStatus           @default(PENDING)
+  totalAmount          BigInt
+  packageCount         Int                   @default(0)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  customerId           String?
+  customer             Customer?             @relation(fields: [customerId], references: [id])
+  merchant             Merchant              @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  store                Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  order                Order?
+  tickets              SupportTicket[]
+  affiliateCommissions AffiliateCommission[]
+
+  @@index([customerEmail])
+  @@index([customerId])
+  @@index([storeId])
+  @@index([merchantId])
+  @@index([paymentIntentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model WebhookConfig {
+  id         String             @id @default(uuid())
+  merchantId String
+  url        String
+  events     WebhookEventType[]
+  isActive   Boolean            @default(true)
+  secret     String?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  merchant   Merchant           @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+}
+
+model ApiLog {
+  id           String    @id @default(uuid())
+  merchantId   String?
+  apiKeyId     String?
+  endpoint     String
+  method       String
+  statusCode   Int
+  responseTime Int
+  ipAddress    String?
+  userAgent    String?
+  requestBody  Json?
+  responseBody Json?
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  merchant     Merchant? @relation(fields: [merchantId], references: [id])
+
+  @@index([merchantId])
+  @@index([apiKeyId])
+  @@index([endpoint])
+  @@index([createdAt])
+}
+
+model Store {
+  id                  String          @id @default(uuid())
+  merchantId          String
+  name                String
+  domain              String?         @unique
+  subdomain           String?         @unique
+  businessName        String
+  primaryColor        String          @default("#6366f1")
+  secondaryColor      String          @default("#8b5cf6")
+  accentColor         String          @default("#22c55e")
+  logoUrl             String?
+  selectedPackages    Json?
+  pricingMarkup       Json?
+  defaultCurrency     String?         @default("USD") // Default currency for store
+  supportedCurrencies Json? // Array of supported currency codes
+  seoConfig           Json? // SEO configuration (meta tags, etc.)
+  isActive            Boolean         @default(true)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  customerOrders      CustomerOrder[]
+  paymentIntents      PaymentIntent[]
+  merchant            Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([domain])
+  @@index([subdomain])
+}
+
+model PaymentIntent {
+  id             String    @id @default(uuid())
+  stripeIntentId String    @unique
+  merchantId     String?
+  storeId        String?
+  amount         BigInt
+  currency       String    @default("usd")
+  status         String
+  metadata       Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  merchant       Merchant? @relation(fields: [merchantId], references: [id])
+  store          Store?    @relation(fields: [storeId], references: [id])
+
+  @@index([merchantId])
+  @@index([storeId])
+  @@index([status])
+  @@index([stripeIntentId])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(uuid())
+  merchantId String
+  token      String   @unique
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  merchantId String
+  token      String   @unique
+  ipAddress  String?
+  userAgent  String?
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime @default(now())
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model BalanceTransaction {
+  id          String                 @id @default(uuid())
+  merchantId  String
+  orderId     String?
+  amount      BigInt
+  type        BalanceTransactionType
+  description String?
+  createdAt   DateTime               @default(now())
+  merchant    Merchant               @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  order       Order?                 @relation(fields: [orderId], references: [id])
+
+  @@index([merchantId])
+  @@index([orderId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model Subscription {
+  id                   String    @id @default(uuid())
+  merchantId           String    @unique
+  plan                 String
+  billingPeriod        String    @default("monthly")
+  status               String
+  currentPeriodStart   DateTime
+  currentPeriodEnd     DateTime
+  cancelAtPeriodEnd    Boolean   @default(false)
+  stripeSubscriptionId String?   @unique
+  stripeCustomerId     String?   @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  invoices             Invoice[]
+  merchant             Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([status])
+  @@index([stripeSubscriptionId])
+}
+
+model Invoice {
+  id               String        @id @default(uuid())
+  merchantId       String
+  subscriptionId   String?
+  stripeInvoiceId  String?       @unique
+  amount           BigInt
+  currency         String        @default("usd")
+  status           String
+  invoicePdf       String?
+  hostedInvoiceUrl String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  merchant         Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  subscription     Subscription? @relation(fields: [subscriptionId], references: [id])
+
+  @@index([merchantId])
+  @@index([subscriptionId])
+  @@index([stripeInvoiceId])
+  @@index([status])
+  @@index([createdAt])
 }
 
 enum ServiceType {
@@ -39,194 +334,81 @@ enum BalanceTransactionType {
   ADJUSTMENT
 }
 
-model Merchant {
-  id          String      @id @default(uuid())
-  email       String      @unique
-  password    String      // Hashed password
-  name        String?
-  serviceType ServiceType @default(ADVANCED)
-  isActive    Boolean     @default(true)
-  clerkUserId String?     @unique // Clerk user ID for OAuth
-  emailVerified Boolean   @default(false)
-  emailVerificationToken String? @unique
-  emailVerificationExpires DateTime?
-  twoFactorEnabled Boolean @default(false)
-  twoFactorSecret String?
-  balance         BigInt   @default(0) // Balance in smallest currency unit (balance * 10000 = USD)
-  sessions        Session[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+model SupportTicket {
+  id            String    @id @default(uuid())
+  ticketNumber  String    @unique // Human-readable ticket number (e.g., TKT-001234)
+  customerId    String? // If customer has account
+  customerEmail String // Customer email (required)
+  customerName  String?
+  merchantId    String? // If ticket is from merchant
+  orderId       String? // Related order if applicable
+  subject       String
+  description   String    @db.Text
+  status        String    @default("open") // open, in_progress, resolved, closed
+  priority      String    @default("medium") // low, medium, high, urgent
+  category      String? // billing, technical, order_issue, general
+  assignedTo    String? // Merchant/Admin user ID
+  attachments   Json? // Array of attachment URLs/metadata
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  resolvedAt    DateTime?
 
   // Relations
-  apiKeys      ApiKey[]
-  orders       Order[]
-  webhookConfigs WebhookConfig[]
-  apiLogs      ApiLog[]
-  stores      Store[]
-  passwordResetTokens PasswordResetToken[]
-  balanceTransactions BalanceTransaction[]
+  customer Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  merchant Merchant?       @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  order    CustomerOrder?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  messages TicketMessage[]
 
-  @@index([email])
-  @@index([serviceType])
+  @@index([customerEmail])
+  @@index([customerId])
+  @@index([merchantId])
+  @@index([orderId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
 }
 
-model ApiKey {
+model TicketMessage {
   id          String   @id @default(uuid())
-  key         String   @unique // Hashed API key
-  keyPrefix   String   // First 8 chars for display (e.g., "sk_live_ab")
-  merchantId  String
-  name        String?  // Optional name for the key
-  rateLimit   Int      @default(100) // Requests per minute
-  isActive    Boolean  @default(true)
-  lastUsedAt  DateTime?
+  ticketId    String
+  senderType  String // customer, merchant, admin
+  senderId    String? // Customer ID or Merchant ID
+  senderEmail String
+  senderName  String?
+  message     String   @db.Text
+  attachments Json? // Array of attachment URLs/metadata
+  isInternal  Boolean  @default(false) // Internal notes visible only to merchants/admins
   createdAt   DateTime @default(now())
-  expiresAt   DateTime?
 
   // Relations
-  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  ticket SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
-  @@index([merchantId])
-  @@index([keyPrefix])
+  @@index([ticketId])
+  @@index([createdAt])
 }
 
-model Order {
-  id                  String      @id @default(uuid())
-  merchantId          String
-  transactionId      String      // Merchant's unique transaction ID
-  esimAccessOrderNo   String?     // Order number from eSIM Access
-  status              OrderStatus @default(PENDING)
-  totalAmount         BigInt?     // Amount in smallest currency unit (price * 10000)
-  packageCount        Int         @default(0)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+model AffiliateCommission {
+  id                 String    @id @default(uuid())
+  affiliateId        String // Merchant ID who referred
+  referredMerchantId String? // Merchant who was referred (if applicable)
+  orderId            String? // Order that generated commission
+  customerOrderId    String? // Customer order that generated commission
+  amount             BigInt // Commission amount in cents
+  currency           String    @default("USD")
+  status             String    @default("pending") // pending, paid, cancelled
+  commissionRate     Float // Percentage or fixed amount
+  createdAt          DateTime  @default(now())
+  paidAt             DateTime?
 
   // Relations
-  merchant            Merchant    @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  balanceTransactions BalanceTransaction[]
+  affiliate        Merchant       @relation("AffiliateCommissions", fields: [affiliateId], references: [id], onDelete: Cascade)
+  referredMerchant Merchant?      @relation("ReferredBy", fields: [referredMerchantId], references: [id], onDelete: SetNull)
+  customerOrder    CustomerOrder? @relation(fields: [customerOrderId], references: [id], onDelete: SetNull)
 
-  @@unique([merchantId, transactionId])
-  @@index([merchantId])
-  @@index([esimAccessOrderNo])
+  @@index([affiliateId])
+  @@index([referredMerchantId])
+  @@index([orderId])
+  @@index([customerOrderId])
   @@index([status])
   @@index([createdAt])
 }
-
-model WebhookConfig {
-  id          String            @id @default(uuid())
-  merchantId  String
-  url         String
-  events      WebhookEventType[]
-  isActive    Boolean           @default(true)
-  secret      String?           // Optional webhook secret for verification
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-
-  // Relations
-  merchant    Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  @@index([merchantId])
-}
-
-model ApiLog {
-  id            String   @id @default(uuid())
-  merchantId    String?
-  apiKeyId      String?
-  endpoint      String
-  method        String
-  statusCode    Int
-  responseTime  Int       // Milliseconds
-  ipAddress     String?
-  userAgent     String?
-  requestBody   Json?     // Store request body for debugging
-  responseBody  Json?     // Store response body (truncated if large)
-  errorMessage  String?
-  createdAt     DateTime  @default(now())
-
-  // Relations
-  merchant      Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
-
-  @@index([merchantId])
-  @@index([apiKeyId])
-  @@index([endpoint])
-  @@index([createdAt])
-}
-
-model Store {
-  id              String   @id @default(uuid())
-  merchantId      String
-  name            String
-  domain          String?  @unique // Custom domain
-  subdomain       String?  @unique // Subdomain (e.g., "merchant1.esimlaunch.com")
-  
-  // Branding
-  businessName    String
-  primaryColor    String   @default("#6366f1")
-  secondaryColor  String   @default("#8b5cf6")
-  accentColor     String   @default("#22c55e")
-  logoUrl         String?
-  
-  // Configuration
-  selectedPackages Json?    // Array of package codes/slugs to sell
-  pricingMarkup   Json?     // Markup configuration per package or global
-  
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  // Relations
-  merchant        Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-
-  @@index([merchantId])
-  @@index([domain])
-  @@index([subdomain])
-}
-
-model PasswordResetToken {
-  id        String   @id @default(uuid())
-  merchantId String
-  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  token     String   @unique
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
-
-  @@index([merchantId])
-  @@index([token])
-  @@index([expiresAt])
-}
-
-model Session {
-  id          String   @id @default(uuid())
-  merchantId String
-  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  token      String   @unique
-  ipAddress  String?
-  userAgent  String?
-  expiresAt  DateTime
-  createdAt  DateTime @default(now())
-  lastUsedAt DateTime @default(now())
-
-  @@index([merchantId])
-  @@index([token])
-  @@index([expiresAt])
-}
-
-model BalanceTransaction {
-  id          String                @id @default(uuid())
-  merchantId  String
-  orderId     String?               // Link to order if applicable
-  amount      BigInt                 // Can be negative (deductions) or positive (refunds/topups)
-  type        BalanceTransactionType
-  description String?
-  createdAt   DateTime               @default(now())
-
-  // Relations
-  merchant    Merchant               @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  order       Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
-
-  @@index([merchantId])
-  @@index([orderId])
-  @@index([type])
-  @@index([createdAt])
-}
-

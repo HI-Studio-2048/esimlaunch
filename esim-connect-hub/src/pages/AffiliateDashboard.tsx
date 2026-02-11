@@ -1,0 +1,289 @@
+import { useState, useEffect } from "react";
+import { motion } from "framer-motion";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2, Copy, CheckCircle2, DollarSign, Users, TrendingUp, Link as LinkIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { apiClient } from "@/lib/api";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+export default function AffiliateDashboard() {
+  const { toast } = useToast();
+  const [affiliateCode, setAffiliateCode] = useState<string>("");
+  const [referralCode, setReferralCode] = useState<string>("");
+  const [stats, setStats] = useState<any>(null);
+  const [commissions, setCommissions] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    loadAffiliateData();
+  }, []);
+
+  const loadAffiliateData = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Load affiliate code
+      const codeResponse = await fetch('/api/affiliates/code', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const codeResult = await codeResponse.json();
+      if (codeResult.success) {
+        setAffiliateCode(codeResult.data.affiliateCode);
+      }
+
+      // Load referral code
+      const refResponse = await fetch('/api/affiliates/referral-code', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const refResult = await refResponse.json();
+      if (refResult.success) {
+        setReferralCode(refResult.data.referralCode);
+      }
+
+      // Load stats
+      const statsResponse = await fetch('/api/affiliates/stats', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const statsResult = await statsResponse.json();
+      if (statsResult.success) {
+        setStats(statsResult.data);
+      }
+
+      // Load commissions
+      const commResponse = await fetch('/api/affiliates/commissions', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const commResult = await commResponse.json();
+      if (commResult.success) {
+        setCommissions(commResult.data);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to load affiliate data",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast({
+      title: "Copied",
+      description: `${label} copied to clipboard`,
+    });
+  };
+
+  const getReferralLink = (code: string) => {
+    return `${window.location.origin}/signup?ref=${code}`;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">Affiliate Program</h1>
+          <p className="text-muted-foreground">
+            Earn commissions by referring merchants and customers
+          </p>
+        </div>
+
+        {/* Codes */}
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <LinkIcon className="h-5 w-5" />
+                Your Referral Link
+              </CardTitle>
+              <CardDescription>
+                Share this link to refer new merchants
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  value={getReferralLink(referralCode)}
+                  readOnly
+                  className="font-mono text-sm"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => copyToClipboard(getReferralLink(referralCode), 'Referral link')}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <div>
+                <Label className="text-sm">Referral Code</Label>
+                <div className="flex gap-2 mt-1">
+                  <code className="flex-1 bg-muted p-2 rounded text-sm font-mono">
+                    {referralCode}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(referralCode, 'Referral code')}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="h-5 w-5" />
+                Affiliate Code
+              </CardTitle>
+              <CardDescription>
+                Your unique affiliate identifier
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2">
+                <code className="flex-1 bg-muted p-3 rounded text-lg font-mono text-center">
+                  {affiliateCode}
+                </code>
+                <Button
+                  variant="outline"
+                  onClick={() => copyToClipboard(affiliateCode, 'Affiliate code')}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Stats */}
+        {stats && (
+          <div className="grid md:grid-cols-4 gap-6 mb-6">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Total Earnings</p>
+                  <p className="text-2xl font-bold">${stats.totalEarnings.toFixed(2)}</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Pending</p>
+                  <p className="text-2xl font-bold text-yellow-600">
+                    ${commissions.filter((c: any) => c.status === 'pending').reduce((sum: number, c: any) => sum + c.amount, 0).toFixed(2)}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">{stats.pendingCommissions} commissions</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Paid</p>
+                  <p className="text-2xl font-bold text-green-600">${stats.totalEarnings.toFixed(2)}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stats.paidCommissions} commissions</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Referred Merchants</p>
+                  <p className="text-2xl font-bold">{stats.referredMerchants}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Commissions */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Commission History</CardTitle>
+            <CardDescription>
+              Track your affiliate commissions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {commissions.length === 0 ? (
+              <div className="text-center py-12">
+                <DollarSign className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">No commissions yet</p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Start referring merchants to earn commissions!
+                </p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Rate</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {commissions.map((commission) => (
+                    <TableRow key={commission.id}>
+                      <TableCell>
+                        {new Date(commission.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {commission.referredMerchant ? 'Merchant Referral' : 'Order Commission'}
+                      </TableCell>
+                      <TableCell>
+                        ${commission.amount.toFixed(2)} {commission.currency}
+                      </TableCell>
+                      <TableCell>
+                        {commission.commissionRate}%
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            commission.status === 'paid' ? 'default' :
+                            commission.status === 'pending' ? 'secondary' : 'destructive'
+                          }
+                        >
+                          {commission.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+

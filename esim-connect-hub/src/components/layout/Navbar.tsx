@@ -85,13 +85,12 @@ export function Navbar() {
         transition={{ duration: 0.5 }}
         className={cn(
           "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
-          isScrolled
-            ? "bg-card/80 backdrop-blur-xl shadow-md border-b border-border/50"
-            : "bg-transparent"
+          "bg-card/60 backdrop-blur-xl border-b border-border/30",
+          isScrolled && "bg-card/80 shadow-md border-border/50"
         )}
       >
         <nav className="container-custom">
-          <div className="flex items-center justify-between h-16 md:h-20">
+          <div className="flex items-center justify-between h-16 md:h-20 overflow-visible">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-xl gradient-bg flex items-center justify-center">
@@ -101,13 +100,13 @@ export function Navbar() {
             </Link>
 
             {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-1">
+            <div className="hidden md:flex items-center gap-1 overflow-visible">
               {navLinks.map((link) => (
                 <Link
                   key={link.name}
                   to={link.href}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-colors outline-none focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-transparent",
                     location.pathname === link.href
                       ? "text-primary bg-primary/10"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -122,7 +121,7 @@ export function Navbar() {
                 <DropdownMenuTrigger asChild>
                   <button
                     className={cn(
-                      "px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1",
+                      "px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 outline-none focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-transparent",
                       resourceLinks.some(l => location.pathname === l.href)
                         ? "text-primary bg-primary/10"
                         : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -147,7 +146,7 @@ export function Navbar() {
               <Link
                 to="/blog"
                 className={cn(
-                  "px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                  "px-4 py-2 rounded-lg text-sm font-medium transition-colors outline-none focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-transparent",
                   location.pathname.startsWith("/blog")
                     ? "text-primary bg-primary/10"
                     : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -158,12 +157,12 @@ export function Navbar() {
             </div>
 
             {/* CTA Buttons */}
-            <div className="hidden md:flex items-center gap-3">
+            <div className="hidden md:flex items-center gap-3 overflow-visible">
               <ThemeToggle />
               {isAuthenticated ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="flex items-center gap-2">
+                    <Button variant="ghost" size="sm" className="flex items-center gap-2 outline-none focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-transparent">
                       <Avatar className="w-8 h-8">
                         <AvatarFallback>
                           {user?.email?.charAt(0).toUpperCase() || 'U'}
@@ -232,7 +231,7 @@ export function Navbar() {
             {/* Mobile Menu Button */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors"
+              className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors outline-none focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-transparent"
             >
               {isMobileMenuOpen ? (
                 <X className="w-6 h-6" />

@@ -576,6 +576,71 @@ router.get('/webhooks', async (req, res, next) => {
   }
 });
 
+/**
+ * POST /api/v1/webhooks/test
+ * Test webhook delivery
+ */
+router.post('/webhooks/test', async (req, res, next) => {
+  try {
+    const { url, secret } = z.object({
+      url: z.string().url('Invalid webhook URL'),
+      secret: z.string().optional(),
+    }).parse(req.body);
+
+    // Send a test webhook
+    const testPayload = {
+      event: 'webhook.test',
+      timestamp: new Date().toISOString(),
+      data: {
+        message: 'This is a test webhook from eSIM Launch',
+        test: true,
+      },
+    };
+
+    try {
+      const axios = require('axios');
+      const response = await axios.post(url, testPayload, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...(secret && {
+            'X-Webhook-Signature': require('crypto')
+              .createHmac('sha256', secret)
+              .update(JSON.stringify(testPayload))
+              .digest('hex'),
+          }),
+        },
+        timeout: 10000,
+      });
+
+      res.json({
+        success: true,
+        message: 'Test webhook sent successfully',
+        statusCode: response.status,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        errorCode: 'WEBHOOK_TEST_FAILED',
+        errorMessage: error.message || 'Failed to send test webhook',
+      });
+    }
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: error.errors[0].message,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        errorCode: 'WEBHOOK_TEST_FAILED',
+        errorMessage: error.message || 'Failed to test webhook',
+      });
+    }
+  }
+});
+
 export default router;
 
 

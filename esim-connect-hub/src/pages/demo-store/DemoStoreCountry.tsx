@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Wifi, Clock, Check, Star, Shield, Zap, Globe } from "lucide-react";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
@@ -30,7 +30,17 @@ const plans = [
 export default function DemoStoreCountry() {
   const { config } = useDemoStore();
   const { countrySlug } = useParams<{ countrySlug: string }>();
+  const navigate = useNavigate();
   const country = countryData[countrySlug || ""] || defaultCountry;
+
+  const handleBuyNow = (plan: typeof plans[0]) => {
+    navigate("/demo-store/checkout", {
+      state: {
+        package: plan,
+        country: country.name,
+      },
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -110,6 +120,7 @@ export default function DemoStoreCountry() {
                         size="sm"
                         className="text-white"
                         style={{ background: config.primaryColor }}
+                        onClick={() => handleBuyNow(plan)}
                       >
                         Buy Now
                       </Button>

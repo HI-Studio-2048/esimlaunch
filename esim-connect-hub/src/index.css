@@ -110,9 +110,24 @@
     @apply border-border;
   }
 
+  html {
+    overflow: hidden;
+    height: 100%;
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    height: 100%;
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100vh;
   }
 
   h1, h2, h3, h4, h5, h6 {
