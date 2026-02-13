@@ -131,8 +131,8 @@ export default function About() {
         </div>
       </section>
 
-      {/* Team Section */}
-      <section className="section-padding">
+      {/* Team Section - Hidden */}
+      {/* <section className="section-padding">
         <div className="container-custom">
           <SectionHeader
             title="Meet Our Team"
@@ -160,7 +160,7 @@ export default function About() {
             ))}
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Why Choose Us Section */}
       <section className="section-padding bg-gradient-to-r from-primary/10 to-secondary/10">

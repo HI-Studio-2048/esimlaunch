@@ -134,8 +134,8 @@ export default function DemoStoreAbout() {
         </div>
       </section>
 
-      {/* Team */}
-      <section className="py-16">
+      {/* Team - Hidden */}
+      {/* <section className="py-16">
         <div className="container mx-auto px-4">
           <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">Meet Our Team</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-5xl mx-auto">
@@ -158,7 +158,7 @@ export default function DemoStoreAbout() {
             ))}
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Features */}
       <section
