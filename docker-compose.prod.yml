@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: esimlaunch-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-esimlaunch}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-esimlaunch}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-esimlaunch}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - esimlaunch-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: esimlaunch-redis-prod
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - esimlaunch-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: esimlaunch-backend-prod
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${DB_USER:-esimlaunch}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-esimlaunch}
+      REDIS_URL: redis://redis:6379
+      # Add other environment variables here or use .env file
+      # API_BASE_URL: ${API_BASE_URL}
+      # JWT_SECRET: ${JWT_SECRET}
+      # etc.
+    env_file:
+      - ./backend/.env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    networks:
+      - esimlaunch-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  esimlaunch-network:
+    driver: bridge
+

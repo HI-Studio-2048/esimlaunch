@@ -182,10 +182,26 @@ class ApiClient {
   }
 
   async clerkSync(clerkUserId: string) {
-    return this.request<{ merchant: any; token: string }>('/api/auth/clerk-sync', {
-      method: 'POST',
-      body: JSON.stringify({ clerkUserId }),
-    });
+    try {
+      const result = await this.request<{ merchant: any; token: string }>('/api/auth/clerk-sync', {
+        method: 'POST',
+        body: JSON.stringify({ clerkUserId }),
+      });
+      // Store token immediately after sync
+      if (result.token) {
+        this.setJwtToken(result.token);
+      }
+      return result;
+    } catch (error: any) {
+      console.error('clerkSync API error:', {
+        error,
+        message: error?.message,
+        errorCode: error?.errorCode,
+        status: error?.status,
+        clerkUserId
+      });
+      throw error;
+    }
   }
 
   async verifyEmail(token: string) {

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, Mail, Lock, Globe, Shield } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient, ApiError } from "@/lib/api";
+import { useSignIn, useUser, useClerk } from "@clerk/clerk-react";
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
 
 const Login = () => {
@@ -22,14 +23,29 @@ const Login = () => {
   const location = useLocation();
   const { toast } = useToast();
   const { login, isLoading, error, isAuthenticated, clearError } = useAuth();
+  const { signIn, isLoaded: isClerkLoaded, setActive } = useSignIn();
+  const { user: clerkUser, isLoaded: isClerkUserLoaded } = useUser();
+  const clerk = useClerk();
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (either via our auth or Clerk)
   useEffect(() => {
+    // Check if Clerk user exists (OAuth just completed)
+    if (isClerkUserLoaded && clerkUser && !isAuthenticated) {
+      // Clerk session exists but not synced yet - wait a moment for sync
+      const timer = setTimeout(() => {
+        if (isAuthenticated) {
+          const from = (location.state as any)?.from?.pathname || "/dashboard";
+          navigate(from, { replace: true });
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+    
     if (isAuthenticated) {
       const from = (location.state as any)?.from?.pathname || "/dashboard";
       navigate(from, { replace: true });
     }
-  }, [isAuthenticated, navigate, location]);
+  }, [isAuthenticated, navigate, location, isClerkUserLoaded, clerkUser]);
 
   // Clear error when component unmounts or user starts typing
   useEffect(() => {
@@ -110,11 +126,85 @@ const Login = () => {
     }
   };
 
-  const handleSocialLogin = async (provider: 'google' | 'apple') => {
-    toast({
-      title: "Coming Soon",
-      description: `${provider.charAt(0).toUpperCase() + provider.slice(1)} login will be available soon.`,
-    });
+  const handleSocialLogin = async (e: React.MouseEvent, provider: 'google' | 'apple') => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('=== GOOGLE LOGIN CLICKED ===', { provider, clerkPubKey: !!clerkPubKey, isClerkLoaded, signIn: !!signIn });
+    
+    if (!clerkPubKey) {
+      toast({
+        title: "Authentication unavailable",
+        description: "Clerk authentication is not configured. Please use email login.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!isClerkLoaded || !signIn) {
+      toast({
+        title: "Loading...",
+        description: "Please wait while authentication loads.",
+      });
+      return;
+    }
+
+    if (provider === 'google') {
+      const from = (location.state as any)?.from?.pathname || "/dashboard";
+      const redirectUrl = `${window.location.origin}${from}`;
+      
+      // If Clerk thinks we're signed in but we want to sign in again, sign out first
+      if (isClerkUserLoaded && clerkUser) {
+        const explicitLogout = localStorage.getItem('explicit_logout') || sessionStorage.getItem('explicit_logout');
+        if (explicitLogout === 'true') {
+          // User logged out but Clerk still has session - sign out from Clerk first
+          console.log('Signing out from Clerk before OAuth...');
+          try {
+            if (clerk) {
+              await clerk.signOut();
+              // Wait a moment for sign out to complete
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          } catch (e) {
+            console.error('Error signing out from Clerk:', e);
+          }
+        } else {
+          // User is already signed in normally, redirect to dashboard
+          navigate(from, { replace: true });
+          return;
+        }
+      }
+      
+      try {
+        // Clear explicit logout flag if it exists (user is trying to log in)
+        localStorage.removeItem('explicit_logout');
+        sessionStorage.removeItem('explicit_logout');
+        
+        // Make sure signIn is ready and we're not signed in
+        if (!signIn) {
+          throw new Error('SignIn is not available');
+        }
+        
+        // Use authenticateWithRedirect - this should redirect immediately
+        signIn.authenticateWithRedirect({
+          strategy: 'oauth_google',
+          redirectUrl: redirectUrl,
+          redirectUrlComplete: redirectUrl,
+        });
+      } catch (err: any) {
+        console.error('OAuth error:', err);
+        toast({
+          title: "Login failed",
+          description: err?.message || "Failed to start Google sign-in. Please check your Clerk dashboard settings.",
+          variant: "destructive",
+        });
+      }
+    } else if (provider === 'apple') {
+      toast({
+        title: "Coming Soon",
+        description: "Apple login will be available soon.",
+      });
+    }
   };
 
   return (
@@ -219,9 +309,10 @@ const Login = () => {
             {/* Social Login Buttons */}
             <div className="grid grid-cols-2 gap-3 mb-6">
               <Button
+                type="button"
                 variant="outline"
                 className="w-full"
-                onClick={() => handleSocialLogin("google")}
+                onClick={(e) => handleSocialLogin(e, "google")}
               >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                   <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -232,9 +323,10 @@ const Login = () => {
                 Google
               </Button>
               <Button
+                type="button"
                 variant="outline"
                 className="w-full"
-                onClick={() => handleSocialLogin("apple")}
+                onClick={(e) => handleSocialLogin(e, "apple")}
               >
                 <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>

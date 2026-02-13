@@ -35,12 +35,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Load token from localStorage and validate on mount
   useEffect(() => {
     const initAuth = async () => {
+      // Check if user explicitly logged out - don't auto-login
+      // Check both localStorage and sessionStorage
+      const explicitLogout = localStorage.getItem('explicit_logout') || sessionStorage.getItem('explicit_logout');
+      if (explicitLogout === 'true') {
+        // User explicitly logged out, clear everything
+        localStorage.removeItem('jwt_token');
+        sessionStorage.removeItem('jwt_token');
+        apiClient.setJwtToken(null);
+        setUser(null);
+        setIsLoading(false);
+        // Don't clear the explicit_logout flag - keep it so user stays logged out
+        return;
+      }
+
       try {
         const token = localStorage.getItem('jwt_token');
         if (token) {
           // Validate token by fetching current merchant
           const merchant = await apiClient.getCurrentMerchant();
           setUser(merchant);
+          // Store user ID for user-specific storage
+          if (merchant?.id) {
+            localStorage.setItem('current_user_id', merchant.id);
+            localStorage.setItem('merchant_id', merchant.id);
+          }
         }
       } catch (err) {
         // Token is invalid or expired, clear it
@@ -81,6 +100,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await apiClient.login(email, password);
       setUser(result.merchant);
       
+      // Store user ID for user-specific storage
+      if (result.merchant?.id) {
+        localStorage.setItem('current_user_id', result.merchant.id);
+        localStorage.setItem('merchant_id', result.merchant.id);
+      }
+      
       // Store token based on remember me preference
       if (rememberMe) {
         localStorage.setItem('jwt_token', result.token);
@@ -114,6 +139,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await apiClient.register(email, password, name, serviceType);
       setUser(result.merchant);
       
+      // Store user ID for user-specific storage
+      if (result.merchant?.id) {
+        localStorage.setItem('current_user_id', result.merchant.id);
+        localStorage.setItem('merchant_id', result.merchant.id);
+      }
+      
       // Store token after registration
       localStorage.setItem('jwt_token', result.token);
       apiClient.setJwtToken(result.token);
@@ -129,26 +160,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    // If using Clerk, sign out from Clerk first
-    if (clerkPubKey) {
-      try {
-        const { useClerk } = await import("@clerk/clerk-react");
-        // We can't use hooks here, so we'll need to handle Clerk sign out differently
-        // The ClerkProvider's afterSignOutUrl will handle navigation
-        // For now, we'll clear local state and let Clerk handle its own sign out
-      } catch (e) {
-        // Clerk not available, continue with normal logout
-      }
-    }
+    // Set flag to prevent auto-reauth
+    sessionStorage.setItem('explicit_logout', 'true');
     
     // Clear all authentication state
     setUser(null);
     localStorage.removeItem('jwt_token');
     sessionStorage.removeItem('jwt_token');
     localStorage.removeItem('api_key');
+    localStorage.removeItem('current_user_id');
+    localStorage.removeItem('merchant_id');
     apiClient.setJwtToken(null);
     apiClient.setApiKey(null);
     setError(null);
+    
+    // Note: Clerk sign-out is handled in Navbar component where we have access to the hook
   };
 
   const refreshToken = async () => {

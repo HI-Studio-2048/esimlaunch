@@ -16,16 +16,16 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
-// Dynamically check for Clerk availability
-let clerkSignOut: ((options?: any) => Promise<void>) | null = null;
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
-if (clerkPubKey) {
-  import("@clerk/clerk-react").then((mod) => {
-    // We'll use the clerk instance from the hook at render time
-  }).catch(() => {
-    // Clerk not available
-  });
+// Try to get useClerk hook - will be null if Clerk not available
+let useClerkFromClerk: (() => any) | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const clerkModule = require("@clerk/clerk-react");
+  useClerkFromClerk = clerkModule.useClerk;
+} catch {
+  // Clerk package not available
 }
 
 const navLinks = [
@@ -51,6 +51,17 @@ export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, user, logout } = useAuth();
+  // Use Clerk hook - must be called unconditionally per React rules
+  // If ClerkProvider isn't present, the hook will handle it gracefully
+  let clerk: any = null;
+  if (useClerkFromClerk && clerkPubKey) {
+    try {
+      clerk = useClerkFromClerk();
+    } catch (e) {
+      // Hook failed - ClerkProvider likely not present
+      clerk = null;
+    }
+  }
 
   useEffect(() => {
     const handleScroll = () => {
@@ -65,16 +76,28 @@ export function Navbar() {
   }, [location.pathname]);
 
   const handleLogout = async () => {
-    if (clerkPubKey) {
+    // Set a flag to prevent auto-reauth on reload - use localStorage so it persists
+    localStorage.setItem('explicit_logout', 'true');
+    sessionStorage.setItem('explicit_logout', 'true');
+    
+    // Sign out from Clerk first if it's available
+    if (clerkPubKey && clerk) {
       try {
-        const { useClerk } = await import("@clerk/clerk-react");
-        // Can't use hooks outside components, so just clear local state
+        await clerk.signOut();
+        // Wait a bit for Clerk to clear its session
+        await new Promise(resolve => setTimeout(resolve, 500));
       } catch (e) {
-        // Clerk not available
+        console.error('Error signing out from Clerk:', e);
+        // Continue with local logout even if Clerk sign out fails
       }
     }
+    
+    // Clear local authentication state
     logout();
+    
     navigate("/");
+    
+    // Keep the flag - don't remove it so user stays logged out on reload
   };
 
   return (
