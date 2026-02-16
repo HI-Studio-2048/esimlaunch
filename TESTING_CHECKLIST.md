@@ -3,6 +3,28 @@
 ## 🎯 Overview
 This document lists all features implemented from Phase 1 through Phase 5, organized for systematic testing.
 
+## 🧭 Quick Navigation Reference
+
+**All pages are now accessible via UI navigation!** Here's how to access each feature:
+
+### From Dashboard
+- **Analytics** → Quick Actions → Analytics card (or "View Analytics" button in banner)
+- **Affiliates** → Quick Actions → Affiliates card
+- **Support** → Quick Actions → Support card
+- **Packages** → Quick Actions → Packages card
+- **Pricing** → Quick Actions → Pricing card
+- **Settings** → Settings icon in header
+
+### From Settings
+- **Webhooks** → Navigation card at top
+- **Billing** → Navigation card at top
+- **Email Templates** → Navigation card at top
+
+### From Store Preview
+- **Currency Settings** → Store Settings → Currency Settings button
+- **SEO Settings** → Store Settings → SEO Settings button
+- **Domain Verification** → Store Settings → Domain Verification button
+
 ---
 
 ## ✅ PHASE 1: Critical Fixes & Core Business Flows
@@ -12,11 +34,11 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 **Files:** `esim-connect-hub/src/pages/Onboarding.tsx`
 
 **What to Test:**
-- [ ] Complete onboarding wizard
-- [ ] Store is actually created in database (check Prisma Studio)
-- [ ] Store ID is saved to localStorage
-- [ ] Redirect to store preview works
-- [ ] Store data persists after page refresh
+- [x] Complete onboarding wizard
+- [x] Store is actually created in database (check Prisma Studio)
+- [x] Store ID is saved to localStorage
+- [x] Redirect to store preview works
+- [x] Store data persists after page refresh
 
 **Test Steps:**
 1. Go to `/signup` and create account
@@ -130,14 +152,16 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 - [ ] Package details display correctly
 
 **Test Steps:**
-1. Navigate to `/package-selector`
+1. Navigate to Dashboard → Click "Packages" card in Quick Actions section
+   - OR go directly to `/package-selector`
 2. Browse packages by country
 3. Use search to find specific packages
 4. Select packages for your store
 5. Save selection
 6. Verify packages appear in store
 
-**Route:** `/package-selector`
+**Route:** `/package-selector`  
+**Navigation:** Dashboard → Quick Actions → Packages card
 
 ---
 
@@ -154,14 +178,16 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 - [ ] Markup saves to store configuration
 
 **Test Steps:**
-1. Navigate to `/pricing-config`
+1. Navigate to Dashboard → Click "Pricing" card in Quick Actions section
+   - OR go directly to `/pricing-config`
 2. Set global markup (e.g., 20%)
 3. Set country-specific markup for a country
 4. Set package-specific markup for a package
 5. Verify price calculations are correct
 6. Save configuration
 
-**Route:** `/pricing-config`
+**Route:** `/pricing-config`  
+**Navigation:** Dashboard → Quick Actions → Pricing card
 
 ---
 
@@ -179,7 +205,8 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 - [ ] Webhook delivery logs display
 
 **Test Steps:**
-1. Navigate to `/settings/webhooks`
+1. Navigate to Settings → Click "Webhooks" navigation card at the top
+   - OR go directly to `/settings/webhooks`
 2. Add webhook URL (e.g., `https://webhook.site/your-unique-id`)
 3. Select event types (ORDER_STATUS, ESIM_STATUS, etc.)
 4. Click "Test Webhook"
@@ -187,6 +214,7 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 6. Check delivery logs
 
 **Route:** `/settings/webhooks`  
+**Navigation:** Settings → Webhooks card (top navigation)  
 **API Endpoint:** `POST /api/v1/webhooks/test`
 
 ---
@@ -207,7 +235,8 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 - [ ] Store accessible via custom domain (if configured)
 
 **Test Steps:**
-1. Navigate to `/stores/:storeId/domain`
+1. Navigate to Store Preview → Click "Domain Verification" button in Store Settings section
+   - OR go directly to `/stores/:storeId/domain`
 2. Enter your domain (e.g., `example.com`)
 3. Click "Start Verification"
 4. Add TXT record to your DNS
@@ -215,7 +244,8 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 6. Verify status changes to "Verified"
 
 **Routes:**
-- `/stores/:storeId/domain`
+- `/stores/:storeId/domain`  
+**Navigation:** Store Preview → Store Settings → Domain Verification button  
 - `POST /api/stores/:storeId/verify-domain`
 - `GET /api/stores/:storeId/domain-status`
 - `POST /api/stores/:storeId/verify-dns`
@@ -312,14 +342,16 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 - [ ] Subscription webhooks work
 
 **Test Steps:**
-1. Navigate to `/settings/billing`
+1. Navigate to Settings → Click "Billing" navigation card at the top
+   - OR go directly to `/settings/billing`
 2. View current plan
 3. Test upgrade to higher plan
 4. Check invoice history
 5. Test cancel subscription
 6. Verify Stripe subscription created
 
-**Route:** `/settings/billing`
+**Route:** `/settings/billing`  
+**Navigation:** Settings → Billing card (top navigation)
 
 **API Endpoints:**
 - `GET /api/subscriptions/me`
@@ -365,7 +397,8 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
    - Add a reply message
 
 2. **As Merchant:**
-   - Navigate to `/dashboard/support`
+   - Navigate to Dashboard → Click "Support" card in Quick Actions section
+   - OR go directly to `/dashboard/support`
    - View ticket list
    - Open a ticket
    - Update status/priority
@@ -374,7 +407,8 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 **Routes:**
 - `/support/create` (public)
 - `/support/tickets/:ticketId` (public)
-- `/dashboard/support` (merchant)
+- `/dashboard/support` (merchant)  
+**Navigation:** Dashboard → Quick Actions → Support card
 - `/dashboard/support/tickets/:ticketId` (merchant)
 
 **API Endpoints:**
@@ -406,14 +440,16 @@ This document lists all features implemented from Phase 1 through Phase 5, organ
 - [ ] Multiple currencies supported per store
 
 **Test Steps:**
-1. Navigate to `/stores/:storeId/currency`
+1. Navigate to Store Preview → Click "Currency Settings" button in Store Settings section
+   - OR go directly to `/stores/:storeId/currency`
 2. Set default currency (e.g., EUR)
 3. Select supported currencies
 4. Save settings
 5. Test currency conversion API
 6. Use CurrencySelector in checkout
 
-**Route:** `/stores/:storeId/currency`
+**Route:** `/stores/:storeId/currency`  
+**Navigation:** Store Preview → Store Settings → Currency Settings button
 
 **API Endpoints:**
 - `GET /api/currency/list`
@@ -442,13 +478,16 @@ USD, EUR, GBP, CAD, AUD, JPY, CNY, INR, MXN, BRL, ZAR
 - [ ] Revenue growth calculation correct
 
 **Test Steps:**
-1. Navigate to `/dashboard/analytics`
+1. Navigate to Dashboard → Click "Analytics" card in Quick Actions section
+   - OR click "View Analytics" button in the banner
+   - OR go directly to `/dashboard/analytics`
 2. View summary cards (revenue, orders, customers)
 3. Check revenue over time chart
 4. Test time range selector (7d, 30d, 90d)
 5. Verify data matches actual orders
 
-**Route:** `/dashboard/analytics`
+**Route:** `/dashboard/analytics`  
+**Navigation:** Dashboard → Quick Actions → Analytics card OR "View Analytics" button
 
 **API Endpoints:**
 - `GET /api/analytics/revenue`
@@ -474,7 +513,8 @@ USD, EUR, GBP, CAD, AUD, JPY, CNY, INR, MXN, BRL, ZAR
 - [ ] Open Graph tags work
 
 **Test Steps:**
-1. Navigate to `/stores/:storeId/seo`
+1. Navigate to Store Preview → Click "SEO Settings" button in Store Settings section
+   - OR go directly to `/stores/:storeId/seo`
 2. Set page title and description
 3. Add keywords
 4. Configure Open Graph tags
@@ -482,7 +522,8 @@ USD, EUR, GBP, CAD, AUD, JPY, CNY, INR, MXN, BRL, ZAR
 6. Test sitemap: `/api/seo/store/:storeId/sitemap`
 7. Test robots.txt: `/api/seo/store/:storeId/robots`
 
-**Route:** `/stores/:storeId/seo`
+**Route:** `/stores/:storeId/seo`  
+**Navigation:** Store Preview → Store Settings → SEO Settings button
 
 **API Endpoints:**
 - `GET /api/seo/store/:storeId`
@@ -507,14 +548,16 @@ USD, EUR, GBP, CAD, AUD, JPY, CNY, INR, MXN, BRL, ZAR
 - [ ] Template saves correctly
 
 **Test Steps:**
-1. Navigate to `/settings/email-templates`
+1. Navigate to Settings → Click "Email Templates" navigation card at the top
+   - OR go directly to `/settings/email-templates`
 2. Select a template (Order Confirmation, eSIM Delivery, etc.)
 3. Edit subject and HTML body
 4. Click "Preview" to see rendered template
 5. Save template
 6. Trigger email to verify custom template used
 
-**Route:** `/settings/email-templates`
+**Route:** `/settings/email-templates`  
+**Navigation:** Settings → Email Templates card (top navigation)
 
 **API Endpoints:**
 - `GET /api/email-templates`
@@ -546,7 +589,8 @@ USD, EUR, GBP, CAD, AUD, JPY, CNY, INR, MXN, BRL, ZAR
 - [ ] Commission history shows
 
 **Test Steps:**
-1. Navigate to `/dashboard/affiliates`
+1. Navigate to Dashboard → Click "Affiliates" card in Quick Actions section
+   - OR go directly to `/dashboard/affiliates`
 2. View your affiliate code and referral code
 3. Copy referral link
 4. Use referral link to sign up new merchant
@@ -554,7 +598,8 @@ USD, EUR, GBP, CAD, AUD, JPY, CNY, INR, MXN, BRL, ZAR
 6. Check commissions appear in dashboard
 7. View commission history
 
-**Route:** `/dashboard/affiliates`
+**Route:** `/dashboard/affiliates`  
+**Navigation:** Dashboard → Quick Actions → Affiliates card
 
 **API Endpoints:**
 - `GET /api/affiliates/code`
@@ -691,6 +736,7 @@ Ensure these are set in `backend/.env`:
 
 **Last Updated:** 2024  
 **Total Features Implemented:** 17 major features across 5 phases
+
 
 
 

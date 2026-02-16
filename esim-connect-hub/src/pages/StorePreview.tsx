@@ -16,7 +16,10 @@ import {
   Check,
   Star,
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  DollarSign,
+  Coins,
+  Link as LinkIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +27,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { useDemoStore, BrandConfig, defaultBrandConfig } from "@/contexts/DemoStoreContext";
+import { apiClient } from "@/lib/api";
+import { useToast } from "@/hooks/use-toast";
 
 const defaultConfig: BrandConfig = defaultBrandConfig;
 
@@ -37,9 +42,48 @@ export default function StorePreview() {
   const { config: savedConfig, setConfig: setDemoStoreConfig } = useDemoStore();
   const [config, setConfigState] = useState<BrandConfig>(savedConfig || defaultConfig);
   const [viewMode, setViewMode] = useState<"desktop" | "mobile">("desktop");
+  const [isLoadingStore, setIsLoadingStore] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const navigate = useNavigate();
+  const { toast } = useToast();
   
+  // Load store data from backend on mount
+  useEffect(() => {
+    const loadStoreData = async () => {
+      try {
+        const storeId = localStorage.getItem('current_store_id');
+        if (storeId) {
+          const store = await apiClient.getStore(storeId);
+          if (store) {
+            // Convert store data to BrandConfig format
+            const storeConfig: BrandConfig = {
+              businessName: store.businessName || defaultConfig.businessName,
+              primaryColor: store.primaryColor || defaultConfig.primaryColor,
+              secondaryColor: store.secondaryColor || defaultConfig.secondaryColor,
+              accentColor: store.accentColor || defaultConfig.accentColor,
+              logo: store.logoUrl || null,
+            };
+            
+            // Update both local state and context
+            setConfigState(storeConfig);
+            setDemoStoreConfig(storeConfig);
+          }
+        }
+      } catch (error: any) {
+        console.error('Failed to load store data:', error);
+        // If store doesn't exist or error, use saved config from context
+        if (savedConfig) {
+          setConfigState(savedConfig);
+        }
+      } finally {
+        setIsLoadingStore(false);
+      }
+    };
+
+    loadStoreData();
+  }, [setDemoStoreConfig, savedConfig]);
+
   // Update local state when saved config changes
   useEffect(() => {
     if (savedConfig) {
@@ -52,6 +96,30 @@ export default function StorePreview() {
     navigate("/demo-store");
   };
 
+  // Debounced function to save to backend
+  const saveToBackend = (newConfig: BrandConfig) => {
+    // Clear any existing timeout
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    // Set a new timeout to save after user stops making changes
+    saveTimeoutRef.current = setTimeout(() => {
+      const storeId = localStorage.getItem('current_store_id');
+      if (storeId) {
+        apiClient.updateStore(storeId, {
+          businessName: newConfig.businessName,
+          primaryColor: newConfig.primaryColor,
+          secondaryColor: newConfig.secondaryColor,
+          accentColor: newConfig.accentColor,
+          logoUrl: newConfig.logo || undefined,
+        }).catch((error: any) => {
+          console.error('Failed to save store config to backend:', error);
+        });
+      }
+    }, 500); // Wait 500ms after last change before saving
+  };
+
   const setConfig = (updater: BrandConfig | ((prev: BrandConfig) => BrandConfig)) => {
     let newConfig: BrandConfig;
     if (typeof updater === "function") {
@@ -61,9 +129,21 @@ export default function StorePreview() {
       newConfig = updater;
       setConfigState(newConfig);
     }
-    // Also update the context so it persists
+    // Also update the context so it persists (immediate for UI)
     setDemoStoreConfig(newConfig);
+
+    // Debounce backend save to prevent flickering during dragging
+    saveToBackend(newConfig);
   };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+    };
+  }, []);
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -79,6 +159,21 @@ export default function StorePreview() {
     setConfig(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleNavigateToStoreSetting = (path: string) => {
+    const storeId = localStorage.getItem('current_store_id');
+    if (!storeId) {
+      toast({
+        title: "Error",
+        description: "No store found. Please create a store first.",
+        variant: "destructive",
+      });
+      return;
+    }
+    navigate(`/stores/${storeId}${path}`);
+  };
+
+  const storeId = localStorage.getItem('current_store_id');
+
   return (
     <div className="min-h-screen bg-background py-16">
       <div className="container mx-auto px-4">
@@ -87,6 +182,45 @@ export default function StorePreview() {
           title="See Your eSIM Store Come to Life"
           description="Customize your brand colors, upload your logo, and preview exactly how your white-label eSIM store will look."
         />
+
+        {/* Store Settings Quick Links */}
+        {storeId && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 mt-8"
+          >
+            <div className="bg-card rounded-2xl p-6 shadow-card border border-border">
+              <h3 className="font-semibold text-lg mb-4">Store Settings</h3>
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => handleNavigateToStoreSetting("/currency")}
+                  className="flex items-center gap-2"
+                >
+                  <Coins className="w-4 h-4" />
+                  Currency Settings
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleNavigateToStoreSetting("/seo")}
+                  className="flex items-center gap-2"
+                >
+                  <Search className="w-4 h-4" />
+                  SEO Settings
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleNavigateToStoreSetting("/domain")}
+                  className="flex items-center gap-2"
+                >
+                  <LinkIcon className="w-4 h-4" />
+                  Domain Verification
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <div className="grid lg:grid-cols-[400px,1fr] gap-8 mt-12">
           {/* Configuration Panel */}

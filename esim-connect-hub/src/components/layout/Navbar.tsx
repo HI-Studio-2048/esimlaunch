@@ -76,28 +76,24 @@ export function Navbar() {
   }, [location.pathname]);
 
   const handleLogout = async () => {
-    // Set a flag to prevent auto-reauth on reload - use localStorage so it persists
+    // Set a flag to prevent auto-reauth on reload
     localStorage.setItem('explicit_logout', 'true');
     sessionStorage.setItem('explicit_logout', 'true');
-    
-    // Sign out from Clerk first if it's available
-    if (clerkPubKey && clerk) {
-      try {
-        await clerk.signOut();
-        // Wait a bit for Clerk to clear its session
-        await new Promise(resolve => setTimeout(resolve, 500));
-      } catch (e) {
-        console.error('Error signing out from Clerk:', e);
-        // Continue with local logout even if Clerk sign out fails
-      }
-    }
     
     // Clear local authentication state
     logout();
     
-    navigate("/");
+    // Sign out from Clerk and WAIT for it to complete before navigating
+    if (clerkPubKey && clerk) {
+      try {
+        await clerk.signOut();
+      } catch (e) {
+        console.error('Error signing out from Clerk:', e);
+      }
+    }
     
-    // Keep the flag - don't remove it so user stays logged out on reload
+    // Now navigate (Clerk session is fully cleared)
+    navigate("/");
   };
 
   return (
@@ -228,10 +224,7 @@ export function Navbar() {
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      onClick={async () => {
-                        logout();
-                        navigate("/");
-                      }}
+                      onClick={handleLogout}
                       className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
                     >
                       <LogOut className="w-4 h-4" />
@@ -373,9 +366,8 @@ export function Navbar() {
                         variant="destructive"
                         className="w-full"
                         onClick={() => {
-                          logout();
-                          navigate("/");
                           setIsMobileMenuOpen(false);
+                          handleLogout();
                         }}
                       >
                         <LogOut className="w-4 h-4 mr-2" />

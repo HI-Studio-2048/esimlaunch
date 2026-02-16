@@ -73,6 +73,20 @@ export function ClerkAuthSync() {
             localStorage.setItem('merchant_id', result.merchant.id);
           }
           
+          // Try to load API keys and set the first active one
+          try {
+            const apiKeys = await apiClient.listApiKeys();
+            const activeKey = apiKeys.find(key => key.isActive);
+            if (activeKey) {
+              // Note: We can't get the full key back, but we can check if one exists
+              // The user will need to create/copy the key from Settings
+              console.log('Active API key found:', activeKey.keyPrefix);
+            }
+          } catch (keyError) {
+            // Silently fail - API keys might not be set up yet
+            console.log('No API keys found or error loading keys:', keyError);
+          }
+          
           console.log('Clerk user synced successfully', result.merchant);
           
           // Clear explicit logout flag since user just logged in

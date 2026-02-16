@@ -32,49 +32,50 @@ export default function AffiliateDashboard() {
   const loadAffiliateData = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      
       // Load affiliate code
-      const codeResponse = await fetch('/api/affiliates/code', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const codeResult = await codeResponse.json();
-      if (codeResult.success) {
-        setAffiliateCode(codeResult.data.affiliateCode);
+      try {
+        const codeData = await apiClient.getAffiliateCode();
+        setAffiliateCode(codeData.affiliateCode || '');
+      } catch (error: any) {
+        console.error('Failed to load affiliate code:', error);
+        // Don't show error toast for individual failures
       }
 
       // Load referral code
-      const refResponse = await fetch('/api/affiliates/referral-code', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const refResult = await refResponse.json();
-      if (refResult.success) {
-        setReferralCode(refResult.data.referralCode);
+      try {
+        const refData = await apiClient.getReferralCode();
+        setReferralCode(refData.referralCode || '');
+      } catch (error: any) {
+        console.error('Failed to load referral code:', error);
       }
 
       // Load stats
-      const statsResponse = await fetch('/api/affiliates/stats', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const statsResult = await statsResponse.json();
-      if (statsResult.success) {
-        setStats(statsResult.data);
+      try {
+        const statsData = await apiClient.getAffiliateStats();
+        setStats(statsData);
+      } catch (error: any) {
+        console.error('Failed to load stats:', error);
+        // Stats are optional, don't show error toast
       }
 
       // Load commissions
-      const commResponse = await fetch('/api/affiliates/commissions', {
-        headers: { 'Authorization': `Bearer ${token}` },
-      });
-      const commResult = await commResponse.json();
-      if (commResult.success) {
-        setCommissions(commResult.data);
+      try {
+        const commData = await apiClient.getAffiliateCommissions();
+        setCommissions(commData || []);
+      } catch (error: any) {
+        console.error('Failed to load commissions:', error);
+        setCommissions([]);
       }
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to load affiliate data",
-        variant: "destructive",
-      });
+      console.error('Failed to load affiliate data:', error);
+      // Only show toast if all requests failed
+      if (!affiliateCode && !referralCode && !stats && commissions.length === 0) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to load affiliate data. Some features may not be available.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsLoading(false);
     }

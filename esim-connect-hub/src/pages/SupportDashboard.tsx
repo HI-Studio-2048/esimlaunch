@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { apiClient } from "@/lib/api";
 import { 
   MessageSquare, Plus, Loader2, Search,
   CheckCircle2, Clock, AlertCircle, XCircle, Filter
@@ -61,39 +62,31 @@ export default function SupportDashboard() {
   const loadTickets = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('token');
-      const params = new URLSearchParams();
-      if (filters.status) params.append('status', filters.status);
-      if (filters.priority) params.append('priority', filters.priority);
-      if (filters.category) params.append('category', filters.category);
-
-      const response = await fetch(`/api/support/tickets?${params.toString()}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
+      const ticketsData = await apiClient.getSupportTickets({
+        status: filters.status || undefined,
+        priority: filters.priority || undefined,
+        category: filters.category || undefined,
       });
-
-      const result = await response.json();
-      if (result.success) {
-        let filteredTickets = result.data;
-        
-        // Client-side search filter
-        if (filters.search) {
-          filteredTickets = filteredTickets.filter((ticket: any) =>
-            ticket.subject.toLowerCase().includes(filters.search.toLowerCase()) ||
-            ticket.ticketNumber.toLowerCase().includes(filters.search.toLowerCase()) ||
-            ticket.customerEmail.toLowerCase().includes(filters.search.toLowerCase())
-          );
-        }
-        
-        setTickets(filteredTickets);
+      
+      // Client-side search filter
+      let filteredTickets = ticketsData || [];
+      if (filters.search) {
+        filteredTickets = filteredTickets.filter((ticket: any) =>
+          ticket.subject?.toLowerCase().includes(filters.search.toLowerCase()) ||
+          ticket.ticketNumber?.toLowerCase().includes(filters.search.toLowerCase()) ||
+          ticket.customerEmail?.toLowerCase().includes(filters.search.toLowerCase())
+        );
       }
+      
+      setTickets(filteredTickets);
     } catch (error: any) {
+      console.error('Failed to load tickets:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to load tickets",
         variant: "destructive",
       });
+      setTickets([]);
     } finally {
       setIsLoading(false);
     }
@@ -101,19 +94,12 @@ export default function SupportDashboard() {
 
   const loadStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch('/api/support/stats', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        setStats(result.data);
-      }
+      const statsData = await apiClient.getSupportStats();
+      setStats(statsData);
     } catch (error: any) {
       console.error('Failed to load stats:', error);
+      // Don't show toast for stats - it's not critical
+      setStats(null);
     }
   };
 
@@ -201,14 +187,14 @@ export default function SupportDashboard() {
                 />
               </div>
               <Select
-                value={filters.status}
-                onValueChange={(value) => setFilters({ ...filters, status: value })}
+                value={filters.status || undefined}
+                onValueChange={(value) => setFilters({ ...filters, status: value === "all" ? "" : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Statuses</SelectItem>
+                  <SelectItem value="all">All Statuses</SelectItem>
                   <SelectItem value="open">Open</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
                   <SelectItem value="resolved">Resolved</SelectItem>
@@ -216,14 +202,14 @@ export default function SupportDashboard() {
                 </SelectContent>
               </Select>
               <Select
-                value={filters.priority}
-                onValueChange={(value) => setFilters({ ...filters, priority: value })}
+                value={filters.priority || undefined}
+                onValueChange={(value) => setFilters({ ...filters, priority: value === "all" ? "" : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All Priorities" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Priorities</SelectItem>
+                  <SelectItem value="all">All Priorities</SelectItem>
                   <SelectItem value="low">Low</SelectItem>
                   <SelectItem value="medium">Medium</SelectItem>
                   <SelectItem value="high">High</SelectItem>
@@ -231,14 +217,14 @@ export default function SupportDashboard() {
                 </SelectContent>
               </Select>
               <Select
-                value={filters.category}
-                onValueChange={(value) => setFilters({ ...filters, category: value })}
+                value={filters.category || undefined}
+                onValueChange={(value) => setFilters({ ...filters, category: value === "all" ? "" : value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Categories</SelectItem>
+                  <SelectItem value="all">All Categories</SelectItem>
                   <SelectItem value="billing">Billing</SelectItem>
                   <SelectItem value="technical">Technical</SelectItem>
                   <SelectItem value="order_issue">Order Issue</SelectItem>
@@ -332,6 +318,7 @@ export default function SupportDashboard() {
     </div>
   );
 }
+
 
 
 

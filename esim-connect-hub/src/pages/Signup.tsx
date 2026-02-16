@@ -29,26 +29,18 @@ const Signup = () => {
   const { user: clerkUser, isLoaded: isClerkUserLoaded } = useUser();
   const clerk = useClerk();
 
-  // Redirect if already authenticated (either via our auth or Clerk)
+  // Redirect if already authenticated
   useEffect(() => {
-    // Check if Clerk user exists (OAuth just completed)
-    if (isClerkUserLoaded && clerkUser && !isAuthenticated) {
-      // Clerk session exists but not synced yet - wait a moment for sync
-      const timer = setTimeout(() => {
-        if (isAuthenticated) {
-          navigate("/dashboard", { replace: true });
-        } else {
-          // If still not authenticated after sync, go to onboarding
-          navigate("/onboarding", { replace: true });
-        }
-      }, 1000);
-      return () => clearTimeout(timer);
+    // If user explicitly logged out, stay on signup page — don't auto-redirect
+    const explicitLogout = localStorage.getItem('explicit_logout') || sessionStorage.getItem('explicit_logout');
+    if (explicitLogout === 'true') {
+      return;
     }
     
     if (isAuthenticated) {
       navigate("/dashboard", { replace: true });
     }
-  }, [isAuthenticated, navigate, isClerkUserLoaded, clerkUser]);
+  }, [isAuthenticated, navigate]);
 
   // Clear error when component unmounts
   useEffect(() => {
@@ -105,11 +97,20 @@ const Signup = () => {
     }
   };
 
+  const startOAuthRedirect = async (redirectUrl: string) => {
+    if (!signUp) {
+      throw new Error('SignUp is not available');
+    }
+    await signUp.authenticateWithRedirect({
+      strategy: 'oauth_google',
+      redirectUrl: redirectUrl,
+      redirectUrlComplete: redirectUrl,
+    });
+  };
+
   const handleSocialSignup = async (e: React.MouseEvent, provider: 'google' | 'apple') => {
     e.preventDefault();
     e.stopPropagation();
-    
-    console.log('=== GOOGLE SIGNUP CLICKED ===', { provider, clerkPubKey: !!clerkPubKey, isClerkLoaded, signUp: !!signUp });
     
     if (!clerkPubKey) {
       toast({
@@ -131,43 +132,38 @@ const Signup = () => {
     if (provider === 'google') {
       const redirectUrl = `${window.location.origin}/onboarding`;
       
-      // If Clerk thinks we're signed in, sign out first before signup
-      if (isClerkUserLoaded && clerkUser) {
-        console.log('Signing out from Clerk before OAuth signup...');
-        try {
-          if (clerk) {
-            await clerk.signOut();
-            // Wait a moment for sign out to complete
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        } catch (e) {
-          console.error('Error signing out from Clerk:', e);
-        }
-      }
+      // Clear explicit logout flag (user is actively trying to sign up)
+      localStorage.removeItem('explicit_logout');
+      sessionStorage.removeItem('explicit_logout');
       
       try {
-        // Clear explicit logout flag if it exists (user is trying to sign up)
-        localStorage.removeItem('explicit_logout');
-        sessionStorage.removeItem('explicit_logout');
-        
-        // Make sure signUp is ready
-        if (!signUp) {
-          throw new Error('SignUp is not available');
-        }
-        
-        // Use authenticateWithRedirect - this should redirect immediately
-        signUp.authenticateWithRedirect({
-          strategy: 'oauth_google',
-          redirectUrl: redirectUrl,
-          redirectUrlComplete: redirectUrl,
-        });
+        await startOAuthRedirect(redirectUrl);
       } catch (err: any) {
-        console.error('OAuth error:', err);
-        toast({
-          title: "Signup failed",
-          description: err?.message || "Failed to start Google sign-up. Please check your Clerk dashboard settings.",
-          variant: "destructive",
-        });
+        // If Clerk says "already signed in", sign out first then retry once
+        if (err?.message?.includes('already signed in') || err?.message?.includes('single session mode')) {
+          console.log('Clerk has stale session, clearing and retrying OAuth...');
+          try {
+            if (clerk) {
+              await clerk.signOut();
+            }
+            // Retry after clearing session
+            await startOAuthRedirect(redirectUrl);
+          } catch (retryErr: any) {
+            console.error('OAuth retry error:', retryErr);
+            toast({
+              title: "Signup failed",
+              description: retryErr?.message || "Failed to start Google sign-up. Please try again.",
+              variant: "destructive",
+            });
+          }
+        } else {
+          console.error('OAuth error:', err);
+          toast({
+            title: "Signup failed",
+            description: err?.message || "Failed to start Google sign-up. Please check your Clerk dashboard settings.",
+            variant: "destructive",
+          });
+        }
       }
     } else if (provider === 'apple') {
       toast({

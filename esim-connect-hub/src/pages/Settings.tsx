@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,65 +25,135 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { User, Lock, Trash2, Eye, EyeOff, Save, Mail, CheckCircle, XCircle, Shield, Monitor, LogOut, Loader2, Globe } from "lucide-react";
+import { User, Lock, Trash2, Eye, EyeOff, Save, Mail, CheckCircle, XCircle, Shield, Monitor, LogOut, Loader2, Globe, Webhook, CreditCard, FileText, Key, Plus, Copy } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "react-router-dom";
 import { DomainConfiguration } from "@/components/shared/DomainConfiguration";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 export default function Settings() {
-  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
 
-  // Load 2FA status on mount
+  // Wait for authentication before loading data
   useEffect(() => {
-    const load2FAStatus = async () => {
-      try {
-        const status = await apiClient.get2FAStatus();
-        setTwoFAEnabled(status.enabled);
-      } catch (err) {
-        console.error('Failed to load 2FA status:', err);
-      } finally {
-        setIsLoading2FAStatus(false);
+    const loadAllData = async () => {
+      // Ensure ApiClient has the latest token
+      const token = localStorage.getItem('jwt_token');
+      if (token) {
+        apiClient.setJwtToken(token);
       }
-    };
 
-    load2FAStatus();
-  }, []);
-
-  // Load sessions on mount
-  useEffect(() => {
-    const loadSessions = async () => {
-      try {
-        const sessionsData = await apiClient.getSessions();
-        setSessions(sessionsData);
-      } catch (err) {
-        console.error('Failed to load sessions:', err);
-      } finally {
-        setIsLoadingSessions(false);
-      }
-    };
-
-    loadSessions();
-  }, []);
-
-  // Load stores on mount
-  useEffect(() => {
-    const loadStores = async () => {
-      try {
-        const storesData = await apiClient.listStores();
-        setStores(storesData);
-        if (storesData.length > 0) {
-          setSelectedStore(storesData[0]);
+      // Load 2FA status
+      const load2FAStatus = async () => {
+        try {
+          const status = await apiClient.get2FAStatus();
+          setTwoFAEnabled(status.enabled);
+        } catch (err) {
+          console.error('Failed to load 2FA status:', err);
+        } finally {
+          setIsLoading2FAStatus(false);
         }
-      } catch (err) {
-        console.error('Failed to load stores:', err);
-      } finally {
-        setIsLoadingStores(false);
-      }
+      };
+
+      // Load sessions
+      const loadSessions = async () => {
+        try {
+          const sessionsData = await apiClient.getSessions();
+          setSessions(sessionsData);
+        } catch (err) {
+          console.error('Failed to load sessions:', err);
+        } finally {
+          setIsLoadingSessions(false);
+        }
+      };
+
+      // Load stores
+      const loadStores = async () => {
+        try {
+          const storesData = await apiClient.listStores();
+          setStores(storesData);
+          if (storesData.length > 0) {
+            setSelectedStore(storesData[0]);
+          }
+        } catch (err) {
+          console.error('Failed to load stores:', err);
+        } finally {
+          setIsLoadingStores(false);
+        }
+      };
+
+      // Load API keys
+      const loadApiKeys = async () => {
+        try {
+          const apiKeysData = await apiClient.listApiKeys();
+          // Filter out inactive (revoked) keys
+          const activeKeys = apiKeysData.filter(key => key.isActive !== false);
+          setApiKeys(activeKeys);
+        } catch (err) {
+          console.error('Failed to load API keys:', err);
+        } finally {
+          setIsLoadingApiKeys(false);
+        }
+      };
+
+      // Load all data in parallel
+      await Promise.all([
+        load2FAStatus(),
+        loadSessions(),
+        loadStores(),
+        loadApiKeys(),
+      ]);
     };
 
-    loadStores();
-  }, []);
+    // Wait for user to be set (from ClerkAuthSync)
+    if (!user) {
+      // Poll for user and token
+      const checkAuth = setInterval(() => {
+        const token = localStorage.getItem('jwt_token');
+        // Check if user was set (re-read from closure)
+        const hasUser = user !== null;
+        if (token) {
+          clearInterval(checkAuth);
+          // ApiClient will automatically use token from localStorage
+          loadAllData();
+        }
+      }, 200);
+      
+      setTimeout(() => clearInterval(checkAuth), 10000);
+      return () => clearInterval(checkAuth);
+    }
+
+    // User exists, check for token
+    const token = localStorage.getItem('jwt_token');
+    if (!token) {
+      // Wait for token
+      const checkToken = setInterval(() => {
+        const newToken = localStorage.getItem('jwt_token');
+        if (newToken) {
+          clearInterval(checkToken);
+          // ApiClient will automatically use token from localStorage
+          loadAllData();
+        }
+      }, 200);
+      
+      setTimeout(() => clearInterval(checkToken), 10000);
+      return () => clearInterval(checkToken);
+    }
+
+    // Both user and token exist, load data
+    // ApiClient will automatically use token from localStorage
+    loadAllData();
+  }, [user]);
 
   const handleDomainUpdate = async () => {
     // Reload stores after domain update
@@ -96,6 +167,92 @@ export default function Settings() {
     } catch (err) {
       console.error('Failed to reload stores:', err);
     }
+  };
+
+  // API Key handlers
+  const handleCreateApiKey = async () => {
+    try {
+      const result = await apiClient.createApiKey(newApiKeyName || undefined);
+      setNewApiKey(result.key);
+      setApiKeys([result, ...apiKeys]);
+      setNewApiKeyName("");
+      
+      // Automatically store the API key in localStorage so it can be used immediately
+      if (result.key) {
+        localStorage.setItem('api_key', result.key);
+        apiClient.setApiKey(result.key);
+        
+        // Dispatch event to notify other components that API key is now available
+        window.dispatchEvent(new CustomEvent('apiKeyCreated'));
+      }
+      
+      toast({
+        title: "API Key Created",
+        description: "Your new API key has been generated and saved. Copy it now - you won't be able to see it again!",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create API key",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRevokeApiKey = async (keyId: string) => {
+    if (!keyId) return;
+    
+    try {
+      // Find the key being revoked to check if it's the one in localStorage
+      const keyToRevokeObj = apiKeys.find(key => key.id === keyId);
+      
+      await apiClient.revokeApiKey(keyId);
+      
+      // If the revoked key matches the one in localStorage, remove it
+      if (keyToRevokeObj && typeof window !== 'undefined') {
+        const storedApiKey = localStorage.getItem('api_key');
+        // Check if the stored key starts with the same prefix
+        if (storedApiKey && storedApiKey.startsWith(keyToRevokeObj.keyPrefix)) {
+          localStorage.removeItem('api_key');
+          apiClient.setApiKey(null);
+        }
+      }
+      
+      // Reload the API keys list from the backend to ensure we have the latest state
+      try {
+        const updatedKeys = await apiClient.listApiKeys();
+        // Filter out inactive (revoked) keys
+        const activeKeys = updatedKeys.filter(key => key.isActive !== false);
+        setApiKeys(activeKeys);
+      } catch (reloadError) {
+        console.error('Failed to reload API keys after deletion:', reloadError);
+        // If reload fails, just remove from local state
+        setApiKeys(prevKeys => prevKeys.filter(key => key.id !== keyId));
+      }
+      
+      setKeyToRevoke(null); // Close dialog
+      
+      toast({
+        title: "API Key Revoked",
+        description: "The API key has been successfully revoked",
+      });
+    } catch (error: any) {
+      console.error('Failed to revoke API key:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to revoke API key",
+        variant: "destructive",
+      });
+      setKeyToRevoke(null); // Close dialog even on error
+    }
+  };
+
+  const copyApiKey = (key: string) => {
+    navigator.clipboard.writeText(key);
+    toast({
+      title: "Copied!",
+      description: "API key copied to clipboard",
+    });
   };
 
   // Profile state
@@ -145,6 +302,14 @@ export default function Settings() {
   const [stores, setStores] = useState<any[]>([]);
   const [isLoadingStores, setIsLoadingStores] = useState(true);
   const [selectedStore, setSelectedStore] = useState<any | null>(null);
+
+  // API Keys state
+  const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(true);
+  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
+  const [newApiKeyName, setNewApiKeyName] = useState("");
+  const [newApiKey, setNewApiKey] = useState<string | null>(null);
+  const [keyToRevoke, setKeyToRevoke] = useState<string | null>(null);
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -355,6 +520,60 @@ export default function Settings() {
             <p className="text-muted-foreground">
               Manage your account settings and preferences
             </p>
+          </div>
+
+          {/* Settings Navigation Cards */}
+          <div className="grid sm:grid-cols-3 gap-4 mb-8">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("/settings/webhooks")}
+              className={`bg-card rounded-xl p-4 shadow-card hover:shadow-card-hover transition-all duration-300 text-left border ${
+                location.pathname === "/settings/webhooks"
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              }`}
+            >
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+                <Webhook className="w-5 h-5 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1">Webhooks</h3>
+              <p className="text-sm text-muted-foreground">Configure webhook endpoints</p>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("/settings/billing")}
+              className={`bg-card rounded-xl p-4 shadow-card hover:shadow-card-hover transition-all duration-300 text-left border ${
+                location.pathname === "/settings/billing"
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              }`}
+            >
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+                <CreditCard className="w-5 h-5 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1">Billing</h3>
+              <p className="text-sm text-muted-foreground">Manage subscription and invoices</p>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("/settings/email-templates")}
+              className={`bg-card rounded-xl p-4 shadow-card hover:shadow-card-hover transition-all duration-300 text-left border ${
+                location.pathname === "/settings/email-templates"
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              }`}
+            >
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3">
+                <FileText className="w-5 h-5 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1">Email Templates</h3>
+              <p className="text-sm text-muted-foreground">Customize email templates</p>
+            </motion.button>
           </div>
 
           {/* Profile Settings */}
@@ -716,6 +935,162 @@ export default function Settings() {
             </CardContent>
           </Card>
 
+          {/* API Keys Section */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Key className="w-5 h-5" />
+                    API Keys
+                  </CardTitle>
+                  <CardDescription>
+                    Manage your API keys for programmatic access to the eSIM Access API
+                  </CardDescription>
+                </div>
+                <Dialog open={showApiKeyDialog} onOpenChange={setShowApiKeyDialog}>
+                  <DialogTrigger asChild>
+                    <Button variant="gradient" size="sm">
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create API Key
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Create New API Key</DialogTitle>
+                      <DialogDescription>
+                        Give your API key a name to help you identify it later.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="key-name">Key Name (Optional)</Label>
+                        <Input
+                          id="key-name"
+                          value={newApiKeyName}
+                          onChange={(e) => setNewApiKeyName(e.target.value)}
+                          placeholder="e.g., Production API Key"
+                        />
+                      </div>
+                      {newApiKey && (
+                        <div className="p-4 bg-muted rounded-lg">
+                          <p className="text-sm font-medium mb-2">Your API Key (copy this now):</p>
+                          <div className="flex items-center gap-2">
+                            <code className="flex-1 p-2 bg-background rounded text-sm font-mono break-all overflow-wrap-anywhere min-w-0">
+                              {newApiKey}
+                            </code>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => copyApiKey(newApiKey)}
+                              className="shrink-0"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </Button>
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            This key will not be shown again. Make sure to save it securely.
+                          </p>
+                        </div>
+                      )}
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setShowApiKeyDialog(false);
+                            setNewApiKey(null);
+                            setNewApiKeyName("");
+                          }}
+                        >
+                          {newApiKey ? "Close" : "Cancel"}
+                        </Button>
+                        {!newApiKey && (
+                          <Button onClick={handleCreateApiKey}>
+                            Create Key
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {isLoadingApiKeys ? (
+                <div className="space-y-3">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="h-16 bg-muted rounded-lg animate-pulse" />
+                  ))}
+                </div>
+              ) : apiKeys.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Key className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                  <p>No API keys yet. Create your first one to get started.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {apiKeys.map((key) => (
+                    <div
+                      key={key.id}
+                      className="flex items-center justify-between p-4 bg-muted rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3">
+                          <Key className="w-5 h-5 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium">
+                              {key.name || "Unnamed Key"}
+                            </div>
+                            <div className="text-sm text-muted-foreground font-mono">
+                              {key.keyPrefix}...
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-2">
+                          Created {new Date(key.createdAt).toLocaleDateString()} • 
+                          Rate limit: {key.rateLimit}/min
+                          {key.lastUsedAt && ` • Last used: ${new Date(key.lastUsedAt).toLocaleDateString()}`}
+                        </div>
+                      </div>
+                      <AlertDialog open={keyToRevoke === key.id} onOpenChange={(open) => {
+                        if (!open) setKeyToRevoke(null);
+                      }}>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setKeyToRevoke(key.id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Revoke API Key?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to revoke this API key? This action cannot be undone.
+                              {key.name && ` The key "${key.name}" will no longer work.`}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel onClick={() => setKeyToRevoke(null)}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleRevokeApiKey(key.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Revoke Key
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Danger Zone */}
           <Card className="border-destructive">
             <CardHeader>
@@ -734,7 +1109,12 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground mb-4">
                     Once you delete your account, there is no going back. Please be certain.
                   </p>
-                  <AlertDialog>
+                  <AlertDialog onOpenChange={(open) => {
+                    if (open) {
+                      // Close API Key dialog if it's open
+                      setShowApiKeyDialog(false);
+                    }
+                  }}>
                     <AlertDialogTrigger asChild>
                       <Button variant="destructive" disabled={isDeletingAccount}>
                         <Trash2 className="w-4 h-4 mr-2" />

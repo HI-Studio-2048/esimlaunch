@@ -227,7 +227,10 @@ class AuthService {
    */
   async listApiKeys(merchantId: string): Promise<ApiKeyResponse[]> {
     const apiKeys = await prisma.apiKey.findMany({
-      where: { merchantId },
+      where: { 
+        merchantId,
+        isActive: true, // Only return active (non-revoked) keys
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -392,7 +395,7 @@ class AuthService {
   /**
    * Update merchant profile
    */
-  async updateProfile(merchantId: string, data: { name?: string; email?: string }) {
+  async updateProfile(merchantId: string, data: { name?: string; email?: string; serviceType?: ServiceType }) {
     const updateData: any = {};
     
     if (data.name !== undefined) {
@@ -410,6 +413,10 @@ class AuthService {
       }
       
       updateData.email = data.email;
+    }
+    
+    if (data.serviceType !== undefined) {
+      updateData.serviceType = data.serviceType;
     }
 
     const merchant = await prisma.merchant.update({

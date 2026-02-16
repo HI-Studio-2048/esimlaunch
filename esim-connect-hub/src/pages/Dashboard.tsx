@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { 
   BarChart3, Users, Package, CreditCard, Globe, TrendingUp,
   ArrowUp, ArrowDown, MoreHorizontal, Search, Bell, Settings,
-  ChevronDown, Filter, Download, Key, Plus, Trash2
+  ChevronDown, Filter, Download,
+  MessageSquare, Handshake, DollarSign, Calculator
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/shared/SectionHeader";
@@ -20,18 +22,9 @@ import {
   markStepCompleted,
   resetOnboardingProgress
 } from "@/lib/onboardingProgress";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { toast } = useToast();
   const { user, isAuthenticated } = useAuth();
   const [stats, setStats] = useState({
@@ -41,12 +34,8 @@ export default function Dashboard() {
     balance: 0,
   });
   const [orders, setOrders] = useState<any[]>([]);
-  const [apiKeys, setApiKeys] = useState<any[]>([]);
   const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
-  const [newApiKeyName, setNewApiKeyName] = useState("");
-  const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [setupSteps, setSetupSteps] = useState<SetupStep[]>([]);
 
   useEffect(() => {
@@ -56,10 +45,9 @@ export default function Dashboard() {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const [statsData, ordersData, apiKeysData, storesData] = await Promise.all([
+      const [statsData, ordersData, storesData] = await Promise.all([
         apiClient.getDashboardStats().catch(() => null),
         apiClient.getOrders(1, 5).catch(() => null),
-        apiClient.listApiKeys().catch(() => null),
         apiClient.listStores().catch(() => null),
       ]);
 
@@ -68,9 +56,6 @@ export default function Dashboard() {
       }
       if (ordersData) {
         setOrders(ordersData.orders || []);
-      }
-      if (apiKeysData) {
-        setApiKeys(apiKeysData);
       }
       if (storesData) {
         setStores(storesData);
@@ -169,49 +154,6 @@ export default function Dashboard() {
     setSetupSteps(steps);
   };
 
-  const handleCreateApiKey = async () => {
-    try {
-      const result = await apiClient.createApiKey(newApiKeyName || undefined);
-      setNewApiKey(result.key);
-      setApiKeys([result, ...apiKeys]);
-      setNewApiKeyName("");
-      toast({
-        title: "API Key Created",
-        description: "Your new API key has been generated. Copy it now - you won't be able to see it again!",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create API key",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleRevokeApiKey = async (keyId: string) => {
-    try {
-      await apiClient.revokeApiKey(keyId);
-      setApiKeys(apiKeys.filter(key => key.id !== keyId));
-      toast({
-        title: "API Key Revoked",
-        description: "The API key has been successfully revoked",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to revoke API key",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const copyApiKey = (key: string) => {
-    navigator.clipboard.writeText(key);
-    toast({
-      title: "Copied!",
-      description: "API key copied to clipboard",
-    });
-  };
 
   const handleResetOnboarding = () => {
     if (confirm("Are you sure you want to reset onboarding progress? This will allow you to go through the setup process again.")) {
@@ -283,7 +225,7 @@ export default function Dashboard() {
                 <Bell className="w-5 h-5" />
                 <span className="absolute top-1 right-1 w-2 h-2 rounded-full gradient-bg" />
               </Button>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
                 <Settings className="w-5 h-5" />
               </Button>
             </div>
@@ -312,7 +254,11 @@ export default function Dashboard() {
               <div className="text-sm opacity-80">Real-time data from your eSIM Launch account</div>
             </div>
           </div>
-          <Button size="sm" className="bg-background text-foreground hover:bg-background/90 hidden md:flex">
+          <Button 
+            size="sm" 
+            className="bg-background text-foreground hover:bg-background/90 hidden md:flex"
+            onClick={() => navigate("/dashboard/analytics")}
+          >
             View Analytics
           </Button>
         </motion.div>
@@ -384,135 +330,86 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* API Keys Section */}
+        {/* Quick Actions Section */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-card rounded-2xl p-6 shadow-card mb-8"
+          transition={{ delay: 0.2 }}
+          className="mb-8"
         >
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="font-semibold text-lg">API Keys</h3>
-              <p className="text-sm text-muted-foreground">Manage your API keys for programmatic access</p>
-            </div>
-            <Dialog open={showApiKeyDialog} onOpenChange={setShowApiKeyDialog}>
-              <DialogTrigger asChild>
-                <Button variant="gradient" size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create API Key
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New API Key</DialogTitle>
-                  <DialogDescription>
-                    Give your API key a name to help you identify it later.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="key-name">Key Name (Optional)</Label>
-                    <Input
-                      id="key-name"
-                      value={newApiKeyName}
-                      onChange={(e) => setNewApiKeyName(e.target.value)}
-                      placeholder="e.g., Production API Key"
-                    />
-                  </div>
-                  {newApiKey && (
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm font-medium mb-2">Your API Key (copy this now):</p>
-                      <div className="flex items-center gap-2">
-                        <code className="flex-1 p-2 bg-background rounded text-sm font-mono">
-                          {newApiKey}
-                        </code>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => copyApiKey(newApiKey)}
-                        >
-                          Copy
-                        </Button>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        This key will not be shown again. Make sure to save it securely.
-                      </p>
-                    </div>
-                  )}
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setShowApiKeyDialog(false);
-                        setNewApiKey(null);
-                        setNewApiKeyName("");
-                      }}
-                    >
-                      {newApiKey ? "Close" : "Cancel"}
-                    </Button>
-                    {!newApiKey && (
-                      <Button onClick={handleCreateApiKey}>
-                        Create Key
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold mb-2">Quick Actions</h2>
+            <p className="text-sm text-muted-foreground">Access key features and settings</p>
           </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("/dashboard/analytics")}
+              className="bg-card rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 text-left border border-border hover:border-primary/50"
+            >
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                <BarChart3 className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1">Analytics</h3>
+              <p className="text-sm text-muted-foreground">View detailed analytics and reports</p>
+            </motion.button>
 
-          {loading ? (
-            <div className="space-y-3">
-              {[1, 2].map((i) => (
-                <div key={i} className="h-16 bg-muted rounded-lg animate-pulse" />
-              ))}
-            </div>
-          ) : apiKeys.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Key className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>No API keys yet. Create your first one to get started.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {apiKeys.map((key) => (
-                <div
-                  key={key.id}
-                  className="flex items-center justify-between p-4 bg-muted rounded-lg"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <Key className="w-5 h-5 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">
-                          {key.name || "Unnamed Key"}
-                        </div>
-                        <div className="text-sm text-muted-foreground font-mono">
-                          {key.keyPrefix}...
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-2">
-                      Created {new Date(key.createdAt).toLocaleDateString()} • 
-                      Rate limit: {key.rateLimit}/min
-                      {key.lastUsedAt && ` • Last used: ${new Date(key.lastUsedAt).toLocaleDateString()}`}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRevokeApiKey(key.id)}
-                    className="text-destructive hover:text-destructive"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("/dashboard/affiliates")}
+              className="bg-card rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 text-left border border-border hover:border-primary/50"
+            >
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                <Handshake className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1">Affiliates</h3>
+              <p className="text-sm text-muted-foreground">Manage affiliate and referral programs</p>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("/dashboard/support")}
+              className="bg-card rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 text-left border border-border hover:border-primary/50"
+            >
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                <MessageSquare className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1">Support</h3>
+              <p className="text-sm text-muted-foreground">Manage customer support tickets</p>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("/package-selector")}
+              className="bg-card rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 text-left border border-border hover:border-primary/50"
+            >
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                <Package className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1">Packages</h3>
+              <p className="text-sm text-muted-foreground">Select and manage eSIM packages</p>
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("/pricing-config")}
+              className="bg-card rounded-2xl p-6 shadow-card hover:shadow-card-hover transition-all duration-300 text-left border border-border hover:border-primary/50"
+            >
+              <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4">
+                <DollarSign className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="font-semibold mb-1">Pricing</h3>
+              <p className="text-sm text-muted-foreground">Configure pricing and markups</p>
+            </motion.button>
+          </div>
         </motion.div>
 
-        {/* Recent Orders */}
+{/* Recent Orders */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}

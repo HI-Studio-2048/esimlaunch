@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { apiClient } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Save, Calculator, DollarSign, Loader2 } from "lucide-react";
+import { usePackages } from "@/hooks/usePackages";
+import { getCountryName } from "@/lib/countries";
+import { ArrowLeft, Save, Calculator, DollarSign, Loader2, Wifi } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -30,6 +32,44 @@ export default function PricingConfig() {
   const [globalMarkupValue, setGlobalMarkupValue] = useState<string>("0");
   const [countryMarkups, setCountryMarkups] = useState<Record<string, { type: "percentage" | "fixed"; value: string }>>({});
   const [packageMarkups, setPackageMarkups] = useState<Record<string, { type: "percentage" | "fixed"; value: string }>>({});
+  const [dataSizeMarkups, setDataSizeMarkups] = useState<Record<string, { type: "percentage" | "fixed"; value: string }>>({});
+
+  // Check if packages are selected
+  const hasSelectedPackages = store?.selectedPackages && Array.isArray(store.selectedPackages) && store.selectedPackages.length > 0;
+
+  // Fetch package details to get data sizes and countries
+  const { packages: allPackages } = usePackages({});
+  
+  // Get selected package details
+  const selectedPackageDetails = useMemo(() => {
+    if (!hasSelectedPackages || !allPackages) return [];
+    return allPackages.filter(pkg => store.selectedPackages.includes(pkg.slug));
+  }, [hasSelectedPackages, allPackages, store?.selectedPackages]);
+
+  // Group packages by country
+  const packagesByCountry = useMemo(() => {
+    const grouped: Record<string, typeof selectedPackageDetails> = {};
+    selectedPackageDetails.forEach(pkg => {
+      if (!grouped[pkg.locationCode]) {
+        grouped[pkg.locationCode] = [];
+      }
+      grouped[pkg.locationCode].push(pkg);
+    });
+    return grouped;
+  }, [selectedPackageDetails]);
+
+  // Group packages by data size (in GB)
+  const packagesByDataSize = useMemo(() => {
+    const grouped: Record<string, typeof selectedPackageDetails> = {};
+    selectedPackageDetails.forEach(pkg => {
+      const dataGB = (pkg.volume / (1024 * 1024 * 1024)).toFixed(1);
+      if (!grouped[dataGB]) {
+        grouped[dataGB] = [];
+      }
+      grouped[dataGB].push(pkg);
+    });
+    return grouped;
+  }, [selectedPackageDetails]);
 
   useEffect(() => {
     const loadStore = async () => {
@@ -60,6 +100,9 @@ export default function PricingConfig() {
           }
           if (markup.packages) {
             setPackageMarkups(markup.packages);
+          }
+          if (markup.dataSizes) {
+            setDataSizeMarkups(markup.dataSizes);
           }
         }
       } catch (error: any) {
@@ -100,6 +143,7 @@ export default function PricingConfig() {
         },
         countries: countryMarkups,
         packages: packageMarkups,
+        dataSizes: dataSizeMarkups,
       };
 
       await apiClient.updateStore(storeId, {
@@ -153,6 +197,7 @@ export default function PricingConfig() {
           <TabsList>
             <TabsTrigger value="global">Global Markup</TabsTrigger>
             <TabsTrigger value="country">Country-Specific</TabsTrigger>
+            <TabsTrigger value="dataSize">Data Size-Specific</TabsTrigger>
             <TabsTrigger value="package">Package-Specific</TabsTrigger>
             <TabsTrigger value="preview">Preview</TabsTrigger>
           </TabsList>
@@ -226,17 +271,173 @@ export default function PricingConfig() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Country-specific markup configuration will be available after you select packages in your store.
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/package-selector")}
-                  >
-                    Select Packages First
-                  </Button>
-                </div>
+                {!hasSelectedPackages ? (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Country-specific markup configuration will be available after you select packages in your store.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => navigate("/package-selector")}
+                    >
+                      Select Packages First
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Configure markups for countries where you have selected packages. Country-specific markups will override the global markup.
+                    </p>
+                    <div className="space-y-3">
+                      {Object.entries(packagesByCountry).map(([countryCode, countryPackages]) => (
+                        <div key={countryCode} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{getCountryName(countryCode)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {countryPackages.length} package{countryPackages.length !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Select
+                              value={countryMarkups[countryCode]?.type || "percentage"}
+                              onValueChange={(val: "percentage" | "fixed") => {
+                                setCountryMarkups(prev => ({
+                                  ...prev,
+                                  [countryCode]: {
+                                    ...prev[countryCode],
+                                    type: val,
+                                    value: prev[countryCode]?.value || "0",
+                                  },
+                                }));
+                              }}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="percentage">Percentage</SelectItem>
+                                <SelectItem value="fixed">Fixed</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              value={countryMarkups[countryCode]?.value || "0"}
+                              onChange={(e) => {
+                                setCountryMarkups(prev => ({
+                                  ...prev,
+                                  [countryCode]: {
+                                    ...prev[countryCode],
+                                    type: prev[countryCode]?.type || "percentage",
+                                    value: e.target.value,
+                                  },
+                                }));
+                              }}
+                              placeholder={countryMarkups[countryCode]?.type === "fixed" ? "5.00" : "10"}
+                              step={countryMarkups[countryCode]?.type === "fixed" ? "0.01" : "0.1"}
+                              className="w-24"
+                            />
+                            <span className="text-sm text-muted-foreground w-8">
+                              {countryMarkups[countryCode]?.type === "fixed" ? "$" : "%"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Data Size-Specific Markup */}
+          <TabsContent value="dataSize">
+            <Card>
+              <CardHeader>
+                <CardTitle>Data Size-Specific Markup</CardTitle>
+                <CardDescription>
+                  Set different markups based on data size (e.g., 1GB, 3GB, 5GB). These will override global and country markups.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!hasSelectedPackages ? (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Data size-specific markup configuration will be available after you select packages in your store.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => navigate("/package-selector")}
+                    >
+                      Select Packages First
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Configure markups for different data sizes. Data size-specific markups override global and country markups, but can be overridden by package-specific markups.
+                    </p>
+                    <div className="space-y-3">
+                      {Object.entries(packagesByDataSize)
+                        .sort(([sizeA], [sizeB]) => parseFloat(sizeA) - parseFloat(sizeB))
+                        .map(([dataSizeGB, sizePackages]) => (
+                        <div key={dataSizeGB} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex items-center gap-3 flex-1">
+                            <Wifi className="h-4 w-4 text-muted-foreground" />
+                            <div>
+                              <p className="font-medium text-sm">{dataSizeGB} GB</p>
+                              <p className="text-xs text-muted-foreground">
+                                {sizePackages.length} package{sizePackages.length !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Select
+                              value={dataSizeMarkups[dataSizeGB]?.type || "percentage"}
+                              onValueChange={(val: "percentage" | "fixed") => {
+                                setDataSizeMarkups(prev => ({
+                                  ...prev,
+                                  [dataSizeGB]: {
+                                    ...prev[dataSizeGB],
+                                    type: val,
+                                    value: prev[dataSizeGB]?.value || "0",
+                                  },
+                                }));
+                              }}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="percentage">Percentage</SelectItem>
+                                <SelectItem value="fixed">Fixed</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              value={dataSizeMarkups[dataSizeGB]?.value || "0"}
+                              onChange={(e) => {
+                                setDataSizeMarkups(prev => ({
+                                  ...prev,
+                                  [dataSizeGB]: {
+                                    ...prev[dataSizeGB],
+                                    type: prev[dataSizeGB]?.type || "percentage",
+                                    value: e.target.value,
+                                  },
+                                }));
+                              }}
+                              placeholder={dataSizeMarkups[dataSizeGB]?.type === "fixed" ? "5.00" : "10"}
+                              step={dataSizeMarkups[dataSizeGB]?.type === "fixed" ? "0.01" : "0.1"}
+                              className="w-24"
+                            />
+                            <span className="text-sm text-muted-foreground w-8">
+                              {dataSizeMarkups[dataSizeGB]?.type === "fixed" ? "$" : "%"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -251,17 +452,78 @@ export default function PricingConfig() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <p className="text-sm text-muted-foreground">
-                    Package-specific markup configuration will be available after you select packages in your store.
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => navigate("/package-selector")}
-                  >
-                    Select Packages First
-                  </Button>
-                </div>
+                {!hasSelectedPackages ? (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Package-specific markup configuration will be available after you select packages in your store.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => navigate("/package-selector")}
+                    >
+                      Select Packages First
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Configure individual markups for each selected package. Package-specific markups override both global and country markups.
+                    </p>
+                    <div className="space-y-3">
+                      {store.selectedPackages.map((packageSlug: string) => (
+                        <div key={packageSlug} className="flex items-center justify-between p-3 border rounded-lg">
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{packageSlug}</p>
+                            <p className="text-xs text-muted-foreground">Package slug</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <Select
+                              value={packageMarkups[packageSlug]?.type || "percentage"}
+                              onValueChange={(val: "percentage" | "fixed") => {
+                                setPackageMarkups(prev => ({
+                                  ...prev,
+                                  [packageSlug]: {
+                                    ...prev[packageSlug],
+                                    type: val,
+                                    value: prev[packageSlug]?.value || "0",
+                                  },
+                                }));
+                              }}
+                            >
+                              <SelectTrigger className="w-32">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="percentage">Percentage</SelectItem>
+                                <SelectItem value="fixed">Fixed</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="number"
+                              value={packageMarkups[packageSlug]?.value || "0"}
+                              onChange={(e) => {
+                                setPackageMarkups(prev => ({
+                                  ...prev,
+                                  [packageSlug]: {
+                                    ...prev[packageSlug],
+                                    type: prev[packageSlug]?.type || "percentage",
+                                    value: e.target.value,
+                                  },
+                                }));
+                              }}
+                              placeholder={packageMarkups[packageSlug]?.type === "fixed" ? "5.00" : "10"}
+                              step={packageMarkups[packageSlug]?.type === "fixed" ? "0.01" : "0.1"}
+                              className="w-24"
+                            />
+                            <span className="text-sm text-muted-foreground w-8">
+                              {packageMarkups[packageSlug]?.type === "fixed" ? "$" : "%"}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -319,6 +581,7 @@ export default function PricingConfig() {
     </div>
   );
 }
+
 
 
 

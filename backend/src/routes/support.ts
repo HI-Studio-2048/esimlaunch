@@ -72,42 +72,31 @@ router.post('/tickets', async (req, res, next) => {
 
 /**
  * GET /api/support/tickets
- * Get tickets (requires authentication - customer or merchant)
+ * Get tickets (requires merchant authentication via JWT)
  */
-router.get('/tickets', async (req, res, next) => {
+router.get('/tickets', authenticateJWT, async (req, res, next) => {
   try {
-    // Check if customer is authenticated
-    const customer = (req as any).customer;
     const merchant = (req as any).merchant;
 
-    if (customer) {
-      // Get customer tickets
-      const tickets = await supportService.getTicketsByEmail(customer.email);
-      return res.json({
-        success: true,
-        data: tickets,
+    if (!merchant) {
+      return res.status(401).json({
+        success: false,
+        errorCode: 'UNAUTHORIZED',
+        errorMessage: 'Merchant authentication required',
       });
     }
 
-    if (merchant) {
-      // Get merchant tickets with optional filters
-      const filters = {
-        status: req.query.status as string | undefined,
-        priority: req.query.priority as string | undefined,
-        category: req.query.category as string | undefined,
-      };
+    // Get merchant tickets with optional filters
+    const filters = {
+      status: req.query.status as string | undefined,
+      priority: req.query.priority as string | undefined,
+      category: req.query.category as string | undefined,
+    };
 
-      const tickets = await supportService.getTicketsByMerchant(merchant.id, filters);
-      return res.json({
-        success: true,
-        data: tickets,
-      });
-    }
-
-    res.status(401).json({
-      success: false,
-      errorCode: 'UNAUTHORIZED',
-      errorMessage: 'Authentication required',
+    const tickets = await supportService.getTicketsByMerchant(merchant.id, filters);
+    return res.json({
+      success: true,
+      data: tickets,
     });
   } catch (error: any) {
     res.status(500).json({
@@ -424,6 +413,7 @@ router.get('/stats', authenticateJWT, async (req, res, next) => {
 });
 
 export default router;
+
 
 
 

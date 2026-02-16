@@ -219,6 +219,7 @@ router.post('/refresh', authenticateJWT, async (req, res, next) => {
 const updateProfileSchema = z.object({
   name: z.string().optional(),
   email: z.string().email('Invalid email address').optional(),
+  serviceType: z.enum(['EASY', 'ADVANCED']).optional(),
 });
 
 router.put('/profile', authenticateJWT, async (req, res, next) => {

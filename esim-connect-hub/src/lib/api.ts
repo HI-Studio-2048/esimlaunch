@@ -65,6 +65,19 @@ class ApiClient {
     options: RequestInit = {},
     retryCount = 0
   ): Promise<T> {
+    // ALWAYS reload API key and JWT token from localStorage before each request
+    // This ensures we always have the latest values, even if they were set after component mount
+    let storedApiKey: string | null = null;
+    let storedJwtToken: string | null = null;
+    
+    if (typeof window !== 'undefined') {
+      storedApiKey = localStorage.getItem('api_key');
+      storedJwtToken = localStorage.getItem('jwt_token');
+      // Update instance variables
+      this.apiKey = storedApiKey;
+      this.jwtToken = storedJwtToken;
+    }
+
     const url = `${this.baseURL}${endpoint}`;
     
     const headers: HeadersInit = {
@@ -72,11 +85,27 @@ class ApiClient {
       ...options.headers,
     };
 
-    // Add authentication header
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-    } else if (this.jwtToken) {
-      headers['Authorization'] = `Bearer ${this.jwtToken}`;
+    // Check if this is an eSIM Access API endpoint (requires API key)
+    const isESIMAccessAPI = endpoint.startsWith('/api/v1/');
+    
+    // Add authentication header - use the freshly loaded values
+    if (isESIMAccessAPI) {
+      // eSIM Access API endpoints require API key
+      if (!storedApiKey) {
+        throw new ApiError(
+          'API_KEY_REQUIRED',
+          'API key is required for eSIM Access API endpoints. Please create an API key in Settings.',
+          401
+        );
+      }
+      headers['Authorization'] = `Bearer ${storedApiKey}`;
+    } else {
+      // Other endpoints can use API key or JWT token - prefer JWT token for merchant endpoints
+      if (storedJwtToken) {
+        headers['Authorization'] = `Bearer ${storedJwtToken}`;
+      } else if (storedApiKey) {
+        headers['Authorization'] = `Bearer ${storedApiKey}`;
+      }
     }
 
     const response = await fetch(url, {
@@ -84,10 +113,21 @@ class ApiClient {
       headers,
     });
 
+    // Check content type before parsing
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('application/json')) {
+      const text = await response.text();
+      throw new ApiError(
+        'INVALID_RESPONSE',
+        `Expected JSON but got ${contentType}. Response: ${text.substring(0, 100)}`,
+        response.status
+      );
+    }
+
     const data: ApiResponse<T> = await response.json();
 
-    // Handle 401 Unauthorized - try to refresh token
-    if (response.status === 401 && !this.apiKey && this.jwtToken && retryCount === 0) {
+    // Handle 401 Unauthorized - try to refresh token (only for non-API-key endpoints)
+    if (response.status === 401 && !isESIMAccessAPI && !storedApiKey && storedJwtToken && retryCount === 0) {
       try {
         await this.refreshToken();
         // Retry the original request with new token
@@ -104,6 +144,14 @@ class ApiClient {
     }
 
     if (!response.ok || !data.success) {
+      // Provide better error message for API key issues
+      if (response.status === 401 && isESIMAccessAPI) {
+        throw new ApiError(
+          data.errorCode || 'INVALID_API_KEY',
+          'Invalid or expired API key. Please check your API key in Settings.',
+          response.status
+        );
+      }
       throw new ApiError(
         data.errorCode || 'UNKNOWN_ERROR',
         data.errorMessage || 'An error occurred',
@@ -111,7 +159,15 @@ class ApiClient {
       );
     }
 
-    return data.data as T;
+    // For eSIM Access API endpoints, the response structure is different
+    // They return { success, obj, ... } directly, not wrapped in { success, data }
+    if (isESIMAccessAPI) {
+      // eSIM Access API returns the response object directly
+      return data as T;
+    }
+
+    // Regular API endpoints wrap data in { success, data }
+    return (data as any).data as T;
   }
 
   // Authentication endpoints
@@ -161,10 +217,10 @@ class ApiClient {
     return result;
   }
 
-  async updateProfile(name?: string, email?: string) {
+  async updateProfile(name?: string, email?: string, serviceType?: 'EASY' | 'ADVANCED') {
     return this.request<any>('/api/auth/profile', {
       method: 'PUT',
-      body: JSON.stringify({ name, email }),
+      body: JSON.stringify({ name, email, serviceType }),
     });
   }
 
@@ -730,6 +786,128 @@ class ApiClient {
       orders: { last30Days: number; last7Days: number };
       customers: { totalCustomers: number; repeatCustomers: number; newCustomers: number };
     }>(`/api/analytics/summary?${params.toString()}`);
+  }
+
+  // Affiliate endpoints
+  async getAffiliateCode() {
+    return this.request<{ affiliateCode: string }>('/api/affiliates/code');
+  }
+
+  async getReferralCode() {
+    return this.request<{ referralCode: string }>('/api/affiliates/referral-code');
+  }
+
+  async getAffiliateStats() {
+    return this.request<{
+      totalEarnings: number;
+      pendingCommissions: number;
+      paidCommissions: number;
+      referredMerchants: number;
+    }>('/api/affiliates/stats');
+  }
+
+  async getAffiliateCommissions(params?: {
+    status?: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    const query = queryParams.toString();
+    return this.request<Array<{
+      id: string;
+      amount: number;
+      currency: string;
+      commissionRate: number;
+      status: string;
+      createdAt: string;
+      referredMerchant?: any;
+    }>>(`/api/affiliates/commissions${query ? `?${query}` : ''}`);
+  }
+
+  async trackReferral(referralCode: string) {
+    return this.request<{ message: string }>('/api/affiliates/track-referral', {
+      method: 'POST',
+      body: JSON.stringify({ referralCode }),
+    });
+  }
+
+  // Support ticket endpoints
+  async getSupportTickets(params?: {
+    status?: string;
+    priority?: string;
+    category?: string;
+  }) {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.priority) queryParams.append('priority', params.priority);
+    if (params?.category) queryParams.append('category', params.category);
+    const query = queryParams.toString();
+    return this.request<Array<{
+      id: string;
+      ticketNumber: string;
+      subject: string;
+      customerName?: string;
+      customerEmail: string;
+      status: string;
+      priority: string;
+      category?: string;
+      createdAt: string;
+    }>>(`/api/support/tickets${query ? `?${query}` : ''}`);
+  }
+
+  async getSupportTicket(ticketId: string) {
+    return this.request<any>(`/api/support/tickets/${ticketId}`);
+  }
+
+  async getSupportStats() {
+    return this.request<{
+      total: number;
+      open: number;
+      inProgress: number;
+      resolved: number;
+      closed: number;
+    }>('/api/support/stats');
+  }
+
+  async createSupportTicket(data: {
+    subject: string;
+    message: string;
+    category?: string;
+    priority?: string;
+    customerEmail?: string;
+    customerName?: string;
+  }) {
+    return this.request<{
+      id: string;
+      ticketNumber: string;
+    }>('/api/support/tickets', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async addTicketMessage(ticketId: string, message: string) {
+    return this.request<{ id: string }>(`/api/support/tickets/${ticketId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  }
+
+  async updateTicketStatus(ticketId: string, status: string) {
+    return this.request<{ message: string }>(`/api/support/tickets/${ticketId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  async updateTicketPriority(ticketId: string, priority: string) {
+    return this.request<{ message: string }>(`/api/support/tickets/${ticketId}/priority`, {
+      method: 'PUT',
+      body: JSON.stringify({ priority }),
+    });
   }
 }
 

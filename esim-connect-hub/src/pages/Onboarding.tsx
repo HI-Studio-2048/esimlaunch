@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,14 +26,23 @@ import {
   Upload,
   Globe,
   AlertCircle,
+  Sparkles,
+  Code2,
 } from "lucide-react";
 
-const steps = [
+// Steps for Easy Way (store builder)
+const easyWaySteps = [
+  { id: 0, name: "Service Type", icon: Sparkles },
   { id: 1, name: "Profile", icon: User },
   { id: 2, name: "Branding", icon: Palette },
   { id: 3, name: "Provider", icon: Wifi },
   { id: 4, name: "Payment", icon: CreditCard },
   { id: 5, name: "Launch", icon: Rocket },
+];
+
+// Steps for Advanced (just service type selection)
+const advancedSteps = [
+  { id: 0, name: "Service Type", icon: Sparkles },
 ];
 
 const providers = [
@@ -46,11 +56,12 @@ const providers = [
 ];
 
 const Onboarding = () => {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [currentStep, setCurrentStep] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { setConfig } = useDemoStore();
+  const { user, setUser } = useAuth();
 
   // Check if onboarding is already completed
   useEffect(() => {
@@ -93,14 +104,58 @@ const Onboarding = () => {
     goLiveNow: false,
   });
 
-  const handleNext = () => {
+  const [serviceType, setServiceType] = useState<'EASY' | 'ADVANCED' | null>(null);
+
+  // Load current service type from user
+  useEffect(() => {
+    if (user?.serviceType) {
+      setServiceType(user.serviceType);
+    }
+  }, [user]);
+
+  const handleNext = async () => {
+    // If on step 0 (service type selection), update the merchant's service type
+    if (currentStep === 0 && serviceType) {
+      try {
+        setIsLoading(true);
+        const updatedMerchant = await apiClient.updateProfile(undefined, undefined, serviceType);
+        // Update user context with new service type
+        if (setUser && updatedMerchant && user) {
+          setUser({ ...user, serviceType: updatedMerchant.serviceType || serviceType });
+        }
+        setIsLoading(false);
+        
+        // If Advanced is selected, redirect to dashboard (no store builder needed)
+        if (serviceType === 'ADVANCED') {
+          toast({
+            title: "Welcome to Advanced Mode!",
+            description: "You now have full API access. Redirecting to your dashboard...",
+          });
+          navigate("/dashboard", { replace: true });
+          return;
+        }
+        
+        // If Easy Way is selected, continue to store builder steps
+        setCurrentStep(1);
+        return;
+      } catch (error: any) {
+        setIsLoading(false);
+        toast({
+          title: "Error",
+          description: error?.errorMessage || error?.message || "Failed to update service type. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    
     if (currentStep < 5) {
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handleBack = () => {
-    if (currentStep > 1) {
+    if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
   };
@@ -154,13 +209,21 @@ const Onboarding = () => {
       }
 
       // Save branding to DemoStoreContext for store preview
-      setConfig({
+      const storeConfig = {
         businessName: profile.businessName || "Your eSIM Store",
         primaryColor: branding.primaryColor,
-        secondaryColor: "#8b5cf6",
-        accentColor: "#22c55e",
-        logo: logoDataUrl,
-      });
+        secondaryColor: createdStore.secondaryColor || "#8b5cf6",
+        accentColor: createdStore.accentColor || "#22c55e",
+        logo: logoDataUrl || createdStore.logoUrl || null,
+      };
+      setConfig(storeConfig);
+      
+      // Also save to localStorage for persistence
+      try {
+        localStorage.setItem('esimlaunch_store_config', JSON.stringify(storeConfig));
+      } catch (error) {
+        console.error('Failed to save store config to localStorage:', error);
+      }
       
       setIsLoading(false);
       toast({
@@ -181,7 +244,18 @@ const Onboarding = () => {
   };
 
   const renderStepContent = () => {
+    // Only show store builder steps if user selected Easy Way
+    // If they're on step 0, they're selecting service type
+    // If they selected Advanced, they should have been redirected already
+    if (serviceType === 'ADVANCED' && currentStep > 0) {
+      // This shouldn't happen, but just in case, redirect
+      navigate("/dashboard", { replace: true });
+      return null;
+    }
+
     switch (currentStep) {
+      case 0:
+        return <ServiceTypeStep serviceType={serviceType} setServiceType={setServiceType} />;
       case 1:
         return <ProfileStep profile={profile} setProfile={setProfile} />;
       case 2:
@@ -239,13 +313,17 @@ const Onboarding = () => {
               <motion.div
                 className="h-full gradient-bg"
                 initial={{ width: "0%" }}
-                animate={{ width: `${((currentStep - 1) / (steps.length - 1)) * 100}%` }}
+                animate={{ 
+                  width: serviceType === 'ADVANCED' 
+                    ? "100%" // Advanced only has one step
+                    : `${(currentStep / (easyWaySteps.length - 1)) * 100}%`
+                }}
                 transition={{ duration: 0.3 }}
               />
             </div>
 
             {/* Step Indicators */}
-            {steps.map((step, index) => {
+            {(serviceType === 'ADVANCED' ? advancedSteps : easyWaySteps).map((step, index) => {
               const isCompleted = currentStep > step.id;
               const isCurrent = currentStep === step.id;
               const Icon = step.icon;
@@ -307,7 +385,7 @@ const Onboarding = () => {
           <Button
             variant="outline"
             onClick={handleBack}
-            disabled={currentStep === 1}
+            disabled={currentStep === 0}
             className="gap-2"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -315,9 +393,33 @@ const Onboarding = () => {
           </Button>
 
           {currentStep < 5 ? (
-            <Button variant="gradient" onClick={handleNext} className="gap-2">
-              Continue
-              <ArrowRight className="w-4 h-4" />
+            <Button 
+              variant="gradient" 
+              onClick={handleNext} 
+              className="gap-2"
+              disabled={isLoading || (currentStep === 0 && !serviceType)}
+            >
+              {isLoading ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full"
+                />
+              ) : (
+                <>
+                  {currentStep === 0 && serviceType === 'ADVANCED' ? (
+                    <>
+                      Go to Dashboard
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  ) : (
+                    <>
+                      Continue
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </>
+              )}
             </Button>
           ) : (
             <Button
@@ -354,6 +456,133 @@ interface ProfileData {
   country: string;
   description: string;
 }
+
+// Step 0: Service Type Selection
+const ServiceTypeStep = ({
+  serviceType,
+  setServiceType,
+}: {
+  serviceType: 'EASY' | 'ADVANCED' | null;
+  setServiceType: React.Dispatch<React.SetStateAction<'EASY' | 'ADVANCED' | null>>;
+}) => (
+  <div className="space-y-6">
+    <div>
+      <h2 className="text-2xl font-bold mb-2">Choose your service type</h2>
+      <p className="text-muted-foreground">
+        Select how you want to use eSIMLaunch. You can change this later.
+      </p>
+    </div>
+
+    <RadioGroup value={serviceType || ''} onValueChange={(val) => setServiceType(val as 'EASY' | 'ADVANCED')}>
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Easy Way Option */}
+        <div
+          className={`relative rounded-xl border-2 p-6 cursor-pointer transition-all ${
+            serviceType === 'EASY'
+              ? "border-primary bg-primary/5"
+              : "border-border hover:border-primary/50"
+          }`}
+          onClick={() => setServiceType('EASY')}
+        >
+          <div className="flex items-start gap-4">
+            <RadioGroupItem value="EASY" id="easy" className="mt-1" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-5 h-5 text-primary" />
+                <Label htmlFor="easy" className="text-xl font-semibold cursor-pointer">
+                  Easy Way
+                </Label>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Fully managed store builder - perfect for getting started quickly
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>Visual store builder with drag-and-drop</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>Pre-built templates and themes</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>Automatic order processing</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>Built-in analytics dashboard</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>No coding required</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        {/* Advanced Option */}
+        <div
+          className={`relative rounded-xl border-2 p-6 cursor-pointer transition-all ${
+            serviceType === 'ADVANCED'
+              ? "border-primary bg-primary/5"
+              : "border-border hover:border-primary/50"
+          }`}
+          onClick={() => setServiceType('ADVANCED')}
+        >
+          <div className="flex items-start gap-4">
+            <RadioGroupItem value="ADVANCED" id="advanced" className="mt-1" />
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2">
+                <Code2 className="w-5 h-5 text-primary" />
+                <Label htmlFor="advanced" className="text-xl font-semibold cursor-pointer">
+                  Advanced
+                </Label>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Full API access for custom integrations and workflows
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>RESTful API access</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>Webhook support</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>Custom integrations</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>Full control over order flow</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-primary" />
+                  <span>Developer-friendly</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </RadioGroup>
+
+    <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
+      <p className="text-sm">
+        <span className="font-medium">💡 Note:</span>{" "}
+        {serviceType === 'EASY' 
+          ? "Easy Way includes the store builder feature. You'll be able to create and customize your store in the next steps."
+          : serviceType === 'ADVANCED'
+          ? "Advanced mode gives you full API access. After selecting this, you'll be redirected to your dashboard where you can set up API keys and start building custom integrations."
+          : "Select a service type to continue."}
+      </p>
+    </div>
+  </div>
+);
 
 // Step 1: Profile
 const ProfileStep = ({

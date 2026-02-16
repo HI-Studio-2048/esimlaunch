@@ -494,22 +494,32 @@ router.post('/webhooks', async (req, res, next) => {
     }).parse(req.body);
 
     // Store webhook configuration
-    const webhookConfig = await prisma.webhookConfig.upsert({
+    // Find existing config for this merchant
+    const existingConfig = await prisma.webhookConfig.findFirst({
       where: {
         merchantId: req.merchant!.id,
       },
-      update: {
-        url,
-        events: events || [],
-        secret: secret || null,
-      },
-      create: {
-        merchantId: req.merchant!.id,
-        url,
-        events: events || [],
-        secret: secret || null,
-      },
     });
+
+    const webhookConfig = existingConfig
+      ? await prisma.webhookConfig.update({
+          where: {
+            id: existingConfig.id,
+          },
+          data: {
+            url,
+            events: events || [],
+            secret: secret || null,
+          },
+        })
+      : await prisma.webhookConfig.create({
+          data: {
+            merchantId: req.merchant!.id,
+            url,
+            events: events || [],
+            secret: secret || null,
+          },
+        });
 
     res.json({
       success: true,
@@ -543,7 +553,7 @@ router.post('/webhooks', async (req, res, next) => {
  */
 router.get('/webhooks', async (req, res, next) => {
   try {
-    const webhookConfig = await prisma.webhookConfig.findUnique({
+    const webhookConfig = await prisma.webhookConfig.findFirst({
       where: {
         merchantId: req.merchant!.id,
       },

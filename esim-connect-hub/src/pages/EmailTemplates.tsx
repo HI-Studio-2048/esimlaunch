@@ -25,17 +25,75 @@ export default function EmailTemplates() {
   const loadTemplates = async () => {
     setIsLoading(true);
     try {
-      const result = await apiClient.getEmailTemplates();
-      setTemplates(result);
-      if (result.length > 0) {
-        setSelectedTemplate(result[0]);
+      const result = await (apiClient as any).getEmailTemplates();
+      // apiClient.request for /api/* routes extracts data, so result is the array directly
+      const templatesData = Array.isArray(result) ? result : (result?.data || []);
+      
+      if (templatesData.length > 0) {
+        setTemplates(templatesData);
+        setSelectedTemplate(templatesData[0]);
+      } else {
+        // Fallback: Use default templates if API returns empty or invalid data
+        const defaultTemplates = [
+          {
+            id: 'order-confirmation',
+            name: 'Order Confirmation',
+            subject: 'Order Confirmed - {{orderNumber}}',
+            htmlBody: '<h2>Order Confirmed</h2><p>Thank you for your order, {{customerName}}!</p><p><strong>Order Number:</strong> {{orderNumber}}</p><p><strong>Total:</strong> {{totalAmount}}</p><p>We\'ll send your eSIM QR codes shortly.</p>',
+            textBody: 'Order Confirmed\n\nThank you for your order, {{customerName}}!\n\nOrder Number: {{orderNumber}}\nTotal: {{totalAmount}}\n\nWe\'ll send your eSIM QR codes shortly.',
+            variables: ['orderNumber', 'customerName', 'totalAmount', 'orderDate'],
+          },
+          {
+            id: 'esim-delivery',
+            name: 'eSIM Delivery',
+            subject: 'Your eSIM is Ready - {{orderNumber}}',
+            htmlBody: '<h2>Your eSIM is Ready!</h2><p>Hi {{customerName}},</p><p>Your eSIM for order {{orderNumber}} is ready to use.</p><p>Scan the QR code below to install:</p>{{qrCode}}<p>Need help? <a href="{{helpUrl}}">View setup guide</a></p>',
+            textBody: 'Your eSIM is Ready!\n\nHi {{customerName}},\n\nYour eSIM for order {{orderNumber}} is ready to use.\n\nScan the QR code below to install:\n{{qrCode}}\n\nNeed help? View setup guide: {{helpUrl}}',
+            variables: ['orderNumber', 'customerName', 'qrCode', 'helpUrl'],
+          },
+          {
+            id: 'ticket-confirmation',
+            name: 'Support Ticket Confirmation',
+            subject: 'Support Ticket Created - {{ticketNumber}}',
+            htmlBody: '<h2>Support Ticket Created</h2><p>Thank you for contacting us, {{customerName}}.</p><p><strong>Ticket Number:</strong> {{ticketNumber}}</p><p><strong>Subject:</strong> {{ticketSubject}}</p><p>We\'ll get back to you soon!</p>',
+            textBody: 'Support Ticket Created\n\nThank you for contacting us, {{customerName}}.\n\nTicket Number: {{ticketNumber}}\nSubject: {{ticketSubject}}\n\nWe\'ll get back to you soon!',
+            variables: ['ticketNumber', 'customerName', 'ticketSubject'],
+          },
+        ];
+        setTemplates(defaultTemplates);
+        setSelectedTemplate(defaultTemplates[0]);
       }
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to load email templates",
-        variant: "destructive",
-      });
+      console.error('Failed to load email templates:', error);
+      // Fallback: Use default templates if API fails
+      const defaultTemplates = [
+        {
+          id: 'order-confirmation',
+          name: 'Order Confirmation',
+          subject: 'Order Confirmed - {{orderNumber}}',
+          htmlBody: '<h2>Order Confirmed</h2><p>Thank you for your order, {{customerName}}!</p><p><strong>Order Number:</strong> {{orderNumber}}</p><p><strong>Total:</strong> {{totalAmount}}</p><p>We\'ll send your eSIM QR codes shortly.</p>',
+          textBody: 'Order Confirmed\n\nThank you for your order, {{customerName}}!\n\nOrder Number: {{orderNumber}}\nTotal: {{totalAmount}}\n\nWe\'ll send your eSIM QR codes shortly.',
+          variables: ['orderNumber', 'customerName', 'totalAmount', 'orderDate'],
+        },
+        {
+          id: 'esim-delivery',
+          name: 'eSIM Delivery',
+          subject: 'Your eSIM is Ready - {{orderNumber}}',
+          htmlBody: '<h2>Your eSIM is Ready!</h2><p>Hi {{customerName}},</p><p>Your eSIM for order {{orderNumber}} is ready to use.</p><p>Scan the QR code below to install:</p>{{qrCode}}<p>Need help? <a href="{{helpUrl}}">View setup guide</a></p>',
+          textBody: 'Your eSIM is Ready!\n\nHi {{customerName}},\n\nYour eSIM for order {{orderNumber}} is ready to use.\n\nScan the QR code below to install:\n{{qrCode}}\n\nNeed help? View setup guide: {{helpUrl}}',
+          variables: ['orderNumber', 'customerName', 'qrCode', 'helpUrl'],
+        },
+        {
+          id: 'ticket-confirmation',
+          name: 'Support Ticket Confirmation',
+          subject: 'Support Ticket Created - {{ticketNumber}}',
+          htmlBody: '<h2>Support Ticket Created</h2><p>Thank you for contacting us, {{customerName}}.</p><p><strong>Ticket Number:</strong> {{ticketNumber}}</p><p><strong>Subject:</strong> {{ticketSubject}}</p><p>We\'ll get back to you soon!</p>',
+          textBody: 'Support Ticket Created\n\nThank you for contacting us, {{customerName}}.\n\nTicket Number: {{ticketNumber}}\nSubject: {{ticketSubject}}\n\nWe\'ll get back to you soon!',
+          variables: ['ticketNumber', 'customerName', 'ticketSubject'],
+        },
+      ];
+      setTemplates(defaultTemplates);
+      setSelectedTemplate(defaultTemplates[0]);
     } finally {
       setIsLoading(false);
     }
@@ -45,27 +103,19 @@ export default function EmailTemplates() {
     if (!selectedTemplate) return;
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/email-templates/${selectedTemplate.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          subject: selectedTemplate.subject,
-          htmlBody: selectedTemplate.htmlBody,
-          textBody: selectedTemplate.textBody,
-        }),
+      const result = await (apiClient as any).updateEmailTemplate(selectedTemplate.id, {
+        subject: selectedTemplate.subject,
+        htmlBody: selectedTemplate.htmlBody,
+        textBody: selectedTemplate.textBody,
       });
-      const result = await response.json();
-      if (result.success) {
+
+      if (result && result.success) {
         toast({
           title: "Success",
           description: "Email template updated successfully",
         });
       } else {
-        throw new Error(result.errorMessage || 'Failed to update template');
+        throw new Error(result?.errorMessage || 'Failed to update template');
       }
     } catch (error: any) {
       toast({
@@ -81,33 +131,94 @@ export default function EmailTemplates() {
   const handlePreview = async () => {
     if (!selectedTemplate) return;
     try {
-      // Generate sample variables
+      // Generate sample variables with realistic values
       const sampleVariables: Record<string, string> = {};
       selectedTemplate.variables?.forEach((variable: string) => {
-        sampleVariables[variable] = `Sample ${variable}`;
+        // Provide realistic sample values based on variable name
+        if (variable.toLowerCase().includes('number') || variable.toLowerCase().includes('id')) {
+          sampleVariables[variable] = '12345';
+        } else if (variable.toLowerCase().includes('name')) {
+          sampleVariables[variable] = 'John Doe';
+        } else if (variable.toLowerCase().includes('amount') || variable.toLowerCase().includes('price') || variable.toLowerCase().includes('total')) {
+          sampleVariables[variable] = '$29.99';
+        } else if (variable.toLowerCase().includes('date')) {
+          sampleVariables[variable] = new Date().toLocaleDateString();
+        } else if (variable.toLowerCase().includes('url') || variable.toLowerCase().includes('link')) {
+          sampleVariables[variable] = 'https://example.com/help';
+        } else if (variable.toLowerCase().includes('qr') || variable.toLowerCase().includes('code')) {
+          sampleVariables[variable] = '[QR Code Image]';
+        } else if (variable.toLowerCase().includes('subject')) {
+          sampleVariables[variable] = 'Sample Subject';
+        } else {
+          sampleVariables[variable] = `Sample ${variable}`;
+        }
       });
 
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/email-templates/${selectedTemplate.id}/preview`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify({ sampleVariables }),
-      });
-      const result = await response.json();
-      if (result.success) {
+      const result = await (apiClient as any).previewEmailTemplate(selectedTemplate.id, sampleVariables);
+
+      // apiClient.request extracts data, so result is the preview object directly
+      if (result && (result.subject || result.htmlBody)) {
+        setPreview(result);
+      } else if (result && result.data) {
+        // Fallback: if it's still wrapped
         setPreview(result.data);
       } else {
-        throw new Error(result.errorMessage || 'Failed to preview template');
+        // If API fails, generate preview locally
+        let subject = selectedTemplate.subject;
+        let htmlBody = selectedTemplate.htmlBody;
+        let textBody = selectedTemplate.textBody || '';
+
+        Object.entries(sampleVariables).forEach(([key, value]) => {
+          const regex = new RegExp(`{{${key}}}`, 'g');
+          subject = subject.replace(regex, value);
+          htmlBody = htmlBody.replace(regex, value);
+          textBody = textBody.replace(regex, value);
+        });
+
+        setPreview({ subject, htmlBody, textBody });
       }
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to preview template",
-        variant: "destructive",
-      });
+      console.error('Preview error:', error);
+      // Fallback: Generate preview locally if API fails
+      try {
+        const sampleVariables: Record<string, string> = {};
+        selectedTemplate.variables?.forEach((variable: string) => {
+          if (variable.toLowerCase().includes('number') || variable.toLowerCase().includes('id')) {
+            sampleVariables[variable] = '12345';
+          } else if (variable.toLowerCase().includes('name')) {
+            sampleVariables[variable] = 'John Doe';
+          } else if (variable.toLowerCase().includes('amount') || variable.toLowerCase().includes('price') || variable.toLowerCase().includes('total')) {
+            sampleVariables[variable] = '$29.99';
+          } else if (variable.toLowerCase().includes('date')) {
+            sampleVariables[variable] = new Date().toLocaleDateString();
+          } else if (variable.toLowerCase().includes('url') || variable.toLowerCase().includes('link')) {
+            sampleVariables[variable] = 'https://example.com/help';
+          } else if (variable.toLowerCase().includes('qr') || variable.toLowerCase().includes('code')) {
+            sampleVariables[variable] = '[QR Code Image]';
+          } else {
+            sampleVariables[variable] = `Sample ${variable}`;
+          }
+        });
+
+        let subject = selectedTemplate.subject;
+        let htmlBody = selectedTemplate.htmlBody;
+        let textBody = selectedTemplate.textBody || '';
+
+        Object.entries(sampleVariables).forEach(([key, value]) => {
+          const regex = new RegExp(`{{${key}}}`, 'g');
+          subject = subject.replace(regex, value);
+          htmlBody = htmlBody.replace(regex, value);
+          textBody = textBody.replace(regex, value);
+        });
+
+        setPreview({ subject, htmlBody, textBody });
+      } catch (fallbackError) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to preview template",
+          variant: "destructive",
+        });
+      }
     }
   };
 
