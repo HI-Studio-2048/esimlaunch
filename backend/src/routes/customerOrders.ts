@@ -13,6 +13,41 @@ const getOrdersByEmailSchema = z.object({
 });
 
 /**
+ * GET /api/customer-orders/payment-intent/:paymentIntentId
+ * Get customer order by payment intent ID
+ * MUST be defined before /:orderId to avoid route shadowing
+ */
+router.get('/payment-intent/:paymentIntentId', async (req, res, next) => {
+  try {
+    const paymentIntentId = req.params.paymentIntentId;
+    
+    const order = await customerOrderService.getByPaymentIntentId(paymentIntentId);
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'ORDER_NOT_FOUND',
+        errorMessage: 'Order not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        ...order,
+        totalAmount: Number(order.totalAmount) / 100,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'FETCH_FAILED',
+      errorMessage: error.message || 'Failed to fetch order',
+    });
+  }
+});
+
+/**
  * GET /api/customer-orders/:orderId
  * Get customer order by ID (public, no auth required)
  */
@@ -108,40 +143,6 @@ router.get('/', async (req, res, next) => {
         errorMessage: error.message || 'Failed to fetch orders',
       });
     }
-  }
-});
-
-/**
- * GET /api/customer-orders/payment-intent/:paymentIntentId
- * Get customer order by payment intent ID
- */
-router.get('/payment-intent/:paymentIntentId', async (req, res, next) => {
-  try {
-    const paymentIntentId = req.params.paymentIntentId;
-    
-    const order = await customerOrderService.getByPaymentIntentId(paymentIntentId);
-
-    if (!order) {
-      return res.status(404).json({
-        success: false,
-        errorCode: 'ORDER_NOT_FOUND',
-        errorMessage: 'Order not found',
-      });
-    }
-
-    res.json({
-      success: true,
-      data: {
-        ...order,
-        totalAmount: Number(order.totalAmount) / 100, // Convert from cents to dollars
-      },
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      errorCode: 'FETCH_FAILED',
-      errorMessage: error.message || 'Failed to fetch order',
-    });
   }
 });
 

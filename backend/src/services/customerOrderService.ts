@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { OrderStatus } from '@prisma/client';
+import { BalanceTransactionType, OrderStatus } from '@prisma/client';
 import { esimAccessService } from './esimAccessService';
 import { emailService } from './emailService';
 import { qrCodeService } from './qrCodeService';
@@ -45,13 +45,13 @@ export const customerOrderService = {
         where: { email: customerEmail },
         select: { id: true },
       });
-      linkedCustomerId = customer?.id || null;
+      linkedCustomerId = customer?.id ?? undefined;
     }
 
     // Calculate package count
     const packageCount = packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0);
 
-    // Create customer order
+    // Create customer order row first so we always have a record of the attempt
     const customerOrder = await prisma.customerOrder.create({
       data: {
         customerId: linkedCustomerId,
@@ -60,43 +60,66 @@ export const customerOrderService = {
         storeId,
         merchantId,
         paymentIntentId: paymentIntentId || null,
-        totalAmount: BigInt(totalAmount),
+        totalAmount: BigInt(totalAmount), // amount in cents charged to customer
         packageCount,
         status: OrderStatus.PENDING,
       },
     });
 
-    // Create merchant order via eSIM Access API
+    // Create merchant order via eSIM Access API and deduct merchant balance
     try {
       const transactionId = `customer_${customerOrder.id}_${Date.now()}`;
-      
-      const orderResult = await esimAccessService.createOrder({
-        transactionId,
-        amount: totalAmount,
-        packageInfoList: packageInfoList.map(pkg => ({
-          packageCode: pkg.packageCode,
-          slug: pkg.slug,
-          count: pkg.count,
-          price: pkg.price,
-        })),
-      });
 
-      if (orderResult.success && orderResult.obj?.orderNo) {
+      const result = await prisma.$transaction(async (tx) => {
+        // Check merchant balance (stored in cents)
+        const merchant = await tx.merchant.findUnique({
+          where: { id: merchantId },
+          select: { balance: true },
+        });
+
+        if (!merchant) {
+          throw new Error('MERCHANT_NOT_FOUND');
+        }
+
+        const currentBalance = Number(merchant.balance || 0n);
+        if (currentBalance < totalAmount) {
+          const err: any = new Error('Insufficient balance');
+          err.code = 'INSUFFICIENT_BALANCE';
+          throw err;
+        }
+
+        // Call eSIM Access API (method is orderProfiles, not createOrder)
+        const orderResult = await esimAccessService.orderProfiles({
+          transactionId,
+          amount: totalAmount,
+          packageInfoList: packageInfoList.map((pkg) => ({
+            packageCode: pkg.packageCode,
+            slug: pkg.slug,
+            count: pkg.count,
+            price: pkg.price,
+          })),
+        });
+
+        if (!orderResult.success || !orderResult.obj?.orderNo) {
+          const errMessage = orderResult.errorMessage || 'Failed to create eSIM order';
+          throw new Error(errMessage);
+        }
+
         // Create merchant order record
-        const merchantOrder = await prisma.order.create({
+        const merchantOrder = await tx.order.create({
           data: {
             merchantId,
             transactionId,
             esimAccessOrderNo: orderResult.obj.orderNo,
             status: OrderStatus.PROCESSING,
-            totalAmount: BigInt(totalAmount),
+            totalAmount: BigInt(totalAmount), // cents
             packageCount,
             customerOrderId: customerOrder.id,
           },
         });
 
-        // Link customer order to merchant order
-        await prisma.customerOrder.update({
+        // Link customer order to merchant order & update status
+        await tx.customerOrder.update({
           where: { id: customerOrder.id },
           data: {
             orderId: merchantOrder.id,
@@ -105,13 +128,33 @@ export const customerOrderService = {
           },
         });
 
+        // Deduct balance and record transaction
+        await tx.merchant.update({
+          where: { id: merchantId },
+          data: {
+            balance: {
+              decrement: BigInt(totalAmount),
+            },
+          },
+        });
+
+        await tx.balanceTransaction.create({
+          data: {
+            merchantId,
+            orderId: merchantOrder.id,
+            amount: BigInt(-totalAmount),
+            type: BalanceTransactionType.ORDER,
+            description: `Customer store order ${orderResult.obj.orderNo} - ${packageCount} package(s)`,
+          },
+        });
+
+        return { orderResult, merchantOrder };
+      });
+
+      const { orderResult, merchantOrder } = result;
+
         // Send order confirmation email
         try {
-          const store = await prisma.store.findUnique({
-            where: { id: storeId },
-            select: { businessName: true, name: true },
-          });
-
           await emailService.sendOrderConfirmationEmail({
             email: customerEmail,
             order: {
@@ -127,25 +170,33 @@ export const customerOrderService = {
           });
         } catch (emailError) {
           console.error('Failed to send order confirmation email:', emailError);
-          // Don't fail order creation if email fails
+        }
+
+        // Trigger affiliate commission if merchant was referred
+        try {
+          const merchant = await prisma.merchant.findUnique({
+            where: { id: merchantId },
+            select: { referredBy: true },
+          });
+          if (merchant?.referredBy) {
+            const { affiliateService } = await import('./affiliateService');
+            await affiliateService.createCommission({
+              affiliateId: merchant.referredBy,
+              referredMerchantId: merchantId,
+              customerOrderId: customerOrder.id,
+              amount: totalAmount,
+              commissionRate: 10,
+            });
+          }
+        } catch (commissionError) {
+          console.error('Failed to create affiliate commission:', commissionError);
         }
 
         return {
           ...customerOrder,
           orderId: merchantOrder.id,
-          esimAccessOrderNo: orderResult.obj.orderNo,
+          esimAccessOrderNo: (orderResult as any).obj?.orderNo,
         };
-      } else {
-        // Order creation failed, update customer order status
-        await prisma.customerOrder.update({
-          where: { id: customerOrder.id },
-          data: {
-            status: OrderStatus.FAILED,
-          },
-        });
-
-        throw new Error(orderResult.errorMessage || 'Failed to create eSIM order');
-      }
     } catch (error: any) {
       // Update customer order status to failed
       await prisma.customerOrder.update({

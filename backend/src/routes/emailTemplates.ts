@@ -1,12 +1,12 @@
 import express from 'express';
 import { z } from 'zod';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { emailTemplateService } from '../services/emailTemplateService';
 
 const router = express.Router();
 
 // All routes require JWT authentication
-router.use(authenticateJWT);
+router.use(authenticateSessionOrJWT);
 
 // Validation schemas
 const updateTemplateSchema = z.object({
@@ -144,6 +144,11 @@ router.post('/:templateId/preview', async (req, res, next) => {
 });
 
 export default router;
+
+
+
+
+
 
 
 

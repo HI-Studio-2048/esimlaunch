@@ -3,45 +3,51 @@ import { motion } from "framer-motion";
 import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, DollarSign, Users, Percent, ArrowRight, Sparkles } from "lucide-react";
-import { AnimatedCounter } from "./AnimatedCounter";
+import { TrendingUp, DollarSign, ShoppingCart, Percent, ArrowRight, Sparkles, Tag, BadgeDollarSign } from "lucide-react";
 
 interface ROICalculatorProps {
   showCTA?: boolean;
 }
 
 export function ROICalculator({ showCTA = true }: ROICalculatorProps) {
-  const [monthlyVisitors, setMonthlyVisitors] = useState([10000]);
-  const [conversionRate, setConversionRate] = useState([3]);
-  const [averageOrderValue, setAverageOrderValue] = useState([50]);
+  const [wholesaleCost, setWholesaleCost] = useState([8]);
+  const [markupPercent, setMarkupPercent] = useState([40]);
+  const [monthlySales, setMonthlySales] = useState([500]);
 
   const calculations = useMemo(() => {
-    const visitors = monthlyVisitors[0];
-    const conversion = conversionRate[0] / 100;
-    const aov = averageOrderValue[0];
+    const cost = wholesaleCost[0];
+    const markup = markupPercent[0] / 100;
+    const sales = monthlySales[0];
 
-    // Without eSIMLaunch (assuming 30% lower conversion and 20% lower AOV)
-    const withoutConversion = conversion * 0.7;
-    const withoutAOV = aov * 0.8;
-    const withoutRevenue = visitors * withoutConversion * withoutAOV;
-
-    // With eSIMLaunch
-    const withRevenue = visitors * conversion * aov;
-
-    // Difference
-    const additionalRevenue = withRevenue - withoutRevenue;
-    const percentageIncrease = ((withRevenue - withoutRevenue) / withoutRevenue) * 100;
+    const sellingPrice = cost * (1 + markup);
+    const profitPerSale = sellingPrice - cost;
+    const monthlyRevenue = sellingPrice * sales;
+    const monthlyCost = cost * sales;
+    const monthlyProfit = profitPerSale * sales;
+    const annualProfit = monthlyProfit * 12;
+    const margin = (profitPerSale / sellingPrice) * 100;
 
     return {
-      withoutRevenue: Math.round(withoutRevenue),
-      withRevenue: Math.round(withRevenue),
-      additionalRevenue: Math.round(additionalRevenue),
-      percentageIncrease: Math.round(percentageIncrease),
-      annualAdditional: Math.round(additionalRevenue * 12),
+      sellingPrice,
+      profitPerSale,
+      monthlyRevenue,
+      monthlyCost,
+      monthlyProfit,
+      annualProfit,
+      margin,
     };
-  }, [monthlyVisitors, conversionRate, averageOrderValue]);
+  }, [wholesaleCost, markupPercent, monthlySales]);
 
   const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  };
+
+  const formatCurrencyRounded = (value: number) => {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
@@ -61,140 +67,148 @@ export function ROICalculator({ showCTA = true }: ROICalculatorProps) {
           <CardHeader>
             <CardTitle className="text-xl font-display flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              Configure Your Business
+              Your Pricing Setup
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-8">
-            {/* Monthly Visitors */}
+            {/* Wholesale Cost */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium flex items-center gap-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  Monthly Visitors
+                  <Tag className="h-4 w-4 text-muted-foreground" />
+                  Wholesale Cost per eSIM
                 </label>
                 <span className="text-lg font-semibold text-primary">
-                  {formatNumber(monthlyVisitors[0])}
+                  {formatCurrency(wholesaleCost[0])}
                 </span>
               </div>
               <Slider
-                value={monthlyVisitors}
-                onValueChange={setMonthlyVisitors}
-                min={1000}
-                max={500000}
-                step={1000}
-                className="w-full"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>1K</span>
-                <span>500K</span>
-              </div>
-            </div>
-
-            {/* Conversion Rate */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium flex items-center gap-2">
-                  <Percent className="h-4 w-4 text-muted-foreground" />
-                  Conversion Rate
-                </label>
-                <span className="text-lg font-semibold text-primary">
-                  {conversionRate[0]}%
-                </span>
-              </div>
-              <Slider
-                value={conversionRate}
-                onValueChange={setConversionRate}
-                min={0.5}
-                max={15}
+                value={wholesaleCost}
+                onValueChange={setWholesaleCost}
+                min={1}
+                max={50}
                 step={0.5}
                 className="w-full"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>0.5%</span>
-                <span>15%</span>
+                <span>$1.00</span>
+                <span>$50.00</span>
               </div>
             </div>
 
-            {/* Average Order Value */}
+            {/* Markup */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                  Average Order Value
+                  <Percent className="h-4 w-4 text-muted-foreground" />
+                  Your Markup
                 </label>
                 <span className="text-lg font-semibold text-primary">
-                  ${averageOrderValue[0]}
+                  {markupPercent[0]}%
                 </span>
               </div>
               <Slider
-                value={averageOrderValue}
-                onValueChange={setAverageOrderValue}
-                min={10}
+                value={markupPercent}
+                onValueChange={setMarkupPercent}
+                min={5}
                 max={200}
                 step={5}
                 className="w-full"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>$10</span>
-                <span>$200</span>
+                <span>5%</span>
+                <span>200%</span>
+              </div>
+            </div>
+
+            {/* Monthly Sales */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium flex items-center gap-2">
+                  <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                  Monthly Sales Volume
+                </label>
+                <span className="text-lg font-semibold text-primary">
+                  {formatNumber(monthlySales[0])} eSIMs
+                </span>
+              </div>
+              <Slider
+                value={monthlySales}
+                onValueChange={setMonthlySales}
+                min={10}
+                max={10000}
+                step={10}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>10</span>
+                <span>10,000</span>
               </div>
             </div>
           </CardContent>
         </Card>
 
         {/* Results Section */}
-        <div className="space-y-6">
-          {/* Comparison Cards */}
-          <div className="grid gap-4">
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 }}
-            >
-              <Card className="border-border/50 bg-muted/30">
-                <CardContent className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Without eSIMLaunch</p>
-                      <p className="text-2xl font-bold font-display text-muted-foreground">
-                        {formatCurrency(calculations.withoutRevenue)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Monthly Revenue</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
-                      <TrendingUp className="h-6 w-6 text-muted-foreground" />
-                    </div>
+        <div className="space-y-4">
+          {/* Per-sale breakdown */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+          >
+            <Card className="border-border/50 bg-muted/30">
+              <CardContent className="p-5">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Per eSIM Sold</p>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Your Cost</p>
+                    <p className="text-base font-bold text-muted-foreground">{formatCurrency(calculations.sellingPrice - calculations.profitPerSale)}</p>
                   </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.2 }}
-            >
-              <Card className="border-primary/30 bg-primary/5 relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 to-transparent" />
-                <CardContent className="p-5 relative">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-primary font-medium">With eSIMLaunch</p>
-                      <p className="text-2xl font-bold font-display text-primary">
-                        {formatCurrency(calculations.withRevenue)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Monthly Revenue</p>
-                    </div>
-                    <div className="h-12 w-12 rounded-full bg-primary/20 flex items-center justify-center">
-                      <TrendingUp className="h-6 w-6 text-primary" />
-                    </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Selling Price</p>
+                    <p className="text-base font-bold">{formatCurrency(calculations.sellingPrice)}</p>
                   </div>
-                </CardContent>
-              </Card>
-            </motion.div>
-          </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Your Profit</p>
+                    <p className="text-base font-bold text-green-500">+{formatCurrency(calculations.profitPerSale)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Profit margin</span>
+                  <span className="text-xs font-semibold text-primary">{calculations.margin.toFixed(1)}%</span>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
 
-          {/* Additional Revenue Highlight */}
+          {/* Monthly Revenue & Cost */}
+          <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Card className="border-border/50 bg-muted/30">
+              <CardContent className="p-5">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-3">Monthly Overview</p>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground flex items-center gap-2">
+                      <TrendingUp className="h-3.5 w-3.5" /> Revenue
+                    </span>
+                    <span className="font-semibold">{formatCurrencyRounded(calculations.monthlyRevenue)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground flex items-center gap-2">
+                      <DollarSign className="h-3.5 w-3.5" /> Wholesale Cost
+                    </span>
+                    <span className="font-semibold text-muted-foreground">−{formatCurrencyRounded(calculations.monthlyCost)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Profit Highlight */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -203,16 +217,19 @@ export function ROICalculator({ showCTA = true }: ROICalculatorProps) {
             <Card className="gradient-bg border-0 text-primary-foreground">
               <CardContent className="p-6">
                 <div className="text-center space-y-2">
-                  <p className="text-sm opacity-90">Additional Monthly Revenue</p>
+                  <div className="flex items-center justify-center gap-2 mb-1">
+                    <BadgeDollarSign className="h-5 w-5 opacity-80" />
+                    <p className="text-sm opacity-90">Your Monthly Profit</p>
+                  </div>
                   <p className="text-4xl font-bold font-display">
-                    +{formatCurrency(calculations.additionalRevenue)}
+                    {formatCurrencyRounded(calculations.monthlyProfit)}
                   </p>
-                  <div className="flex items-center justify-center gap-4 pt-2">
+                  <div className="flex items-center justify-center gap-3 pt-2">
                     <span className="text-sm bg-white/20 px-3 py-1 rounded-full">
-                      +{calculations.percentageIncrease}% increase
+                      {calculations.margin.toFixed(1)}% margin
                     </span>
                     <span className="text-sm bg-white/20 px-3 py-1 rounded-full">
-                      {formatCurrency(calculations.annualAdditional)}/year
+                      {formatCurrencyRounded(calculations.annualProfit)}/year
                     </span>
                   </div>
                 </div>

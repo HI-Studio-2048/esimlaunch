@@ -66,20 +66,29 @@ const CheckoutForm = ({ paymentIntentClientSecret, amount, onSuccess, customerEm
       } else if (paymentIntent && paymentIntent.status === "succeeded") {
         // Use customer email from form state
         const email = customerEmail || paymentIntent.receipt_email || '';
-        
-        // Confirm payment on backend with customer info
-        await apiClient.confirmPayment(paymentIntent.id, {
-          customerEmail: email,
-          customerName: customer?.name || packageInfo?.customerName,
-          customerId: customer?.id, // Link to customer account if logged in
-          storeId: localStorage.getItem("current_store_id") || undefined,
-          packageInfoList: [{
-            slug: packageInfo?.slug || packageInfo?.id?.toString(),
-            count: 1,
-            price: Math.round(packageInfo.price * 100),
-          }],
-        });
-        onSuccess(paymentIntent.id);
+
+        try {
+          // Confirm payment on backend with customer info
+          await apiClient.confirmPayment(paymentIntent.id, {
+            customerEmail: email,
+            customerName: customer?.name || packageInfo?.customerName,
+            customerId: customer?.id, // Link to customer account if logged in
+            storeId: localStorage.getItem("current_store_id") || undefined,
+            packageInfoList: [{
+              slug: packageInfo?.slug || packageInfo?.id?.toString(),
+              count: 1,
+              price: Math.round(packageInfo.price * 100),
+            }],
+          });
+          onSuccess(paymentIntent.id);
+        } catch (err: any) {
+          const message =
+            err?.errorCode === "INSUFFICIENT_BALANCE"
+              ? "This store is temporarily unavailable because the merchant balance is too low to fulfill orders. Please try again later."
+              : err?.message || "Payment succeeded, but we could not create your eSIM order. Please contact support.";
+          setError(message);
+          setIsProcessing(false);
+        }
       } else {
         setIsProcessing(false);
       }

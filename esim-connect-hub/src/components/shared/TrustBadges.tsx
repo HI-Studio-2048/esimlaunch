@@ -13,14 +13,6 @@ const certifications = [
   { icon: CheckCircle, label: "ISO 27001", description: "Information security" },
 ];
 
-const partners = [
-  { name: "Stripe", logo: "💳" },
-  { name: "Airalo", logo: "📶" },
-  { name: "eSIM Go", logo: "🌐" },
-  { name: "Truphone", logo: "📱" },
-  { name: "GigSky", logo: "✈️" },
-];
-
 // Popular international mobile network providers with eSIM support
 // Logos are stored locally in /public/logos/
 const mobileProviders = [
@@ -183,32 +175,6 @@ export function TrustBadges() {
               <p className="text-xs text-muted-foreground">{cert.description}</p>
             </motion.div>
           ))}
-        </motion.div>
-
-        {/* Partner Logos */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.2 }}
-          className="mb-12"
-        >
-          <p className="text-center text-sm text-muted-foreground mb-6">Integrated with leading providers</p>
-          <div className="flex flex-wrap justify-center items-center gap-8">
-            {partners.map((partner, index) => (
-              <motion.div
-                key={partner.name}
-                initial={{ opacity: 0, scale: 0.8 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.3 + index * 0.1 }}
-                className="flex items-center gap-2 px-6 py-3 bg-card rounded-xl border border-border hover:border-primary/30 transition-colors"
-              >
-                <span className="text-2xl">{partner.logo}</span>
-                <span className="font-medium text-sm">{partner.name}</span>
-              </motion.div>
-            ))}
-          </div>
         </motion.div>
 
         {/* Press Mentions - Horizontal Ticker */}

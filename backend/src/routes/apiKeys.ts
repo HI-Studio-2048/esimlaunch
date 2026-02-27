@@ -1,12 +1,12 @@
 import express from 'express';
 import { z } from 'zod';
 import { authService } from '../services/authService';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 
 const router = express.Router();
 
 // All routes require JWT authentication
-router.use(authenticateJWT);
+router.use(authenticateSessionOrJWT);
 
 // Validation schemas
 const createApiKeySchema = z.object({
@@ -90,6 +90,11 @@ router.delete('/:keyId', async (req, res, next) => {
 });
 
 export default router;
+
+
+
+
+
 
 
 

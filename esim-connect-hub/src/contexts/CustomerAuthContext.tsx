@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { API_BASE_URL } from "@/lib/api";
 
 interface Customer {
   id: string;
@@ -38,7 +39,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
       if (token && customerData) {
         try {
           // Verify token by fetching customer data
-          const response = await fetch('/api/customers/me', {
+          const response = await fetch(`${API_BASE_URL}/api/customers/me`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
@@ -75,7 +76,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await fetch('/api/customers/login', {
+      const response = await fetch(`${API_BASE_URL}/api/customers/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -105,7 +106,7 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const response = await fetch('/api/customers/register', {
+      const response = await fetch(`${API_BASE_URL}/api/customers/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -167,6 +168,11 @@ export function useCustomerAuth() {
   }
   return context;
 }
+
+
+
+
+
 
 
 

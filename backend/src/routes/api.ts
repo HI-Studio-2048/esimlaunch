@@ -1,14 +1,14 @@
 import express from 'express';
 import { z } from 'zod';
 import { esimAccessService } from '../services/esimAccessService';
-import { authenticateApiKey, logApiRequest, createRateLimiter } from '../middleware/auth';
+import { authenticateSessionOrApiKey, logApiRequest, createRateLimiter } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { OrderStatus, BalanceTransactionType } from '@prisma/client';
 
 const router = express.Router();
 
-// All API routes require API key authentication, rate limiting, and logging
-router.use(authenticateApiKey);
+// Auth: session cookie (Prisma DB) or Bearer (JWT/API key). Rate limiting and logging.
+router.use(authenticateSessionOrApiKey);
 router.use(createRateLimiter());
 router.use(logApiRequest);
 
@@ -42,8 +42,8 @@ const queryProfilesSchema = z.object({
   startTime: z.string().optional(),
   endTime: z.string().optional(),
   pager: z.object({
-    pageSize: z.number().int().min(5).max(500),
-    pageNum: z.number().int().min(1).max(10000),
+    pageSize: z.coerce.number().int().min(5).max(500),
+    pageNum: z.coerce.number().int().min(1).max(10000),
   }).optional(),
 });
 
@@ -99,20 +99,22 @@ router.post('/orders', async (req, res, next) => {
     const data = orderProfilesSchema.parse(req.body);
     const merchantId = req.merchant!.id;
 
-    // Calculate order amount if not provided
-    // TODO: If amount is not provided, fetch package prices from eSIM Access API
-    let orderAmount = data.amount;
-    if (!orderAmount) {
-      // For now, require amount to be provided
-      // In the future, we can fetch package prices and calculate
-      return res.status(400).json({
-        success: false,
-        errorCode: 'VALIDATION_ERROR',
-        errorMessage: 'Order amount is required',
-      });
+    // Resolve order amount: use provided amount or compute from package list (eSIM Access price in 1/10000 USD)
+    let orderAmountApi = data.amount;
+    if (orderAmountApi == null) {
+      try {
+        orderAmountApi = await esimAccessService.getOrderAmountFromPackages(data.packageInfoList);
+      } catch (err: any) {
+        return res.status(400).json({
+          success: false,
+          errorCode: 'VALIDATION_ERROR',
+          errorMessage: err?.message || 'Could not resolve order amount from packages',
+        });
+      }
     }
 
-    // Check merchant balance
+    // Merchant balance is stored in cents (USD). Convert API amount (1/10000 USD) to cents for comparison.
+    const orderAmountCents = Math.round(Number(orderAmountApi) / 100);
     const merchant = await prisma.merchant.findUnique({
       where: { id: merchantId },
       select: { balance: true },
@@ -127,38 +129,39 @@ router.post('/orders', async (req, res, next) => {
     }
 
     const currentBalance = Number(merchant.balance);
-    if (currentBalance < orderAmount) {
+    if (currentBalance < orderAmountCents) {
       return res.status(400).json({
         success: false,
         errorCode: 'INSUFFICIENT_BALANCE',
-        errorMessage: `Insufficient balance. Current balance: ${currentBalance / 10000} USD, Required: ${orderAmount / 10000} USD`,
+        errorMessage: `Insufficient balance. Current balance: $${(currentBalance / 100).toFixed(2)} USD, Required: $${(orderAmountCents / 100).toFixed(2)} USD`,
       });
     }
 
     // Use database transaction to ensure atomicity
     const result = await prisma.$transaction(async (tx) => {
-      // Call eSIM Access API
-      const esimResult = await esimAccessService.orderProfiles(data);
+      // Call eSIM Access API with amount in API units (1/10000 USD)
+      const payload = { ...data, amount: orderAmountApi };
+      const esimResult = await esimAccessService.orderProfiles(payload);
 
       if (esimResult.success && esimResult.obj?.orderNo) {
-        // Create order in database
+        // Create order in database (store amount in 1/10000 USD for Advanced orders)
         const order = await tx.order.create({
           data: {
             merchantId,
             transactionId: data.transactionId,
             esimAccessOrderNo: esimResult.obj.orderNo,
             status: OrderStatus.PENDING,
-            totalAmount: BigInt(orderAmount),
+            totalAmount: BigInt(orderAmountApi),
             packageCount: data.packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0),
           },
         });
 
-        // Deduct balance from merchant
+        // Deduct balance from merchant (balance is in cents)
         const updatedMerchant = await tx.merchant.update({
           where: { id: merchantId },
           data: {
             balance: {
-              decrement: BigInt(orderAmount),
+              decrement: BigInt(orderAmountCents),
             },
           },
         });
@@ -168,16 +171,20 @@ router.post('/orders', async (req, res, next) => {
           throw new Error('Balance would be negative');
         }
 
-        // Create balance transaction record for audit
+        // Create balance transaction record for audit (amount in cents)
         await tx.balanceTransaction.create({
           data: {
             merchantId,
             orderId: order.id,
-            amount: BigInt(-orderAmount), // Negative for deduction
+            amount: BigInt(-orderAmountCents), // Negative for deduction
             type: BalanceTransactionType.ORDER,
             description: `Order ${esimResult.obj.orderNo} - ${data.packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0)} package(s)`,
           },
         });
+
+        // Best-effort: look up package names and pre-populate EsimProfile rows via ORDER_STATUS webhook.
+        // packageName + coverage are stored when profiles arrive via webhook or first profile query.
+        console.log(`[Order] Created order ${esimResult.obj?.orderNo} for merchant ${merchantId}`);
 
         return { ...esimResult, orderId: order.id };
       }
@@ -242,12 +249,136 @@ router.get('/orders/:orderNo', async (req, res, next) => {
 
 /**
  * GET /api/v1/profiles
- * Query eSIM profiles
+ * Query eSIM profiles - returns live eSIM Access data enriched with DB metadata
+ * (packageName, coverage, nickname, orderedAt, etc.)
  */
 router.get('/profiles', async (req, res, next) => {
   try {
     const params = queryProfilesSchema.parse(req.query);
+    const merchantId = req.merchant!.id;
     const result = await esimAccessService.queryProfiles(params);
+
+    if (result.success && result.obj?.esimList?.length) {
+      const apiProfiles = result.obj.esimList;
+
+      // Look up our DB records for these profiles
+      const esimTranNos = apiProfiles.map(p => p.esimTranNo).filter(Boolean);
+      const dbRecords = await prisma.esimProfile.findMany({
+        where: { merchantId, esimTranNo: { in: esimTranNos } },
+      });
+      const dbMap = new Map(dbRecords.map(r => [r.esimTranNo, r]));
+
+      // Upsert profiles in DB and enrich with package name (async, don't block response)
+      setImmediate(async () => {
+        try {
+          for (const p of apiProfiles) {
+            const existingDb = dbMap.get(p.esimTranNo);
+            const pkgCode = p.packageList?.[0]?.packageCode ?? null;
+            const locCode = p.packageList?.[0]?.locationCode ?? null;
+
+            // Enrich from package catalog when we have a package code
+            let packageName = existingDb?.packageName ?? null;
+            let planPrice: number | null = existingDb?.planPrice ?? null;
+            let supportTopUpType: string | null = existingDb?.supportTopUpType ?? null;
+            if (pkgCode) {
+              try {
+                const pkgList = await esimAccessService.getPackages({ packageCode: pkgCode });
+                const pkg = pkgList.obj?.packageList?.[0];
+                if (pkg) {
+                  if (!packageName) packageName = pkg.name ?? null;
+                  if (planPrice == null && pkg.price != null) planPrice = pkg.price;
+                  const raw = (pkg as any).supportTopUpType;
+                  if (!supportTopUpType && raw != null) supportTopUpType = typeof raw === 'string' ? raw : String(raw);
+                }
+              } catch (_) { /* non-fatal */ }
+            }
+
+            // Build coverage from packageList locationCodes
+            let coverage: Array<{ country: string; locationCode: string }> | null = null;
+            if (p.packageList?.length) {
+              coverage = p.packageList.map(pkg => ({
+                locationCode: pkg.locationCode,
+                country: pkg.locationCode, // frontend will decode with getCountryName
+              }));
+            }
+
+            await prisma.esimProfile.upsert({
+              where: { esimTranNo: p.esimTranNo },
+              create: {
+                merchantId,
+                esimTranNo: p.esimTranNo,
+                iccid: p.iccid ?? null,
+                orderNo: p.orderNo ?? null,
+                ac: (p as any).ac ?? null,
+                qrCodeUrl: p.qrCodeUrl ?? null,
+                shortUrl: (p as any).shortUrl ?? null,
+                smsStatus: p.smsStatus ?? null,
+                dataType: p.dataType ?? null,
+                activeType: (p.activeType ? parseInt(String(p.activeType)) : null),
+                packageCode: pkgCode,
+                packageName,
+                planPrice,
+                supportTopUpType: supportTopUpType != null ? supportTopUpType : null,
+                locationCode: locCode,
+                coverage: coverage as any,
+                orderedAt: new Date(),
+              },
+              update: {
+                iccid: p.iccid ?? undefined,
+                ac: (p as any).ac ?? undefined,
+                qrCodeUrl: p.qrCodeUrl ?? undefined,
+                shortUrl: (p as any).shortUrl ?? undefined,
+                activeType: (p.activeType ? parseInt(String(p.activeType)) : undefined),
+                packageCode: pkgCode ?? undefined,
+                packageName: packageName ?? undefined,
+                planPrice: planPrice ?? undefined,
+                supportTopUpType: (supportTopUpType != null ? String(supportTopUpType) : undefined),
+                locationCode: locCode ?? undefined,
+                coverage: coverage ? coverage as any : undefined,
+              },
+            });
+          }
+        } catch (e) {
+          console.error('Failed to upsert eSIM profiles in DB:', e);
+        }
+      });
+
+      // Order totals (our DB): eSIM Access does not return "total amount paid" per profile
+      const orderNos = [...new Set(apiProfiles.map(p => p.orderNo).filter(Boolean))] as string[];
+      const orders = orderNos.length
+        ? await prisma.order.findMany({
+            where: { merchantId, esimAccessOrderNo: { in: orderNos } },
+            select: { esimAccessOrderNo: true, totalAmount: true },
+          })
+        : [];
+      const orderTotalMap = new Map(orders.map(o => [o.esimAccessOrderNo, o.totalAmount]));
+
+      // Merge DB metadata into API response; normalize device fields (API may use snake_case)
+      result.obj.esimList = apiProfiles.map(p => {
+        const raw = p as any;
+        const db = dbMap.get(p.esimTranNo);
+        const orderTotal = p.orderNo ? orderTotalMap.get(p.orderNo) : null;
+        const merged = {
+          ...p,
+          // eSIM Access may return device_brand, device_type, device_model
+          deviceBrand: raw.deviceBrand ?? raw.device_brand ?? undefined,
+          deviceType: raw.deviceType ?? raw.device_type ?? undefined,
+          deviceModel: raw.deviceModel ?? raw.device_model ?? undefined,
+          nickname: db?.nickname ?? undefined,
+          packageName: db?.packageName ?? undefined,
+          coverage: db?.coverage ? (db.coverage as any) : undefined,
+          orderedAt: db?.orderedAt?.toISOString() ?? undefined,
+          dbCreatedAt: db?.createdAt.toISOString() ?? undefined,
+          ac: raw.ac ?? db?.ac ?? undefined,
+          shortUrl: raw.shortUrl ?? db?.shortUrl ?? undefined,
+          planPrice: db?.planPrice ?? undefined,
+          supportTopUpType: db?.supportTopUpType ?? undefined,
+          totalAmount: orderTotal != null ? Number(orderTotal) : undefined,
+        };
+        return merged;
+      });
+    }
+
     res.json(result);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -263,6 +394,32 @@ router.get('/profiles', async (req, res, next) => {
         errorMessage: error.message || 'Failed to query profiles',
       });
     }
+  }
+});
+
+/**
+ * PUT /api/v1/profiles/:esimTranNo/nickname
+ * Save a nickname for an eSIM profile (stored in our DB, not eSIM Access)
+ */
+router.put('/profiles/:esimTranNo/nickname', async (req, res, next) => {
+  try {
+    const { esimTranNo } = req.params;
+    const { nickname } = req.body;
+    const merchantId = req.merchant!.id;
+
+    const profile = await prisma.esimProfile.upsert({
+      where: { esimTranNo },
+      create: { merchantId, esimTranNo, nickname: nickname ?? null },
+      update: { nickname: nickname ?? null },
+    });
+
+    res.json({ success: true, data: { nickname: profile.nickname } });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'UPDATE_FAILED',
+      errorMessage: error.message || 'Failed to save nickname',
+    });
   }
 });
 
@@ -420,12 +577,14 @@ router.get('/balance', async (req, res, next) => {
       select: { balance: true },
     });
 
-    const balance = merchant?.balance ? Number(merchant.balance) : 0;
+    // Balance is stored in cents (USD); return in USD for display
+    const balanceCents = merchant?.balance ? Number(merchant.balance) : 0;
+    const balance = balanceCents / 100;
 
     res.json({
       success: true,
       data: {
-        balance: balance, // Balance in smallest currency unit
+        balance, // Balance in USD
       },
     });
   } catch (error: any) {

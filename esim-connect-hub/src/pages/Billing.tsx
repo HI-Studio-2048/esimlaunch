@@ -38,32 +38,29 @@ export default function Billing() {
   const loadBillingData = async () => {
     setIsLoading(true);
     try {
-      // Load subscription
+      // Load subscription (apiClient returns unwrapped data; may include invoices)
       try {
-        const subResult = await apiClient.request('/api/subscriptions/me');
-        if (subResult && subResult.success) {
-          setSubscription(subResult.data);
+        const subResult = await apiClient.request<any>('/api/subscriptions/me');
+        if (subResult && typeof subResult === 'object') {
+          setSubscription(subResult);
+          if (Array.isArray(subResult.invoices)) setInvoices(subResult.invoices);
+        } else {
+          setSubscription(null);
         }
       } catch (error: any) {
-        // Subscription endpoint might not exist yet - that's okay
         console.log('Subscription endpoint not available:', error.message);
         setSubscription(null);
       }
 
-      // Load invoices
+      // Load invoices if not already set from subscription response
       try {
-        const invResult = await apiClient.request('/api/subscriptions/invoices');
-        if (invResult && invResult.success) {
-          setInvoices(invResult.data || []);
-        }
+        const invResult = await apiClient.request<any>('/api/subscriptions/invoices');
+        setInvoices(Array.isArray(invResult) ? invResult : []);
       } catch (error: any) {
-        // Invoices endpoint might not exist yet - that's okay
-        console.log('Invoices endpoint not available:', error.message);
         setInvoices([]);
       }
     } catch (error: any) {
       console.error('Failed to load billing data:', error);
-      // Don't show error toast for missing endpoints - they might not be implemented yet
     } finally {
       setIsLoading(false);
     }
@@ -72,19 +69,19 @@ export default function Billing() {
   const handleUpgrade = async (newPlan: string) => {
     setIsUpdating(true);
     try {
-      const result = await apiClient.request('/api/subscriptions/me', {
+      const result = await apiClient.request<any>('/api/subscriptions/me', {
         method: 'PUT',
         body: JSON.stringify({ plan: newPlan }),
       });
 
-      if (result && result.success) {
+      if (result && typeof result === 'object') {
         toast({
           title: "Subscription Updated",
-          description: `Your subscription has been upgraded to ${plans[newPlan as keyof typeof plans]?.name}.`,
+          description: `Your subscription has been updated to ${plans[newPlan as keyof typeof plans]?.name}.`,
         });
         loadBillingData();
       } else {
-        throw new Error(result?.errorMessage || 'Failed to update subscription');
+        throw new Error('Failed to update subscription');
       }
     } catch (error: any) {
       toast({
@@ -104,18 +101,20 @@ export default function Billing() {
 
     setIsUpdating(true);
     try {
-      const result = await apiClient.request(`/api/subscriptions/me?cancelImmediately=${cancelImmediately}`, {
+      const result = await apiClient.request<any>(`/api/subscriptions/me?cancelImmediately=${cancelImmediately}`, {
         method: 'DELETE',
       });
 
-      if (result && result.success) {
+      if (result != null) {
         toast({
           title: "Subscription Canceled",
-          description: result.message || "Your subscription has been canceled.",
+          description: cancelImmediately
+            ? "Your subscription has been canceled immediately."
+            : "Your subscription will be canceled at the end of the billing period.",
         });
         loadBillingData();
       } else {
-        throw new Error(result?.errorMessage || 'Failed to cancel subscription');
+        throw new Error('Failed to cancel subscription');
       }
     } catch (error: any) {
       toast({
@@ -160,16 +159,21 @@ export default function Billing() {
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-xl font-bold">{planInfo?.name} Plan</h3>
                       <Badge 
-                        variant={subscription.status === 'active' ? 'default' : 'secondary'}
+                        variant={subscription.status === 'active' || subscription.status === 'trialing' ? 'default' : 'secondary'}
                       >
-                        {subscription.status}
+                        {subscription.status === 'trialing' ? 'Free trial' : subscription.status}
                       </Badge>
                     </div>
                     <p className="text-muted-foreground">
                       ${planInfo?.price}/month
+                      {subscription.status === 'trialing' && subscription.currentPeriodEnd && (
+                        <span className="block text-xs mt-1">
+                          Trial ends {new Date(subscription.currentPeriodEnd).toLocaleDateString()}
+                        </span>
+                      )}
                     </p>
                   </div>
-                  {subscription.status === 'active' && (
+                  {(subscription.status === 'active' || subscription.status === 'trialing') && (
                     <Button
                       variant="outline"
                       onClick={() => handleCancel(false)}

@@ -24,6 +24,7 @@ export default function AffiliateDashboard() {
   const [stats, setStats] = useState<any>(null);
   const [commissions, setCommissions] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRequestingPayout, setIsRequestingPayout] = useState(false);
 
   useEffect(() => {
     loadAffiliateData();
@@ -91,6 +92,19 @@ export default function AffiliateDashboard() {
 
   const getReferralLink = (code: string) => {
     return `${window.location.origin}/signup?ref=${code}`;
+  };
+
+  const handleRequestPayout = async () => {
+    setIsRequestingPayout(true);
+    try {
+      await apiClient.requestAffiliatePayout();
+      toast({ title: "Payout Requested", description: "Your payout request has been submitted." });
+      await loadAffiliateData();
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Failed to request payout", variant: "destructive" });
+    } finally {
+      setIsRequestingPayout(false);
+    }
   };
 
   if (isLoading) {
@@ -180,6 +194,27 @@ export default function AffiliateDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Payout Button */}
+        {stats && stats.pendingCommissions > 0 && (
+          <div className="mb-6">
+            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-amber-900 dark:text-amber-300">You have pending commissions</p>
+                <p className="text-sm text-amber-700 dark:text-amber-400">
+                  {stats.pendingCommissions} commission{stats.pendingCommissions !== 1 ? 's' : ''} are ready for payout
+                </p>
+              </div>
+              <Button
+                onClick={handleRequestPayout}
+                disabled={isRequestingPayout}
+                className="shrink-0"
+              >
+                {isRequestingPayout ? "Requesting..." : "Request Payout"}
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         {stats && (

@@ -159,7 +159,7 @@ class AuthService {
     return jwt.sign(
       { merchantId },
       env.jwtSecret,
-      { expiresIn: env.jwtExpiresIn }
+      { expiresIn: env.jwtExpiresIn as any }
     );
   }
 
@@ -282,6 +282,11 @@ class AuthService {
         serviceType: true,
         isActive: true,
         createdAt: true,
+        smtpHost: true,
+        smtpPort: true,
+        smtpUser: true,
+        smtpFromName: true,
+        smtpFromEmail: true,
       },
     });
 
@@ -395,29 +400,36 @@ class AuthService {
   /**
    * Update merchant profile
    */
-  async updateProfile(merchantId: string, data: { name?: string; email?: string; serviceType?: ServiceType }) {
+  async updateProfile(merchantId: string, data: {
+    name?: string;
+    email?: string;
+    serviceType?: ServiceType;
+    smtpHost?: string;
+    smtpPort?: number;
+    smtpUser?: string;
+    smtpPass?: string;
+    smtpFromName?: string;
+    smtpFromEmail?: string;
+  }) {
     const updateData: any = {};
     
-    if (data.name !== undefined) {
-      updateData.name = data.name;
-    }
-    
+    if (data.name !== undefined) updateData.name = data.name;
+
     if (data.email !== undefined) {
-      // Check if email is already taken by another merchant
-      const existingMerchant = await prisma.merchant.findUnique({
-        where: { email: data.email },
-      });
-      
+      const existingMerchant = await prisma.merchant.findUnique({ where: { email: data.email } });
       if (existingMerchant && existingMerchant.id !== merchantId) {
         throw new Error('Email already registered');
       }
-      
       updateData.email = data.email;
     }
     
-    if (data.serviceType !== undefined) {
-      updateData.serviceType = data.serviceType;
-    }
+    if (data.serviceType !== undefined) updateData.serviceType = data.serviceType;
+    if (data.smtpHost !== undefined) updateData.smtpHost = data.smtpHost || null;
+    if (data.smtpPort !== undefined) updateData.smtpPort = data.smtpPort || null;
+    if (data.smtpUser !== undefined) updateData.smtpUser = data.smtpUser || null;
+    if (data.smtpPass !== undefined) updateData.smtpPass = data.smtpPass || null;
+    if (data.smtpFromName !== undefined) updateData.smtpFromName = data.smtpFromName || null;
+    if (data.smtpFromEmail !== undefined) updateData.smtpFromEmail = data.smtpFromEmail || null;
 
     const merchant = await prisma.merchant.update({
       where: { id: merchantId },
@@ -429,6 +441,11 @@ class AuthService {
         serviceType: true,
         isActive: true,
         createdAt: true,
+        smtpHost: true,
+        smtpPort: true,
+        smtpUser: true,
+        smtpFromName: true,
+        smtpFromEmail: true,
       },
     });
 

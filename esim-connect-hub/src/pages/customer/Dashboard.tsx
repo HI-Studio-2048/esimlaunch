@@ -10,6 +10,7 @@ import {
   Package, Mail, Calendar, DollarSign, Loader2, 
   CheckCircle2, Clock, XCircle, LogOut, Settings
 } from "lucide-react";
+import { API_BASE_URL } from "@/lib/api";
 
 const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
   PENDING: { label: "Pending", color: "bg-yellow-500", icon: Clock },
@@ -42,7 +43,7 @@ export default function CustomerDashboard() {
 
     setIsLoading(true);
     try {
-      const ordersResponse = await fetch('/api/customers/me/orders', {
+      const ordersResponse = await fetch(`${API_BASE_URL}/api/customers/me/orders`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

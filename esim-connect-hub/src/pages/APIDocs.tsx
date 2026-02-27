@@ -275,7 +275,7 @@ export default function APIDocs() {
                   </div>
                 </div>
                 <p className="text-muted-foreground mb-4">
-                  All API requests require authentication using a Bearer token. You can generate API keys from your dashboard settings.
+                  All API requests require authentication using a Bearer token. You can generate API keys from the Developer page in your dashboard.
                 </p>
                 <div className="bg-muted rounded-lg p-4 font-mono text-sm">
                   <code>Authorization: Bearer YOUR_API_KEY</code>

@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { API_BASE_URL } from "@/lib/api";
 
 export default function CreateSupportTicket() {
   const navigate = useNavigate();
@@ -44,7 +45,7 @@ export default function CreateSupportTicket() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch('/api/support/tickets', {
+      const response = await fetch(`${API_BASE_URL}/api/support/tickets`, {
         method: 'POST',
         headers,
         body: JSON.stringify(formData),
@@ -212,6 +213,11 @@ export default function CreateSupportTicket() {
     </div>
   );
 }
+
+
+
+
+
 
 
 

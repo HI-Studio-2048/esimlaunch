@@ -26,8 +26,8 @@ class WebhookService {
     merchantId: string,
     webhookEvent: ESIMAccessWebhook
   ): Promise<void> {
-    // Get merchant's webhook configuration
-    const webhookConfig = await prisma.webhookConfig.findUnique({
+    // Get merchant's webhook configuration (merchantId is not unique, use findFirst)
+    const webhookConfig = await prisma.webhookConfig.findFirst({
       where: { merchantId },
     });
 
@@ -189,19 +189,20 @@ class WebhookService {
 
               // Refund balance if order failed or was cancelled
               // Only refund if order was previously PENDING or PROCESSING (balance was deducted)
+              // Order.totalAmount is in 1/10000 USD (Advanced); balance is in cents
               if (
                 (newStatus === OrderStatus.FAILED || newStatus === OrderStatus.CANCELLED) &&
                 (oldStatus === OrderStatus.PENDING || oldStatus === OrderStatus.PROCESSING) &&
                 order.totalAmount
               ) {
-                const refundAmount = Number(order.totalAmount);
+                const refundCents = Math.round(Number(order.totalAmount) / 100);
 
-                // Refund balance to merchant
+                // Refund balance to merchant (cents)
                 await tx.merchant.update({
                   where: { id: order.merchantId },
                   data: {
                     balance: {
-                      increment: BigInt(refundAmount),
+                      increment: BigInt(refundCents),
                     },
                   },
                 });
@@ -211,13 +212,13 @@ class WebhookService {
                   data: {
                     merchantId: order.merchantId,
                     orderId: order.id,
-                    amount: BigInt(refundAmount), // Positive for refund
+                    amount: BigInt(refundCents), // Positive for refund
                     type: BalanceTransactionType.REFUND,
                     description: `Refund for ${newStatus === OrderStatus.FAILED ? 'failed' : 'cancelled'} order ${orderNo}`,
                   },
                 });
 
-                console.log(`Refunded ${refundAmount / 10000} USD to merchant ${order.merchantId} for order ${orderNo}`);
+                console.log(`Refunded $${(refundCents / 100).toFixed(2)} to merchant ${order.merchantId} for order ${orderNo}`);
               }
             });
           }
@@ -240,13 +241,7 @@ class WebhookService {
     const webhookConfigs = await prisma.webhookConfig.findMany({
       where: {
         isActive: true,
-      },
-      include: {
-        merchant: {
-          where: {
-            isActive: true,
-          },
-        },
+        merchant: { isActive: true },
       },
     });
 
@@ -287,6 +282,71 @@ class WebhookService {
       }
 
       const profiles = profilesResult.obj.esimList;
+
+      // Upsert eSIM profiles into our DB so future queries have package name, coverage, dates
+      for (const p of profiles) {
+        try {
+          const pkgCode = p.packageList?.[0]?.packageCode ?? null;
+          const locCode = p.packageList?.[0]?.locationCode ?? null;
+
+          let packageName: string | null = null;
+          let planPrice: number | null = null;
+          let supportTopUpType: string | null = null;
+          if (pkgCode) {
+            const pkgList = await esimAccessService.getPackages({ packageCode: pkgCode });
+            const pkg = pkgList.obj?.packageList?.[0];
+            if (pkg) {
+              packageName = pkg.name ?? null;
+              planPrice = pkg.price ?? null;
+              const raw = (pkg as any).supportTopUpType;
+              supportTopUpType = raw != null ? (typeof raw === 'string' ? raw : String(raw)) : null;
+            }
+          }
+
+          const coverage = p.packageList?.map(pkg => ({
+            locationCode: pkg.locationCode,
+            country: pkg.locationCode,
+          })) ?? null;
+
+          await prisma.esimProfile.upsert({
+            where: { esimTranNo: p.esimTranNo },
+            create: {
+              merchantId: customerOrder.merchantId,
+              esimTranNo: p.esimTranNo,
+              iccid: p.iccid ?? null,
+              orderNo: p.orderNo ?? null,
+              orderId: customerOrder.orderId ?? null,
+              ac: (p as any).ac ?? null,
+              qrCodeUrl: p.qrCodeUrl ?? null,
+              shortUrl: (p as any).shortUrl ?? null,
+              smsStatus: p.smsStatus ?? null,
+              dataType: p.dataType ?? null,
+              activeType: p.activeType ? parseInt(String(p.activeType)) : null,
+              packageCode: pkgCode,
+              packageName,
+              planPrice,
+              supportTopUpType: supportTopUpType != null ? supportTopUpType : null,
+              locationCode: locCode,
+              coverage: coverage as any,
+              orderedAt: new Date(),
+            },
+            update: {
+              iccid: p.iccid ?? undefined,
+              ac: (p as any).ac ?? undefined,
+              qrCodeUrl: p.qrCodeUrl ?? undefined,
+              shortUrl: (p as any).shortUrl ?? undefined,
+              packageCode: pkgCode ?? undefined,
+              packageName: packageName ?? undefined,
+              planPrice: planPrice ?? undefined,
+              supportTopUpType: (supportTopUpType != null ? supportTopUpType : undefined),
+              locationCode: locCode ?? undefined,
+              coverage: coverage ? (coverage as any) : undefined,
+            },
+          });
+        } catch (e) {
+          console.error(`Failed to upsert eSIM profile ${p.esimTranNo}:`, e);
+        }
+      }
 
       // Generate QR codes for each profile
       const qrCodes = await Promise.all(

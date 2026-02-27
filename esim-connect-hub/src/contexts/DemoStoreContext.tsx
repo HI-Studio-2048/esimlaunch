@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 
 export interface BrandConfig {
   businessName: string;
@@ -17,24 +17,24 @@ export const defaultBrandConfig: BrandConfig = {
 };
 
 const STORE_CONFIG_KEY = 'esimlaunch_store_config';
+const STORE_ID_KEY = 'current_store_id';
 
 interface DemoStoreContextType {
   config: BrandConfig;
   setConfig: (config: BrandConfig) => void;
+  storeId: string | null;
+  setStoreId: (id: string | null) => void;
 }
 
 const DemoStoreContext = createContext<DemoStoreContextType | undefined>(undefined);
 
 export function DemoStoreProvider({ children }: { children: ReactNode }) {
-  // Load config from localStorage on mount
   const loadConfig = (): BrandConfig => {
     if (typeof window === 'undefined') return defaultBrandConfig;
-    
     try {
       const saved = localStorage.getItem(STORE_CONFIG_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Validate that all required fields exist
         if (parsed.businessName && parsed.primaryColor && parsed.secondaryColor && parsed.accentColor) {
           return parsed;
         }
@@ -45,9 +45,14 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
     return defaultBrandConfig;
   };
 
-  const [config, setConfigState] = useState<BrandConfig>(loadConfig);
+  const loadStoreId = (): string | null => {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(STORE_ID_KEY);
+  };
 
-  // Save config to localStorage whenever it changes
+  const [config, setConfigState] = useState<BrandConfig>(loadConfig);
+  const [storeId, setStoreIdState] = useState<string | null>(loadStoreId);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -58,12 +63,23 @@ export function DemoStoreProvider({ children }: { children: ReactNode }) {
     }
   }, [config]);
 
-  const setConfig = (newConfig: BrandConfig) => {
+  const setConfig = useCallback((newConfig: BrandConfig) => {
     setConfigState(newConfig);
-  };
+  }, []);
+
+  const setStoreId = useCallback((id: string | null) => {
+    setStoreIdState(id);
+    if (typeof window !== 'undefined') {
+      if (id) {
+        localStorage.setItem(STORE_ID_KEY, id);
+      } else {
+        localStorage.removeItem(STORE_ID_KEY);
+      }
+    }
+  }, []);
 
   return (
-    <DemoStoreContext.Provider value={{ config, setConfig }}>
+    <DemoStoreContext.Provider value={{ config, setConfig, storeId, setStoreId }}>
       {children}
     </DemoStoreContext.Provider>
   );

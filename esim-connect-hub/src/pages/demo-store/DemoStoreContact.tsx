@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Mail, Phone, MapPin, Clock, Send, MessageSquare, HelpCircle } from "lucide-react";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { usePublicStore } from "@/hooks/usePublicStore";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -14,13 +16,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const contactInfo = [
-  { icon: Mail, label: "Email", value: "support@esimstore.com", href: "mailto:support@esimstore.com" },
-  { icon: Phone, label: "Phone", value: "+1 (555) 123-4567", href: "tel:+15551234567" },
-  { icon: MapPin, label: "Address", value: "123 Tech Street, San Francisco, CA 94102" },
-  { icon: Clock, label: "Hours", value: "24/7 Support Available" },
-];
-
 const faqItems = [
   { q: "How do I install my eSIM?", a: "After purchase, you'll receive a QR code via email. Simply scan it with your phone's camera in the eSIM settings." },
   { q: "Is my phone compatible?", a: "Most modern phones support eSIM, including iPhone XS and newer, Samsung Galaxy S20 and newer, and Google Pixel 3 and newer." },
@@ -29,12 +24,92 @@ const faqItems = [
 ];
 
 export default function DemoStoreContact() {
-  const { config } = useDemoStore();
+  const { config, storeId } = useDemoStore();
+  const { data: storeData } = usePublicStore(storeId);
+  const { toast } = useToast();
   const [submitted, setSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const ts = storeData?.templateSettings || {};
+  const contactInfo = [
+    {
+      icon: Mail,
+      label: "Email",
+      value: ts.contactEmail || `support@${config.businessName.toLowerCase().replace(/\s+/g, '')}.com`,
+      href: `mailto:${ts.contactEmail || ''}`,
+    },
+    {
+      icon: Phone,
+      label: "Phone",
+      value: ts.contactPhone || null,
+      href: ts.contactPhone ? `tel:${ts.contactPhone.replace(/\s/g, '')}` : null,
+    },
+    {
+      icon: MapPin,
+      label: "Address",
+      value: ts.contactAddress || null,
+      href: null,
+    },
+    {
+      icon: Clock,
+      label: "Hours",
+      value: ts.contactHours || "24/7 Support Available",
+      href: null,
+    },
+  ].filter(item => item.value);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    const form = formRef.current;
+    if (!form) return;
+
+    const name = (form.querySelector('#name') as HTMLInputElement)?.value;
+    const email = (form.querySelector('#email') as HTMLInputElement)?.value;
+    const message = (form.querySelector('#message') as HTMLTextAreaElement)?.value;
+    const subjectSelect = form.querySelector('[data-value]') as HTMLElement;
+    const subject = subjectSelect?.getAttribute('data-value') || 'General Inquiry';
+
+    if (!name || !email || !message) return;
+
+    setIsSubmitting(true);
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+      const body: any = {
+        customerEmail: email,
+        customerName: name,
+        subject: subject,
+        description: message,
+        category: 'general',
+      };
+      if (storeId) body.storeId = storeId;
+
+      const res = await fetch(`${API_BASE}/api/support/tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (res.ok) {
+        setSubmitted(true);
+        toast({ title: "Message sent", description: "We'll get back to you soon." });
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        toast({
+          variant: "destructive",
+          title: "Could not send message",
+          description: errData.errorMessage || "Please try again or email us directly.",
+        });
+      }
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Could not send message",
+        description: "Network error. Please try again or email us directly.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -96,7 +171,7 @@ export default function DemoStoreContact() {
                     </Button>
                   </div>
                 ) : (
-                  <form onSubmit={handleSubmit} className="space-y-6">
+                  <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
                     <div className="grid sm:grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="name">Name</Label>
@@ -138,8 +213,9 @@ export default function DemoStoreContact() {
                       type="submit"
                       className="w-full text-white"
                       style={{ background: config.primaryColor }}
+                      disabled={isSubmitting}
                     >
-                      Send Message
+                      {isSubmitting ? "Sending..." : "Send Message"}
                       <Send className="ml-2 h-4 w-4" />
                     </Button>
                   </form>

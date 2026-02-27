@@ -147,7 +147,7 @@ export const domainVerificationService = {
     if (store.domainVerified) {
       return {
         verified: true,
-        method: (store.domainVerificationMethod as 'dns' | 'cname') || 'dns',
+        method: (store.domainVerificationMethod as any) || 'dns',
       };
     }
 

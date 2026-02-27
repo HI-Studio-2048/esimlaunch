@@ -26,7 +26,6 @@ export const qrCodeService = {
     try {
       const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
         errorCorrectionLevel: 'M',
-        type: 'image/png',
         width: 300,
         margin: 1,
       });
@@ -55,7 +54,7 @@ export const qrCodeService = {
     try {
       const qrCodeBuffer = await QRCode.toBuffer(qrData, {
         errorCorrectionLevel: 'M',
-        type: 'image/png',
+        type: 'png',
         width: 300,
         margin: 1,
       });
@@ -77,6 +76,11 @@ export const qrCodeService = {
     return qrCodes;
   },
 };
+
+
+
+
+
 
 
 

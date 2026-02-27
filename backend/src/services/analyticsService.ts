@@ -296,10 +296,12 @@ export const analyticsService = {
       },
       orders: {
         last30Days: orders30d.overTime.reduce((sum, item) => {
-          return sum + Object.values(item).reduce((a: number, b: number) => a + b, 0) - (item.period ? 0 : 0);
+          const { period, ...statusCounts } = item as any;
+          return sum + Object.values(statusCounts).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
         }, 0),
         last7Days: orders7d.overTime.reduce((sum, item) => {
-          return sum + Object.values(item).reduce((a: number, b: number) => a + b, 0) - (item.period ? 0 : 0);
+          const { period, ...statusCounts } = item as any;
+          return sum + Object.values(statusCounts).reduce((a: number, b: any) => a + (Number(b) || 0), 0);
         }, 0),
       },
       customers: customers30d,

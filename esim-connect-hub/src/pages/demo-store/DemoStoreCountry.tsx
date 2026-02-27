@@ -1,43 +1,97 @@
 import { useParams, Link, useNavigate } from "react-router-dom";
+import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Wifi, Clock, Check, Star, Shield, Zap, Globe } from "lucide-react";
+import { ArrowLeft, Wifi, Clock, Check, Star, Shield, Zap, Globe, Loader2 } from "lucide-react";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { usePublicStore } from "@/hooks/usePublicStore";
+import { useStorePath } from "@/hooks/useStorePath";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
-const countryData: Record<string, { name: string; flag: string; image: string }> = {
-  "france": { name: "France", flag: "🇫🇷", image: "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80" },
-  "turkey": { name: "Turkey", flag: "🇹🇷", image: "https://images.unsplash.com/photo-1541432901042-2d8bd64b4a9b?w=800&q=80" },
-  "united-kingdom": { name: "United Kingdom", flag: "🇬🇧", image: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80" },
-  "greece": { name: "Greece", flag: "🇬🇷", image: "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=800&q=80" },
-  "united-arab-emirates": { name: "United Arab Emirates", flag: "🇦🇪", image: "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=800&q=80" },
-  "spain": { name: "Spain", flag: "🇪🇸", image: "https://images.unsplash.com/photo-1543783207-ec64e4d95325?w=800&q=80" },
-  "japan": { name: "Japan", flag: "🇯🇵", image: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80" },
-  "united-states": { name: "United States", flag: "🇺🇸", image: "https://images.unsplash.com/photo-1485738422979-f5c462d49f74?w=800&q=80" },
+const countryImages: Record<string, string> = {
+  "france": "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80",
+  "turkey": "https://images.unsplash.com/photo-1541432901042-2d8bd64b4a9b?w=800&q=80",
+  "united-kingdom": "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=800&q=80",
+  "greece": "https://images.unsplash.com/photo-1533105079780-92b9be482077?w=800&q=80",
+  "united-arab-emirates": "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?w=800&q=80",
+  "spain": "https://images.unsplash.com/photo-1543783207-ec64e4d95325?w=800&q=80",
+  "japan": "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=800&q=80",
+  "united-states": "https://images.unsplash.com/photo-1485738422979-f5c462d49f74?w=800&q=80",
 };
 
-const defaultCountry = { name: "Unknown", flag: "🌍", image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=80" };
+function countryCodeToFlag(code: string): string {
+  if (!code || code.length !== 2) return "🌍";
+  return String.fromCodePoint(
+    ...code.toUpperCase().split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
+  );
+}
 
-const plans = [
-  { id: 1, data: "1GB", validity: "7 days", price: 4.50, popular: false },
-  { id: 2, data: "3GB", validity: "30 days", price: 9.00, popular: false },
-  { id: 3, data: "5GB", validity: "30 days", price: 14.00, popular: true },
-  { id: 4, data: "10GB", validity: "30 days", price: 24.00, popular: false },
-  { id: 5, data: "20GB", validity: "30 days", price: 42.00, popular: false },
-  { id: 6, data: "Unlimited", validity: "30 days", price: 65.00, popular: false },
-];
+const DEFAULT_IMAGE = "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&q=80";
 
 export default function DemoStoreCountry() {
-  const { config } = useDemoStore();
+  const { config, storeId } = useDemoStore();
+  const { data: storeData, isLoading } = usePublicStore(storeId);
   const { countrySlug } = useParams<{ countrySlug: string }>();
+  const basePath = useStorePath();
   const navigate = useNavigate();
-  const country = countryData[countrySlug || ""] || defaultCountry;
+
+  // Find matching packages for this country slug
+  const { countryName, countryFlag, countryImage, plans } = useMemo(() => {
+    const slug = countrySlug || "";
+    if (storeData?.packages?.length) {
+      const matchingPkgs = storeData.packages.filter(pkg => {
+        const pkgSlug = pkg.location.toLowerCase().replace(/\s+/g, "-");
+        return pkgSlug === slug;
+      });
+      if (matchingPkgs.length > 0) {
+        const firstPkg = matchingPkgs[0];
+        const sortedPlans = matchingPkgs
+          .map((pkg, idx) => ({
+            id: idx + 1,
+            packageCode: pkg.packageCode,
+            slug: pkg.slug,
+            data: pkg.data,
+            validity: pkg.validity,
+            price: pkg.price,
+            popular: false,
+          }))
+          .sort((a, b) => a.price - b.price);
+        // Mark the middle plan as popular
+        if (sortedPlans.length >= 3) {
+          sortedPlans[Math.floor(sortedPlans.length / 2)].popular = true;
+        }
+        return {
+          countryName: firstPkg.location,
+          countryFlag: countryCodeToFlag(firstPkg.locationCode),
+          countryImage: countryImages[slug] || DEFAULT_IMAGE,
+          plans: sortedPlans,
+        };
+      }
+    }
+    // Fallback static data
+    const staticName = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    return {
+      countryName: staticName,
+      countryFlag: "🌍",
+      countryImage: countryImages[slug] || DEFAULT_IMAGE,
+      plans: [
+        { id: 1, packageCode: '', slug: '', data: "1GB", validity: "7 days", price: 4.50, popular: false },
+        { id: 2, packageCode: '', slug: '', data: "3GB", validity: "30 days", price: 9.00, popular: false },
+        { id: 3, packageCode: '', slug: '', data: "5GB", validity: "30 days", price: 14.00, popular: true },
+        { id: 4, packageCode: '', slug: '', data: "10GB", validity: "30 days", price: 24.00, popular: false },
+        { id: 5, packageCode: '', slug: '', data: "20GB", validity: "30 days", price: 42.00, popular: false },
+      ],
+    };
+  }, [countrySlug, storeData]);
 
   const handleBuyNow = (plan: typeof plans[0]) => {
-    navigate("/demo-store/checkout", {
+    navigate(`${basePath}/checkout`, {
       state: {
-        package: plan,
-        country: country.name,
+        package: {
+          ...plan,
+          packageCode: plan.packageCode,
+        },
+        country: countryName,
       },
     });
   };
@@ -47,24 +101,24 @@ export default function DemoStoreCountry() {
       {/* Hero */}
       <section className="relative h-[300px] md:h-[400px] overflow-hidden">
         <img
-          src={country.image}
-          alt={country.name}
+          src={countryImage}
+          alt={countryName}
           className="w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-6 md:p-10">
           <div className="container mx-auto">
             <Link
-              to="/demo-store/destinations"
+              to={`${basePath}/destinations`}
               className="inline-flex items-center gap-2 text-white/80 hover:text-white mb-4"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to Destinations
             </Link>
             <div className="flex items-center gap-4">
-              <span className="text-5xl">{country.flag}</span>
+              <span className="text-5xl">{countryFlag}</span>
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold text-white">{country.name} eSIM</h1>
+                <h1 className="text-3xl md:text-4xl font-bold text-white">{countryName} eSIM</h1>
                 <p className="text-white/80">Stay connected with high-speed data</p>
               </div>
             </div>

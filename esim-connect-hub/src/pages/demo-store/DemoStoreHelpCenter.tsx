@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { Search, Book, MessageCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { useStorePath } from "@/hooks/useStorePath";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +16,7 @@ const articles = [
 
 export default function DemoStoreHelpCenter() {
   const { config } = useDemoStore();
+  const basePath = useStorePath();
 
   return (
     <div className="min-h-screen bg-background">
@@ -109,7 +112,7 @@ export default function DemoStoreHelpCenter() {
               className="text-white hover:opacity-90"
               asChild
             >
-              <a href="/demo-store/contact">Contact Support</a>
+              <Link to={`${basePath}/contact`}>Contact Support</Link>
             </Button>
           </div>
         </div>

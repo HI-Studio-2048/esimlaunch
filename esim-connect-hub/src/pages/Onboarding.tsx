@@ -14,6 +14,9 @@ import { DNSInstructions } from "@/components/shared/DNSInstructions";
 import { markStepCompleted, getOnboardingProgress } from "@/lib/onboardingProgress";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
+import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { getStripe } from "@/lib/stripe";
+import { PLANS } from "@/lib/plans";
 import {
   User,
   Palette,
@@ -30,14 +33,12 @@ import {
   Code2,
 } from "lucide-react";
 
-// Steps for Easy Way (store builder)
+// Steps for Easy Way (done-for-you store)
 const easyWaySteps = [
   { id: 0, name: "Service Type", icon: Sparkles },
-  { id: 1, name: "Profile", icon: User },
-  { id: 2, name: "Branding", icon: Palette },
-  { id: 3, name: "Provider", icon: Wifi },
-  { id: 4, name: "Payment", icon: CreditCard },
-  { id: 5, name: "Launch", icon: Rocket },
+  { id: 1, name: "Business Info", icon: User },
+  { id: 2, name: "Choose Plan", icon: CreditCard },
+  { id: 3, name: "All Set!", icon: Rocket },
 ];
 
 // Steps for Advanced (just service type selection)
@@ -45,15 +46,6 @@ const advancedSteps = [
   { id: 0, name: "Service Type", icon: Sparkles },
 ];
 
-const providers = [
-  { 
-    id: "esimaccess", 
-    name: "eSIMAccess", 
-    description: "Your eSIM provider", 
-    popular: false,
-    logo: "https://i0.wp.com/esimaccess.com/wp-content/uploads/2023/05/esimaccess.png?fit=768%2C215&ssl=1"
-  },
-];
 
 const Onboarding = () => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -67,8 +59,7 @@ const Onboarding = () => {
   useEffect(() => {
     const progress = getOnboardingProgress();
     if (progress.store) {
-      // Store setup is already completed, redirect to store preview
-      navigate("/store-preview", { replace: true });
+      navigate("/dashboard", { replace: true });
     }
   }, [navigate]);
 
@@ -81,27 +72,10 @@ const Onboarding = () => {
     description: "",
   });
 
-  const [branding, setBranding] = useState({
-    primaryColor: "#6366f1",
-    logo: null as File | null,
-    tagline: "",
-    customDomain: "",
-  });
-
-  const [selectedProvider, setSelectedProvider] = useState("");
-  
-  const [payment, setPayment] = useState({
-    plan: "growth", // Default to Growth plan
-    cardNumber: "",
-    expiryDate: "",
-    cvv: "",
+  const [payment, setPayment] = useState<PaymentData>({
+    plan: "growth",
+    paymentMethodId: undefined,
     billingEmail: "",
-  });
-
-  const [launchOptions, setLaunchOptions] = useState({
-    enableAnalytics: true,
-    enableNotifications: true,
-    goLiveNow: false,
   });
 
   const [serviceType, setServiceType] = useState<'EASY' | 'ADVANCED' | null>(null);
@@ -118,7 +92,7 @@ const Onboarding = () => {
     if (currentStep === 0 && serviceType) {
       try {
         setIsLoading(true);
-        const updatedMerchant = await apiClient.updateProfile(undefined, undefined, serviceType);
+        const updatedMerchant = await apiClient.updateProfile(undefined, undefined, { serviceType });
         // Update user context with new service type
         if (setUser && updatedMerchant && user) {
           setUser({ ...user, serviceType: updatedMerchant.serviceType || serviceType });
@@ -149,7 +123,7 @@ const Onboarding = () => {
       }
     }
     
-    if (currentStep < 5) {
+    if (currentStep < 2) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -162,84 +136,65 @@ const Onboarding = () => {
 
   const handleLaunch = async () => {
     setIsLoading(true);
-    
-    try {
-      // Convert logo file to data URL if present
-      let logoDataUrl: string | null = null;
-      if (branding.logo) {
-        logoDataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(branding.logo!);
-        });
-      }
 
-      // Create store via API
+    try {
+      // Create a basic store record so the merchant has an account to manage
+      const subdomain = profile.businessName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').substring(0, 50);
       const storeData = {
         name: profile.businessName || "My Store",
         businessName: profile.businessName,
-        domain: branding.customDomain || undefined,
-        subdomain: branding.customDomain ? undefined : profile.businessName.toLowerCase().replace(/\s+/g, '-').substring(0, 50),
-        primaryColor: branding.primaryColor,
+        subdomain: subdomain || undefined,
+        primaryColor: "#6366f1",
         secondaryColor: "#8b5cf6",
         accentColor: "#22c55e",
-        logoUrl: logoDataUrl || undefined,
-        selectedPackages: [], // Will be populated when package selection is implemented
-        pricingMarkup: {}, // Will be populated when pricing config is implemented
+        selectedPackages: [],
+        pricingMarkup: {},
+        templateKey: "default",
       };
 
-      // Call API to create store
+      // Create Stripe subscription for the selected plan
+      try {
+        await apiClient.createSubscription({
+          plan: (payment.plan as 'starter' | 'growth' | 'scale') || 'growth',
+          billingPeriod: 'monthly',
+          paymentMethodId: payment.paymentMethodId,
+        });
+        markStepCompleted('subscription', new Date().toISOString());
+      } catch (subError: any) {
+        console.warn('Subscription creation skipped:', subError?.message);
+      }
+
+      // Call API to create store record
       const createdStore = await apiClient.createStore(storeData);
 
-      // Mark onboarding steps as completed
       const completionDate = new Date().toISOString();
       markStepCompleted('store', completionDate);
-      
-      // Save selected plan to localStorage
       localStorage.setItem('user_plan', payment.plan);
-      
-      // Store the created store ID
+
       if (createdStore?.id) {
         localStorage.setItem('current_store_id', createdStore.id);
       }
-      
-      if (branding.customDomain) {
-        markStepCompleted('domain', completionDate);
-      }
 
-      // Save branding to DemoStoreContext for store preview
-      const storeConfig = {
+      // Save basic config to context
+      setConfig({
         businessName: profile.businessName || "Your eSIM Store",
-        primaryColor: branding.primaryColor,
-        secondaryColor: createdStore.secondaryColor || "#8b5cf6",
-        accentColor: createdStore.accentColor || "#22c55e",
-        logo: logoDataUrl || createdStore.logoUrl || null,
-      };
-      setConfig(storeConfig);
-      
-      // Also save to localStorage for persistence
-      try {
-        localStorage.setItem('esimlaunch_store_config', JSON.stringify(storeConfig));
-      } catch (error) {
-        console.error('Failed to save store config to localStorage:', error);
-      }
-      
-      setIsLoading(false);
-      toast({
-        title: "🚀 Congratulations!",
-        description: `Your eSIM store "${createdStore?.name || profile.businessName}" has been created successfully!`,
+        primaryColor: "#6366f1",
+        secondaryColor: "#8b5cf6",
+        accentColor: "#22c55e",
+        logo: null,
       });
-      navigate("/store-preview");
+
+      setIsLoading(false);
+      setCurrentStep(3); // Go to confirmation step
     } catch (error: any) {
       setIsLoading(false);
-      const errorMessage = error?.message || error?.errorMessage || "Failed to create store. Please try again.";
+      const errorMessage = error?.message || error?.errorMessage || "Failed to submit. Please try again.";
       toast({
         title: "Error",
         description: errorMessage,
         variant: "destructive",
       });
-      console.error("Store creation error:", error);
+      console.error("Store request error:", error);
     }
   };
 
@@ -259,33 +214,16 @@ const Onboarding = () => {
       case 1:
         return <ProfileStep profile={profile} setProfile={setProfile} />;
       case 2:
-        return <BrandingStep branding={branding} setBranding={setBranding} selectedPlan={payment.plan} businessName={profile.businessName} />;
+        return <PaymentStep payment={payment} setPayment={setPayment} isLoading={isLoading} setIsLoading={setIsLoading} />;
       case 3:
-        return (
-          <ProviderStep
-            selectedProvider={selectedProvider}
-            setSelectedProvider={setSelectedProvider}
-          />
-        );
-      case 4:
-        return <PaymentStep payment={payment} setPayment={setPayment} />;
-      case 5:
-        return (
-          <LaunchStep
-            launchOptions={launchOptions}
-            setLaunchOptions={setLaunchOptions}
-            profile={profile}
-            branding={branding}
-            selectedProvider={selectedProvider}
-          />
-        );
+        return <ConfirmationStep businessName={profile.businessName} />;
       default:
         return null;
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 pt-24 pb-12">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 pt-4 pb-12">
       <div className="container-custom max-w-4xl">
         {/* Header */}
         <motion.div
@@ -313,10 +251,10 @@ const Onboarding = () => {
               <motion.div
                 className="h-full gradient-bg"
                 initial={{ width: "0%" }}
-                animate={{ 
-                  width: serviceType === 'ADVANCED' 
-                    ? "100%" // Advanced only has one step
-                    : `${(currentStep / (easyWaySteps.length - 1)) * 100}%`
+                animate={{
+                  width: serviceType === 'ADVANCED'
+                    ? "100%"
+                    : `${(Math.min(currentStep, 2) / 2) * 100}%`
                 }}
                 transition={{ duration: 0.3 }}
               />
@@ -385,17 +323,17 @@ const Onboarding = () => {
           <Button
             variant="outline"
             onClick={handleBack}
-            disabled={currentStep === 0}
-            className="gap-2"
+            disabled={currentStep === 0 || currentStep === 3}
+            className={cn("gap-2", currentStep === 3 && "invisible")}
           >
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
 
-          {currentStep < 5 ? (
-            <Button 
-              variant="gradient" 
-              onClick={handleNext} 
+          {currentStep < 2 ? (
+            <Button
+              variant="gradient"
+              onClick={handleNext}
               className="gap-2"
               disabled={isLoading || (currentStep === 0 && !serviceType)}
             >
@@ -421,7 +359,7 @@ const Onboarding = () => {
                 </>
               )}
             </Button>
-          ) : (
+          ) : currentStep === 2 ? (
             <Button
               variant="gradient"
               onClick={handleLaunch}
@@ -437,9 +375,19 @@ const Onboarding = () => {
               ) : (
                 <>
                   <Rocket className="w-4 h-4" />
-                  Launch My Store
+                  Submit Request
                 </>
               )}
+            </Button>
+          ) : (
+            // Step 3: confirmation — "Go to Dashboard" button
+            <Button
+              variant="gradient"
+              onClick={() => navigate("/dashboard")}
+              className="gap-2"
+            >
+              Go to Dashboard
+              <ArrowRight className="w-4 h-4" />
             </Button>
           )}
         </div>
@@ -494,28 +442,28 @@ const ServiceTypeStep = ({
                 </Label>
               </div>
               <p className="text-sm text-muted-foreground mb-4">
-                Fully managed store builder - perfect for getting started quickly
+                Done-for-you — our team builds and deploys your store, you just manage it
               </p>
               <ul className="space-y-2 text-sm">
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-primary" />
-                  <span>Visual store builder with drag-and-drop</span>
+                  <span>Store built and deployed by our team</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-primary" />
-                  <span>Pre-built templates and themes</span>
+                  <span>Custom branding and domain setup included</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-primary" />
-                  <span>Automatic order processing</span>
+                  <span>You control pricing, packages and support</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-primary" />
-                  <span>Built-in analytics dashboard</span>
+                  <span>Automatic order processing and eSIM delivery</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-4 h-4 text-primary" />
-                  <span>No coding required</span>
+                  <span>No coding or technical setup needed</span>
                 </li>
               </ul>
             </div>
@@ -574,8 +522,8 @@ const ServiceTypeStep = ({
     <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
       <p className="text-sm">
         <span className="font-medium">💡 Note:</span>{" "}
-        {serviceType === 'EASY' 
-          ? "Easy Way includes the store builder feature. You'll be able to create and customize your store in the next steps."
+        {serviceType === 'EASY'
+          ? "Easy Way is done-for-you. After you complete these steps, our team will build and deploy your store. You'll manage pricing, packages, and support from your dashboard."
           : serviceType === 'ADVANCED'
           ? "Advanced mode gives you full API access. After selecting this, you'll be redirected to your dashboard where you can set up API keys and start building custom integrations."
           : "Select a service type to continue."}
@@ -923,190 +871,212 @@ const BrandingStep = ({
   );
 };
 
-// Step 3: Provider
+// Step 3: Provider Info (informational only — eSIMAccess is the only provider)
 const ProviderStep = ({
   selectedProvider,
   setSelectedProvider,
 }: {
   selectedProvider: string;
   setSelectedProvider: React.Dispatch<React.SetStateAction<string>>;
-}) => (
-  <div className="space-y-6">
-    <div>
-      <h2 className="text-2xl font-bold mb-2">Choose your eSIM provider</h2>
-      <p className="text-muted-foreground">
-        Select the provider that best fits your business needs.
-      </p>
-    </div>
-
-    <RadioGroup value={selectedProvider} onValueChange={setSelectedProvider}>
-      <div className="grid md:grid-cols-2 gap-4">
-        {providers.map((provider) => (
-          <div
-            key={provider.id}
-            className={`relative rounded-xl border-2 p-4 cursor-pointer transition-all ${
-              selectedProvider === provider.id
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-primary/50"
-            }`}
-            onClick={() => setSelectedProvider(provider.id)}
-          >
-            {provider.popular && (
-              <span className="absolute -top-2 right-4 px-2 py-0.5 text-xs font-medium rounded-full gradient-bg text-primary-foreground">
-                Popular
-              </span>
-            )}
-            <div className="flex items-start gap-3">
-              <RadioGroupItem value={provider.id} id={provider.id} className="mt-1" />
-              <div className="flex-1">
-                <Label htmlFor={provider.id} className="text-base font-semibold cursor-pointer">
-                  {provider.name}
-                </Label>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {provider.description}
-                </p>
-              </div>
-              <div className="w-12 h-12 rounded-lg bg-muted flex items-center justify-center p-2">
-                {provider.logo ? (
-                  <img 
-                    src={provider.logo} 
-                    alt={provider.name}
-                    className="w-full h-full object-contain"
-                  />
-                ) : (
-                  <Wifi className="w-6 h-6 text-muted-foreground" />
-                )}
-              </div>
-            </div>
-          </div>
-        ))}
+}) => {
+  useEffect(() => {
+    if (selectedProvider !== "esimaccess") {
+      setSelectedProvider("esimaccess");
+    }
+  }, [selectedProvider, setSelectedProvider]);
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Powered by eSIMAccess</h2>
+        <p className="text-muted-foreground">
+          Your store is fully connected to eSIMAccess — a leading global eSIM provider.
+        </p>
       </div>
-    </RadioGroup>
 
-    <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
-      <p className="text-sm">
-        <span className="font-medium">💡 Pro tip:</span> You can connect multiple providers
-        later from your dashboard settings.
-      </p>
+      <div className="rounded-xl border-2 border-primary bg-primary/5 p-6">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="w-16 h-16 rounded-xl bg-white shadow flex items-center justify-center p-2">
+            <Wifi className="w-8 h-8 text-primary" />
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold">eSIMAccess</h3>
+            <p className="text-sm text-muted-foreground">Your eSIM backend provider</p>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-3 gap-4 text-sm">
+          {[
+            { label: "Countries covered", value: "150+" },
+            { label: "Networks", value: "600+" },
+            { label: "Activation", value: "Instant" },
+          ].map(item => (
+            <div key={item.label} className="bg-white/60 dark:bg-background/40 rounded-lg p-3 text-center">
+              <div className="text-xl font-bold text-primary">{item.value}</div>
+              <div className="text-muted-foreground text-xs mt-0.5">{item.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-4 rounded-xl bg-muted border border-border">
+        <p className="text-sm">
+          <span className="font-medium">✅ All set:</span> Your store automatically uses eSIMAccess for all eSIM orders. No additional configuration needed.
+        </p>
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface PaymentData {
   plan: string;
-  cardNumber: string;
-  expiryDate: string;
-  cvv: string;
+  paymentMethodId?: string;
   billingEmail: string;
 }
+
+// Inner payment form using Stripe CardElement
+const StripeCardForm = ({
+  onPaymentMethodCreated,
+  isLoading,
+  setIsLoading,
+}: {
+  onPaymentMethodCreated: (paymentMethodId: string) => void;
+  isLoading: boolean;
+  setIsLoading: (v: boolean) => void;
+}) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const { toast } = useToast();
+
+  const handleConfirm = async () => {
+    if (!stripe || !elements) return;
+    setIsLoading(true);
+    try {
+      const siData = await apiClient.createSetupIntent();
+      const clientSecret = siData.clientSecret;
+
+      const { setupIntent, error } = await stripe.confirmCardSetup(clientSecret, {
+        payment_method: { card: elements.getElement(CardElement)! },
+      });
+
+      if (error) {
+        toast({ title: "Card error", description: error.message, variant: "destructive" });
+      } else if (setupIntent?.payment_method) {
+        onPaymentMethodCreated(setupIntent.payment_method as string);
+        toast({ title: "Card saved", description: "Your payment method has been saved." });
+      }
+    } catch (err: any) {
+      toast({ title: "Error", description: err?.message || "Failed to save card", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="border border-border rounded-lg p-3 bg-background">
+        <CardElement options={{ style: { base: { fontSize: '16px', color: '#374151' } } }} />
+      </div>
+      <Button type="button" variant="outline" size="sm" onClick={handleConfirm} disabled={isLoading}>
+        {isLoading ? "Saving..." : "Save Card"}
+      </Button>
+    </div>
+  );
+};
 
 // Step 4: Payment
 const PaymentStep = ({
   payment,
   setPayment,
+  isLoading,
+  setIsLoading,
 }: {
   payment: PaymentData;
   setPayment: React.Dispatch<React.SetStateAction<PaymentData>>;
+  isLoading: boolean;
+  setIsLoading: (v: boolean) => void;
 }) => (
-  <div className="space-y-6">
-    <div>
-      <h2 className="text-2xl font-bold mb-2">Set up payment</h2>
-      <p className="text-muted-foreground">
-        Start your 14-day free trial. No charges until the trial ends.
-      </p>
-    </div>
+  <Elements stripe={getStripe()}>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Set up payment</h2>
+        <p className="text-muted-foreground">
+          Start your 14-day free trial. No charges until the trial ends.
+        </p>
+      </div>
 
-    {/* Plan Selection */}
-    <RadioGroup value={payment.plan} onValueChange={(val) => setPayment({ ...payment, plan: val })}>
-      <div className="grid md:grid-cols-3 gap-4">
-        {[
-          { id: "starter", name: "Starter", price: "$29", features: ["Up to 100 orders/month", "Basic analytics"] },
-          { id: "growth", name: "Growth", price: "$79", features: ["Up to 1,000 orders/month", "Advanced analytics"], recommended: true },
-          { id: "scale", name: "Scale", price: "$199", features: ["Unlimited orders", "Custom domains"] },
-        ].map((plan) => (
-          <div
-            key={plan.id}
-            className={`relative rounded-xl border-2 p-4 cursor-pointer transition-all ${
-              payment.plan === plan.id
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-primary/50"
-            }`}
-            onClick={() => setPayment({ ...payment, plan: plan.id })}
-          >
-            {plan.recommended && (
-              <span className="absolute -top-2 left-4 px-2 py-0.5 text-xs font-medium rounded-full gradient-bg text-primary-foreground">
-                Recommended
-              </span>
-            )}
-            <div className="flex items-start gap-3">
-              <RadioGroupItem value={plan.id} id={plan.id} className="mt-1" />
-              <div>
-                <Label htmlFor={plan.id} className="text-base font-semibold cursor-pointer">
-                  {plan.name}
-                </Label>
-                <p className="text-2xl font-bold gradient-text mt-1">{plan.price}<span className="text-sm text-muted-foreground font-normal">/mo</span></p>
-                <ul className="mt-2 space-y-1">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="text-sm text-muted-foreground flex items-center gap-1">
-                      <Check className="w-3 h-3 text-primary" /> {feature}
-                    </li>
-                  ))}
-                </ul>
+      {/* Plan Selection */}
+      <RadioGroup value={payment.plan} onValueChange={(val) => setPayment({ ...payment, plan: val })}>
+        <div className="grid md:grid-cols-3 gap-4">
+          {PLANS.map((plan) => (
+            <div
+              key={plan.id}
+              className={`relative rounded-xl border-2 p-4 cursor-pointer transition-all ${
+                payment.plan === plan.id
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50"
+              }`}
+              onClick={() => setPayment({ ...payment, plan: plan.id })}
+            >
+              {plan.recommended && (
+                <span className="absolute -top-2 left-4 px-2 py-0.5 text-xs font-medium rounded-full gradient-bg text-primary-foreground">
+                  Recommended
+                </span>
+              )}
+              <div className="flex items-start gap-3">
+                <RadioGroupItem value={plan.id} id={plan.id} className="mt-1" />
+                <div>
+                  <Label htmlFor={plan.id} className="text-base font-semibold cursor-pointer">
+                    {plan.name}
+                  </Label>
+                  <p className="text-2xl font-bold gradient-text mt-1">${plan.monthlyPrice}<span className="text-sm text-muted-foreground font-normal">/mo</span></p>
+                  <ul className="mt-2 space-y-1">
+                    {plan.features.map((feature) => (
+                      <li key={feature} className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Check className="w-3 h-3 text-primary" /> {feature}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-      </div>
-    </RadioGroup>
+          ))}
+        </div>
+      </RadioGroup>
 
-    {/* Payment Details */}
-    <div className="space-y-4">
-      <h3 className="font-semibold">Payment Details</h3>
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="cardNumber">Card Number</Label>
-          <Input
-            id="cardNumber"
-            placeholder="4242 4242 4242 4242"
-            value={payment.cardNumber}
-            onChange={(e) => setPayment({ ...payment, cardNumber: e.target.value })}
-          />
-        </div>
+      {/* Payment Details */}
+      <div className="space-y-4">
+        <h3 className="font-semibold">Payment Details</h3>
+
         <div className="space-y-2">
-          <Label htmlFor="expiryDate">Expiry Date</Label>
-          <Input
-            id="expiryDate"
-            placeholder="MM/YY"
-            value={payment.expiryDate}
-            onChange={(e) => setPayment({ ...payment, expiryDate: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="cvv">CVV</Label>
-          <Input
-            id="cvv"
-            placeholder="123"
-            value={payment.cvv}
-            onChange={(e) => setPayment({ ...payment, cvv: e.target.value })}
-          />
-        </div>
-        <div className="space-y-2 md:col-span-2">
           <Label htmlFor="billingEmail">Billing Email</Label>
           <Input
             id="billingEmail"
+            type="email"
             placeholder="billing@company.com"
             value={payment.billingEmail}
             onChange={(e) => setPayment({ ...payment, billingEmail: e.target.value })}
           />
         </div>
+
+        {payment.paymentMethodId ? (
+          <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg text-green-700 dark:text-green-400 text-sm">
+            <Check className="h-4 w-4" />
+            Payment method saved. You can proceed.
+          </div>
+        ) : (
+          <StripeCardForm
+            onPaymentMethodCreated={(id) => setPayment({ ...payment, paymentMethodId: id })}
+            isLoading={isLoading}
+            setIsLoading={setIsLoading}
+          />
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <CreditCard className="w-4 h-4" />
+        <span>Secured by Stripe. Your payment information is encrypted.</span>
       </div>
     </div>
-
-    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-      <CreditCard className="w-4 h-4" />
-      <span>Secured by Stripe. Your payment information is encrypted.</span>
-    </div>
-  </div>
+  </Elements>
 );
 
 interface LaunchOptionsData {
@@ -1115,7 +1085,7 @@ interface LaunchOptionsData {
   goLiveNow: boolean;
 }
 
-// Step 5: Launch
+// Step 6: Launch (template already chosen in previous step)
 const LaunchStep = ({
   launchOptions,
   setLaunchOptions,
@@ -1213,6 +1183,66 @@ const LaunchStep = ({
       <p className="text-sm text-muted-foreground">
         Click "Launch My Store" to start your journey.
       </p>
+    </div>
+  </div>
+);
+
+// Step 3: Confirmation — shown after request submitted
+const ConfirmationStep = ({ businessName }: { businessName: string }) => (
+  <div className="space-y-6 text-center">
+    <div className="flex flex-col items-center gap-4">
+      <div className="w-20 h-20 rounded-full gradient-bg flex items-center justify-center">
+        <Rocket className="w-10 h-10 text-primary-foreground" />
+      </div>
+      <div>
+        <h2 className="text-2xl font-bold mb-2">Request submitted!</h2>
+        <p className="text-muted-foreground max-w-md mx-auto">
+          Thanks{businessName ? `, ${businessName}` : ""}! Our team has received your request and will start building your eSIM store. We'll reach out via email within <strong>1–2 business days</strong> to confirm your brand details and provide your store link.
+        </p>
+      </div>
+    </div>
+
+    <div className="grid sm:grid-cols-3 gap-4 text-left">
+      {[
+        {
+          step: "1",
+          title: "Team review",
+          desc: "We review your business info and plan selection",
+        },
+        {
+          step: "2",
+          title: "Store built",
+          desc: "We build, brand, and deploy your store on esimlaunch.com",
+        },
+        {
+          step: "3",
+          title: "You go live",
+          desc: "We hand over your store link — you manage everything from the dashboard",
+        },
+      ].map((item) => (
+        <div key={item.step} className="p-4 rounded-xl border bg-card text-left">
+          <div className="w-8 h-8 rounded-full gradient-bg text-primary-foreground text-sm font-bold flex items-center justify-center mb-3">
+            {item.step}
+          </div>
+          <p className="font-semibold text-sm mb-1">{item.title}</p>
+          <p className="text-xs text-muted-foreground">{item.desc}</p>
+        </div>
+      ))}
+    </div>
+
+    <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 text-left">
+      <p className="text-sm">
+        <span className="font-medium">While you wait:</span> Head to your dashboard to select the eSIM packages you want to sell and configure your pricing. This helps us set up your store faster.
+      </p>
+    </div>
+
+    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+      <a
+        href="mailto:support@esimlaunch.com?subject=Easy Way Store Build"
+        className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+      >
+        Questions? Email us at support@esimlaunch.com
+      </a>
     </div>
   </div>
 );

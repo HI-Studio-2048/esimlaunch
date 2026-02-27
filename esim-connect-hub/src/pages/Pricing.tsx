@@ -16,7 +16,7 @@ const pricingPlans = [
     yearlyPrice: 288,
     features: [
       "Up to 100 orders/month",
-      "1 Provider integration",
+      "eSIM Access integration",
       "Basic analytics dashboard",
       "Email support",
       "Custom branding",
@@ -33,7 +33,7 @@ const pricingPlans = [
     yearlyPrice: 786,
     features: [
       "Up to 1,000 orders/month",
-      "5 Provider integrations",
+      "eSIM Access + advanced pricing",
       "Advanced analytics & reports",
       "Priority email support",
       "White label domain",
@@ -53,7 +53,7 @@ const pricingPlans = [
     yearlyPrice: 1982,
     features: [
       "Unlimited orders",
-      "Unlimited providers",
+      "Full eSIM Access catalog",
       "Real-time analytics",
       "24/7 priority support",
       "Multiple admin users",
@@ -69,7 +69,7 @@ const pricingPlans = [
 
 const comparisonFeatures = [
   { name: "Monthly Orders", starter: "100", growth: "1,000", scale: "Unlimited" },
-  { name: "Provider Integrations", starter: "1", growth: "5", scale: "Unlimited" },
+  { name: "eSIM Catalog Access", starter: "Full", growth: "Full", scale: "Full" },
   { name: "Custom Branding", starter: true, growth: true, scale: true },
   { name: "White Label Domain", starter: false, growth: true, scale: true },
   { name: "Margin Control", starter: false, growth: true, scale: true },

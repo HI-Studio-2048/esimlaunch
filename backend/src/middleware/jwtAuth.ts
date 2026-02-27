@@ -1,5 +1,20 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/authService';
+import { authenticateSessionCookie } from './sessionAuth';
+
+/**
+ * Try session cookie (DB) first, then JWT. Use for dashboard/me so auth works with cookies (no localStorage).
+ */
+export async function authenticateSessionOrJWT(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  await authenticateSessionCookie(req, res, async () => {
+    if (req.merchant) return next();
+    return authenticateJWT(req, res, next);
+  });
+}
 
 /**
  * JWT Authentication Middleware
@@ -55,6 +70,11 @@ export async function authenticateJWT(
     });
   }
 }
+
+
+
+
+
 
 
 

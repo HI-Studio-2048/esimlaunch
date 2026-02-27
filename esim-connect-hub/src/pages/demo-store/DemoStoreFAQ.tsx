@@ -1,6 +1,9 @@
 import { motion } from "framer-motion";
 import { HelpCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { usePublicStore } from "@/hooks/usePublicStore";
+import { useStorePath } from "@/hooks/useStorePath";
 import {
   Accordion,
   AccordionContent,
@@ -8,7 +11,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 
-const faqs = [
+const DEFAULT_FAQS = [
   {
     question: "How do I activate my eSIM?",
     answer: "After purchase, you'll receive a QR code via email. Open your phone settings, go to Cellular/Mobile Data, tap Add Cellular Plan, and scan the QR code. Follow the on-screen instructions to complete activation.",
@@ -36,7 +39,12 @@ const faqs = [
 ];
 
 export default function DemoStoreFAQ() {
-  const { config } = useDemoStore();
+  const { config, storeId } = useDemoStore();
+  const { data: storeData } = usePublicStore(storeId);
+  const basePath = useStorePath();
+  const faqs = (storeData?.templateSettings?.faqs && storeData.templateSettings.faqs.length > 0)
+    ? storeData.templateSettings.faqs
+    : DEFAULT_FAQS;
 
   return (
     <div className="min-h-screen bg-background">
@@ -99,13 +107,13 @@ export default function DemoStoreFAQ() {
           <p className="text-muted-foreground mb-6">
             Our support team is here to help 24/7
           </p>
-          <a
-            href="/demo-store/contact"
+          <Link
+            to={`${basePath}/contact`}
             className="inline-block px-6 py-3 rounded-lg text-white font-medium hover:opacity-90 transition-opacity"
             style={{ background: config.primaryColor }}
           >
             Contact Support
-          </a>
+          </Link>
         </div>
       </section>
     </div>

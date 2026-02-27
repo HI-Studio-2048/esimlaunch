@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { seoService } from '../services/seoService';
 import { prisma } from '../lib/prisma';
 
@@ -53,7 +53,7 @@ router.get('/store/:storeId', async (req, res, next) => {
  * PUT /api/seo/store/:storeId
  * Update store SEO configuration (requires authentication)
  */
-router.put('/store/:storeId', authenticateJWT, async (req, res, next) => {
+router.put('/store/:storeId', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const { storeId } = req.params;
     const merchantId = (req as any).merchant!.id;

@@ -59,10 +59,17 @@ export interface ProfileInfo {
   msisdn?: string;
   smsStatus: number;
   dataType: number;
+  // ac = LPA activation code string, e.g. "LPA:1$smdp.server.com$matchingId"
+  ac?: string;
   qrCodeUrl?: string;
+  shortUrl?: string;
   smdpStatus: string;
   esimStatus: string;
   eid?: string;
+  // Device info (eSIM Access may return snake_case: device_brand, device_type, device_model)
+  deviceBrand?: string;
+  deviceType?: string;
+  deviceModel?: string;
   activeType?: string;
   expiredTime?: string;
   totalVolume: number;
@@ -153,6 +160,11 @@ export interface RegionsResponse {
   obj?: RegionInfo[];
 }
 
+// Hidden platform-level markup applied to all package prices
+// exposed through our APIs. This is NOT sent to eSIM Access — it is
+// only used for what merchants and internal tools see.
+const PLATFORM_PRICE_MARKUP = 1.25;
+
 class ESIMAccessService {
   private client: AxiosInstance;
 
@@ -188,6 +200,21 @@ class ESIMAccessService {
     );
   }
 
+  // Internal helper to fetch raw packages from eSIM Access without any markup
+  private async fetchPackagesRaw(params?: {
+    locationCode?: string;
+    type?: 'BASE' | 'TOPUP';
+    packageCode?: string;
+    slug?: string;
+    iccid?: string;
+  }): Promise<PackageListResponse> {
+    const response = await this.client.post<PackageListResponse>(
+      '/api/v1/open/package/list',
+      params || {}
+    );
+    return response.data;
+  }
+
   /**
    * Get all data packages
    * @param locationCode Optional Alpha-2 ISO country code or !RG (Regional) or !GL (Global)
@@ -203,11 +230,51 @@ class ESIMAccessService {
     slug?: string;
     iccid?: string;
   }): Promise<PackageListResponse> {
-    const response = await this.client.post<PackageListResponse>(
-      '/api/v1/open/package/list',
-      params || {}
-    );
-    return response.data;
+    const data = await this.fetchPackagesRaw(params);
+
+    // Apply hidden platform markup to all package prices that are returned
+    if (data.success && data.obj?.packageList?.length) {
+      data.obj.packageList = data.obj.packageList.map((pkg) => {
+        const originalPrice = typeof pkg.price === 'number' ? pkg.price : 0;
+        const markedUpPrice = Math.round(originalPrice * PLATFORM_PRICE_MARKUP);
+        return {
+          ...pkg,
+          price: markedUpPrice,
+        };
+      });
+    }
+
+    return data;
+  }
+
+  /**
+   * Compute total order amount in 1/10000 USD from package list (for API amount field).
+   * Fetches BASE packages and looks up price for each packageInfoList item by packageCode or slug.
+   */
+  async getOrderAmountFromPackages(packageInfoList: Array<{ packageCode?: string; slug?: string; count: number }>): Promise<number> {
+    // Use raw (unmarked) prices when computing the amount that will be
+    // sent to eSIM Access. The platform-level markup is applied only to
+    // what merchants see, not to what we pay the provider.
+    const listRes = await this.fetchPackagesRaw({ type: 'BASE' });
+    if (!listRes.success || !listRes.obj?.packageList?.length) {
+      throw new Error('Failed to fetch package list or no packages available');
+    }
+    const packages = listRes.obj.packageList;
+    const byCode = new Map<string, PackageInfo>();
+    const bySlug = new Map<string, PackageInfo>();
+    for (const p of packages) {
+      if (p.packageCode) byCode.set(p.packageCode, p);
+      if (p.slug) bySlug.set(p.slug, p);
+    }
+    let total = 0;
+    for (const item of packageInfoList) {
+      const pkg = (item.packageCode && byCode.get(item.packageCode)) || (item.slug && bySlug.get(item.slug));
+      if (!pkg) {
+        throw new Error(`Package not found: ${item.packageCode || item.slug || 'unknown'}`);
+      }
+      total += pkg.price * item.count;
+    }
+    return total;
   }
 
   /**
@@ -377,6 +444,11 @@ class ESIMAccessService {
 }
 
 export const esimAccessService = new ESIMAccessService();
+
+
+
+
+
 
 
 

@@ -25,18 +25,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { User, Lock, Trash2, Eye, EyeOff, Save, Mail, CheckCircle, XCircle, Shield, Monitor, LogOut, Loader2, Globe, Webhook, CreditCard, FileText, Key, Plus, Copy } from "lucide-react";
+import { User, Lock, Trash2, Eye, EyeOff, Save, Mail, CheckCircle, XCircle, Shield, Monitor, LogOut, Loader2, Globe, Webhook, CreditCard, FileText } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Link } from "react-router-dom";
 import { DomainConfiguration } from "@/components/shared/DomainConfiguration";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -92,26 +84,11 @@ export default function Settings() {
         }
       };
 
-      // Load API keys
-      const loadApiKeys = async () => {
-        try {
-          const apiKeysData = await apiClient.listApiKeys();
-          // Filter out inactive (revoked) keys
-          const activeKeys = apiKeysData.filter(key => key.isActive !== false);
-          setApiKeys(activeKeys);
-        } catch (err) {
-          console.error('Failed to load API keys:', err);
-        } finally {
-          setIsLoadingApiKeys(false);
-        }
-      };
-
       // Load all data in parallel
       await Promise.all([
         load2FAStatus(),
         loadSessions(),
         loadStores(),
-        loadApiKeys(),
       ]);
     };
 
@@ -156,7 +133,6 @@ export default function Settings() {
   }, [user]);
 
   const handleDomainUpdate = async () => {
-    // Reload stores after domain update
     try {
       const storesData = await apiClient.listStores();
       setStores(storesData);
@@ -302,7 +278,6 @@ export default function Settings() {
   const [stores, setStores] = useState<any[]>([]);
   const [isLoadingStores, setIsLoadingStores] = useState(true);
   const [selectedStore, setSelectedStore] = useState<any | null>(null);
-
   // API Keys state
   const [apiKeys, setApiKeys] = useState<any[]>([]);
   const [isLoadingApiKeys, setIsLoadingApiKeys] = useState(true);
@@ -310,6 +285,19 @@ export default function Settings() {
   const [newApiKeyName, setNewApiKeyName] = useState("");
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
   const [keyToRevoke, setKeyToRevoke] = useState<string | null>(null);
+
+  // SMTP state
+  const [smtpData, setSmtpData] = useState({
+    smtpHost: "",
+    smtpPort: "587",
+    smtpUser: "",
+    smtpPass: "",
+    smtpFromName: "",
+    smtpFromEmail: "",
+  });
+  const [isSavingSmtp, setIsSavingSmtp] = useState(false);
+  const [isSendingTestEmail, setIsSendingTestEmail] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState("");
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -497,6 +485,44 @@ export default function Settings() {
     }
   };
 
+  const handleSaveSmtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingSmtp(true);
+    try {
+      await apiClient.updateProfile(undefined, undefined, {
+        smtpHost: smtpData.smtpHost || undefined,
+        smtpPort: smtpData.smtpPort ? parseInt(smtpData.smtpPort) : undefined,
+        smtpUser: smtpData.smtpUser || undefined,
+        smtpPass: smtpData.smtpPass || undefined,
+        smtpFromName: smtpData.smtpFromName || undefined,
+        smtpFromEmail: smtpData.smtpFromEmail || undefined,
+      });
+      toast({ title: "SMTP settings saved", description: "Your email configuration has been updated." });
+    } catch (err) {
+      const errorMessage = err instanceof ApiError ? err.message : "Failed to save SMTP settings.";
+      toast({ title: "Error", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsSavingSmtp(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailAddress) {
+      toast({ title: "Enter email", description: "Please enter a recipient email address.", variant: "destructive" });
+      return;
+    }
+    setIsSendingTestEmail(true);
+    try {
+      await apiClient.sendTestEmail(testEmailAddress);
+      toast({ title: "Test email sent", description: `Test email sent to ${testEmailAddress}.` });
+    } catch (err) {
+      const errorMessage = err instanceof ApiError ? err.message : "Failed to send test email.";
+      toast({ title: "Error", description: errorMessage, variant: "destructive" });
+    } finally {
+      setIsSendingTestEmail(false);
+    }
+  };
+
   const formatUserAgent = (userAgent: string | null) => {
     if (!userAgent) return 'Unknown';
     // Simple parsing - can be improved
@@ -663,6 +689,107 @@ export default function Settings() {
             </CardContent>
           </Card>
 
+          {/* SMTP Configuration */}
+          <Card className="mb-6">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-primary" />
+                <CardTitle>Email (SMTP) Configuration</CardTitle>
+              </div>
+              <CardDescription>
+                Configure a custom SMTP server to send emails from your own domain. Leave blank to use the default email service.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveSmtp} className="space-y-4">
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpHost">SMTP Host</Label>
+                    <Input
+                      id="smtpHost"
+                      value={smtpData.smtpHost}
+                      onChange={(e) => setSmtpData({ ...smtpData, smtpHost: e.target.value })}
+                      placeholder="smtp.gmail.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpPort">SMTP Port</Label>
+                    <Input
+                      id="smtpPort"
+                      type="number"
+                      value={smtpData.smtpPort}
+                      onChange={(e) => setSmtpData({ ...smtpData, smtpPort: e.target.value })}
+                      placeholder="587"
+                    />
+                  </div>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpUser">SMTP Username</Label>
+                    <Input
+                      id="smtpUser"
+                      value={smtpData.smtpUser}
+                      onChange={(e) => setSmtpData({ ...smtpData, smtpUser: e.target.value })}
+                      placeholder="you@yourdomain.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpPass">SMTP Password</Label>
+                    <Input
+                      id="smtpPass"
+                      type="password"
+                      value={smtpData.smtpPass}
+                      onChange={(e) => setSmtpData({ ...smtpData, smtpPass: e.target.value })}
+                      placeholder="••••••••"
+                    />
+                  </div>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpFromName">From Name</Label>
+                    <Input
+                      id="smtpFromName"
+                      value={smtpData.smtpFromName}
+                      onChange={(e) => setSmtpData({ ...smtpData, smtpFromName: e.target.value })}
+                      placeholder="Your Store Name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="smtpFromEmail">From Email</Label>
+                    <Input
+                      id="smtpFromEmail"
+                      type="email"
+                      value={smtpData.smtpFromEmail}
+                      onChange={(e) => setSmtpData({ ...smtpData, smtpFromEmail: e.target.value })}
+                      placeholder="noreply@yourdomain.com"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 pt-2">
+                  <Button type="submit" disabled={isSavingSmtp}>
+                    {isSavingSmtp ? (
+                      <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />Saving...</span>
+                    ) : (
+                      <><Save className="w-4 h-4 mr-2" />Save SMTP Settings</>
+                    )}
+                  </Button>
+                  <div className="flex items-center gap-2 flex-1">
+                    <Input
+                      type="email"
+                      value={testEmailAddress}
+                      onChange={(e) => setTestEmailAddress(e.target.value)}
+                      placeholder="Send test to..."
+                      className="max-w-xs"
+                    />
+                    <Button type="button" variant="outline" onClick={handleSendTestEmail} disabled={isSendingTestEmail}>
+                      {isSendingTestEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Test"}
+                    </Button>
+                  </div>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+
           {/* Domain Configuration */}
           <Card className="mb-6">
             <CardHeader>
@@ -700,6 +827,37 @@ export default function Settings() {
               )}
             </CardContent>
           </Card>
+
+          {/* Store template — managed by eSIMLaunch team */}
+          {stores.length > 0 && selectedStore && (
+            <Card className="mb-6">
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Globe className="w-5 h-5 text-primary" />
+                  <CardTitle>Store design</CardTitle>
+                </div>
+                <CardDescription>
+                  Your store template and design are handled by the eSIMLaunch team.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-xl bg-primary/5 border border-primary/20 p-5 flex flex-col sm:flex-row items-start gap-4 justify-between">
+                  <div>
+                    <p className="font-medium text-sm mb-1">Design is managed for you</p>
+                    <p className="text-sm text-muted-foreground max-w-md">
+                      Our team selects and builds the best template for your store based on your brand. If you'd like to request a design change or a different theme, contact us directly.
+                    </p>
+                  </div>
+                  <a
+                    href="mailto:support@esimlaunch.com?subject=Store Design Request"
+                    className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors whitespace-nowrap"
+                  >
+                    Request a change
+                  </a>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* 2FA Settings */}
           <Card className="mb-6">
@@ -928,162 +1086,6 @@ export default function Settings() {
                           <LogOut className="w-4 h-4" />
                         )}
                       </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* API Keys Section */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Key className="w-5 h-5" />
-                    API Keys
-                  </CardTitle>
-                  <CardDescription>
-                    Manage your API keys for programmatic access to the eSIM Access API
-                  </CardDescription>
-                </div>
-                <Dialog open={showApiKeyDialog} onOpenChange={setShowApiKeyDialog}>
-                  <DialogTrigger asChild>
-                    <Button variant="gradient" size="sm">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create API Key
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Create New API Key</DialogTitle>
-                      <DialogDescription>
-                        Give your API key a name to help you identify it later.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="key-name">Key Name (Optional)</Label>
-                        <Input
-                          id="key-name"
-                          value={newApiKeyName}
-                          onChange={(e) => setNewApiKeyName(e.target.value)}
-                          placeholder="e.g., Production API Key"
-                        />
-                      </div>
-                      {newApiKey && (
-                        <div className="p-4 bg-muted rounded-lg">
-                          <p className="text-sm font-medium mb-2">Your API Key (copy this now):</p>
-                          <div className="flex items-center gap-2">
-                            <code className="flex-1 p-2 bg-background rounded text-sm font-mono break-all overflow-wrap-anywhere min-w-0">
-                              {newApiKey}
-                            </code>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => copyApiKey(newApiKey)}
-                              className="shrink-0"
-                            >
-                              <Copy className="w-4 h-4" />
-                            </Button>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-2">
-                            This key will not be shown again. Make sure to save it securely.
-                          </p>
-                        </div>
-                      )}
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setShowApiKeyDialog(false);
-                            setNewApiKey(null);
-                            setNewApiKeyName("");
-                          }}
-                        >
-                          {newApiKey ? "Close" : "Cancel"}
-                        </Button>
-                        {!newApiKey && (
-                          <Button onClick={handleCreateApiKey}>
-                            Create Key
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {isLoadingApiKeys ? (
-                <div className="space-y-3">
-                  {[1, 2].map((i) => (
-                    <div key={i} className="h-16 bg-muted rounded-lg animate-pulse" />
-                  ))}
-                </div>
-              ) : apiKeys.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <Key className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                  <p>No API keys yet. Create your first one to get started.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {apiKeys.map((key) => (
-                    <div
-                      key={key.id}
-                      className="flex items-center justify-between p-4 bg-muted rounded-lg"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <Key className="w-5 h-5 text-muted-foreground" />
-                          <div>
-                            <div className="font-medium">
-                              {key.name || "Unnamed Key"}
-                            </div>
-                            <div className="text-sm text-muted-foreground font-mono">
-                              {key.keyPrefix}...
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-2">
-                          Created {new Date(key.createdAt).toLocaleDateString()} • 
-                          Rate limit: {key.rateLimit}/min
-                          {key.lastUsedAt && ` • Last used: ${new Date(key.lastUsedAt).toLocaleDateString()}`}
-                        </div>
-                      </div>
-                      <AlertDialog open={keyToRevoke === key.id} onOpenChange={(open) => {
-                        if (!open) setKeyToRevoke(null);
-                      }}>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setKeyToRevoke(key.id)}
-                            className="text-destructive hover:text-destructive"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Revoke API Key?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Are you sure you want to revoke this API key? This action cannot be undone.
-                              {key.name && ` The key "${key.name}" will no longer work.`}
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel onClick={() => setKeyToRevoke(null)}>Cancel</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => handleRevokeApiKey(key.id)}
-                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            >
-                              Revoke Key
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
                     </div>
                   ))}
                 </div>

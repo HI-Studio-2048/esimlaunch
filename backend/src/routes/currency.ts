@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { currencyService } from '../services/currencyService';
 import { prisma } from '../lib/prisma';
 
@@ -106,7 +106,7 @@ router.get('/store/:storeId', async (req, res, next) => {
  * PUT /api/currency/store/:storeId
  * Update store currency settings (requires authentication)
  */
-router.put('/store/:storeId', authenticateJWT, async (req, res, next) => {
+router.put('/store/:storeId', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const { storeId } = req.params;
     const merchantId = (req as any).merchant!.id;

@@ -65,24 +65,20 @@ const faqs = {
   ],
   "providers": [
     {
-      question: "Which eSIM providers are available?",
-      answer: "We partner with multiple leading global eSIM providers including Airalo, eSIM Go, GigSky, and more. Combined, they offer coverage in 190+ countries with competitive rates."
+      question: "Which eSIM provider powers the platform?",
+      answer: "eSIMLaunch is powered exclusively by eSIM Access, a leading global eSIM infrastructure provider. They offer coverage in 190+ countries with competitive wholesale rates and reliable uptime."
     },
     {
-      question: "Can I connect multiple providers?",
-      answer: "Yes! Depending on your plan, you can connect multiple providers simultaneously. This gives you access to the best rates and coverage for different regions."
+      question: "Can I set different margins for different countries?",
+      answer: "Absolutely! Our pricing engine allows you to set custom margins by country, region, or even specific plans. You have full control over your retail pricing."
     },
     {
-      question: "How do I add a new provider?",
-      answer: "Adding a provider is easy. Go to Settings > Providers in your dashboard, select the provider you want to add, enter your API credentials, and you're connected within minutes."
+      question: "What countries are covered?",
+      answer: "Through eSIM Access, your store covers 190+ countries worldwide including North America, Europe, Asia-Pacific, Middle East, Africa, and Latin America."
     },
     {
-      question: "Can I set different margins for different providers?",
-      answer: "Absolutely! Our pricing engine allows you to set custom margins by provider, region, or even specific plans. You have full control over your retail pricing."
-    },
-    {
-      question: "What if a provider has an outage?",
-      answer: "Our system automatically monitors provider availability. If one provider experiences issues, orders can be automatically routed to backup providers to ensure your customers are never left without service."
+      question: "How reliable is the eSIM fulfillment?",
+      answer: "Our system is connected to eSIM Access via real-time API. When a customer purchases, the eSIM is instantly provisioned and delivered — typically within seconds."
     },
   ],
   "technical": [

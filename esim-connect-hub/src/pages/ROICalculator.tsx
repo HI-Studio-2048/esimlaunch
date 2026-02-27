@@ -6,18 +6,18 @@ import { Calculator, TrendingUp, PiggyBank, Zap } from "lucide-react";
 const benefits = [
   {
     icon: TrendingUp,
-    title: "Higher Conversions",
-    description: "eSIMLaunch's optimized checkout flow increases conversion rates by up to 30%",
+    title: "You Set the Price",
+    description: "Full control over your markup — charge what the market allows, not what providers dictate",
   },
   {
     icon: PiggyBank,
-    title: "Better Margins",
-    description: "Access wholesale pricing from multiple providers to maximize your profits",
+    title: "Wholesale Access",
+    description: "Access competitive wholesale rates via eSIM Access and keep the entire markup as your profit",
   },
   {
     icon: Zap,
-    title: "Instant Delivery",
-    description: "Automated eSIM delivery means happy customers and fewer support tickets",
+    title: "Scale Without Limits",
+    description: "Automated fulfillment means your profits grow with every order, no extra overhead",
   },
 ];
 
@@ -44,12 +44,12 @@ export default function ROICalculatorPage() {
               ROI Calculator
             </div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold font-display mb-6">
-              Calculate Your{" "}
-              <span className="gradient-text">Revenue Potential</span>
+              See Exactly{" "}
+              <span className="gradient-text">What You'll Earn</span>
             </h1>
             <p className="text-lg text-muted-foreground">
-              See how much additional revenue you could generate by switching to eSIMLaunch.
-              Adjust the sliders to match your business metrics.
+              Enter your wholesale cost and markup to instantly see your profit per sale,
+              monthly earnings, and annual revenue potential.
             </p>
           </motion.div>
 
@@ -69,8 +69,8 @@ export default function ROICalculatorPage() {
         <div className="container-custom">
           <SectionHeader
             badge="Why eSIMLaunch?"
-            title="How We Boost Your Revenue"
-            description="Our platform is designed to maximize every aspect of your eSIM business"
+            title="Your Business, Your Margins"
+            description="We give you the tools to price confidently and profit consistently"
             align="center"
           />
 
@@ -100,9 +100,9 @@ export default function ROICalculatorPage() {
         <div className="container-custom">
           <div className="max-w-2xl mx-auto text-center">
             <p className="text-sm text-muted-foreground">
-              <strong>Methodology:</strong> Our calculations assume a 30% improvement in conversion rate
-              and 20% increase in average order value based on data from existing eSIMLaunch customers.
-              Actual results may vary based on your specific business model, traffic quality, and market conditions.
+              <strong>Note:</strong> These calculations are based on the wholesale cost and markup you enter.
+              Actual results may vary depending on your provider, plan type, and market conditions.
+              Platform subscription fees are not included in this estimate.
             </p>
           </div>
         </div>

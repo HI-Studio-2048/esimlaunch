@@ -1,9 +1,10 @@
 import Stripe from 'stripe';
 import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
+import { BalanceTransactionType } from '@prisma/client';
 
 const stripe = new Stripe(env.stripeSecretKey, {
-  apiVersion: '2024-11-20.acacia',
+  apiVersion: '2026-01-28.clover' as any,
 });
 
 export interface CreatePaymentIntentParams {
@@ -279,19 +280,32 @@ export const paymentService = {
         },
       });
 
-      // Update customer order status if exists
+      // If this was a store (Easy) order, credit merchant balance and record refund
       const customerOrder = await prisma.customerOrder.findUnique({
         where: { paymentIntentId },
+        select: { id: true, merchantId: true, totalAmount: true },
       });
 
       if (customerOrder) {
-        await prisma.customerOrder.update({
-          where: { id: customerOrder.id },
-          data: {
-            status: 'CANCELLED', // Or create a REFUNDED status
-            updatedAt: new Date(),
-          },
-        });
+        const refundCents = Number(customerOrder.totalAmount);
+        await prisma.$transaction([
+          prisma.customerOrder.update({
+            where: { id: customerOrder.id },
+            data: { status: 'CANCELLED', updatedAt: new Date() },
+          }),
+          prisma.merchant.update({
+            where: { id: customerOrder.merchantId },
+            data: { balance: { increment: BigInt(refundCents) } },
+          }),
+          prisma.balanceTransaction.create({
+            data: {
+              merchantId: customerOrder.merchantId,
+              amount: BigInt(refundCents),
+              type: BalanceTransactionType.REFUND,
+              description: `Refund for customer order (payment ${paymentIntentId})`,
+            },
+          }),
+        ]);
       }
     }
   },

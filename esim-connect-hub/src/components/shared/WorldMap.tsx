@@ -23,9 +23,9 @@ const countriesData: Record<string, CountryData> = {
     region: "North America",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "10GB", validity: "30 days", price: "$26" },
-      { provider: "eSIM Go", data: "5GB", validity: "14 days", price: "$15" },
-      { provider: "Truphone", data: "20GB", validity: "30 days", price: "$45" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$26" },
+      { provider: "eSIM Access", data: "5GB", validity: "14 days", price: "$15" },
+      { provider: "eSIM Access", data: "20GB", validity: "30 days", price: "$45" },
     ],
   },
   CA: {
@@ -33,8 +33,8 @@ const countriesData: Record<string, CountryData> = {
     region: "North America",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "5GB", validity: "30 days", price: "$18" },
-      { provider: "GigSky", data: "10GB", validity: "30 days", price: "$35" },
+      { provider: "eSIM Access", data: "5GB", validity: "30 days", price: "$18" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$35" },
     ],
   },
   MX: {
@@ -42,8 +42,8 @@ const countriesData: Record<string, CountryData> = {
     region: "North America",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "3GB", validity: "30 days", price: "$11" },
-      { provider: "eSIM Go", data: "5GB", validity: "14 days", price: "$14" },
+      { provider: "eSIM Access", data: "3GB", validity: "30 days", price: "$11" },
+      { provider: "eSIM Access", data: "5GB", validity: "14 days", price: "$14" },
     ],
   },
   GB: {
@@ -51,9 +51,9 @@ const countriesData: Record<string, CountryData> = {
     region: "Europe",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "10GB", validity: "30 days", price: "$22" },
-      { provider: "Truphone", data: "15GB", validity: "30 days", price: "$38" },
-      { provider: "eSIM Go", data: "5GB", validity: "7 days", price: "$12" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$22" },
+      { provider: "eSIM Access", data: "15GB", validity: "30 days", price: "$38" },
+      { provider: "eSIM Access", data: "5GB", validity: "7 days", price: "$12" },
     ],
   },
   FR: {
@@ -61,8 +61,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Europe",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "10GB", validity: "30 days", price: "$20" },
-      { provider: "GigSky", data: "5GB", validity: "15 days", price: "$18" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$20" },
+      { provider: "eSIM Access", data: "5GB", validity: "15 days", price: "$18" },
     ],
   },
   DE: {
@@ -70,8 +70,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Europe",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "10GB", validity: "30 days", price: "$21" },
-      { provider: "Truphone", data: "20GB", validity: "30 days", price: "$42" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$21" },
+      { provider: "eSIM Access", data: "20GB", validity: "30 days", price: "$42" },
     ],
   },
   ES: {
@@ -79,8 +79,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Europe",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "5GB", validity: "30 days", price: "$16" },
-      { provider: "eSIM Go", data: "10GB", validity: "30 days", price: "$25" },
+      { provider: "eSIM Access", data: "5GB", validity: "30 days", price: "$16" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$25" },
     ],
   },
   IT: {
@@ -88,8 +88,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Europe",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "5GB", validity: "30 days", price: "$17" },
-      { provider: "GigSky", data: "10GB", validity: "30 days", price: "$32" },
+      { provider: "eSIM Access", data: "5GB", validity: "30 days", price: "$17" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$32" },
     ],
   },
   JP: {
@@ -97,9 +97,9 @@ const countriesData: Record<string, CountryData> = {
     region: "Asia",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "10GB", validity: "30 days", price: "$28" },
-      { provider: "Truphone", data: "5GB", validity: "14 days", price: "$18" },
-      { provider: "eSIM Go", data: "3GB", validity: "7 days", price: "$12" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$28" },
+      { provider: "eSIM Access", data: "5GB", validity: "14 days", price: "$18" },
+      { provider: "eSIM Access", data: "3GB", validity: "7 days", price: "$12" },
     ],
   },
   KR: {
@@ -107,8 +107,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Asia",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "10GB", validity: "30 days", price: "$25" },
-      { provider: "GigSky", data: "5GB", validity: "15 days", price: "$16" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$25" },
+      { provider: "eSIM Access", data: "5GB", validity: "15 days", price: "$16" },
     ],
   },
   CN: {
@@ -116,8 +116,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Asia",
     coverage: "partial",
     plans: [
-      { provider: "Airalo", data: "5GB", validity: "30 days", price: "$22" },
-      { provider: "Truphone", data: "10GB", validity: "30 days", price: "$38" },
+      { provider: "eSIM Access", data: "5GB", validity: "30 days", price: "$22" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$38" },
     ],
   },
   TH: {
@@ -125,8 +125,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Asia",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "10GB", validity: "30 days", price: "$18" },
-      { provider: "eSIM Go", data: "5GB", validity: "14 days", price: "$10" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$18" },
+      { provider: "eSIM Access", data: "5GB", validity: "14 days", price: "$10" },
     ],
   },
   AU: {
@@ -134,9 +134,9 @@ const countriesData: Record<string, CountryData> = {
     region: "Oceania",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "10GB", validity: "30 days", price: "$24" },
-      { provider: "Truphone", data: "15GB", validity: "30 days", price: "$38" },
-      { provider: "GigSky", data: "5GB", validity: "14 days", price: "$16" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$24" },
+      { provider: "eSIM Access", data: "15GB", validity: "30 days", price: "$38" },
+      { provider: "eSIM Access", data: "5GB", validity: "14 days", price: "$16" },
     ],
   },
   NZ: {
@@ -144,8 +144,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Oceania",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "5GB", validity: "30 days", price: "$18" },
-      { provider: "eSIM Go", data: "10GB", validity: "30 days", price: "$28" },
+      { provider: "eSIM Access", data: "5GB", validity: "30 days", price: "$18" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$28" },
     ],
   },
   BR: {
@@ -153,8 +153,8 @@ const countriesData: Record<string, CountryData> = {
     region: "South America",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "5GB", validity: "30 days", price: "$16" },
-      { provider: "GigSky", data: "10GB", validity: "30 days", price: "$28" },
+      { provider: "eSIM Access", data: "5GB", validity: "30 days", price: "$16" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$28" },
     ],
   },
   AR: {
@@ -162,7 +162,7 @@ const countriesData: Record<string, CountryData> = {
     region: "South America",
     coverage: "partial",
     plans: [
-      { provider: "Airalo", data: "3GB", validity: "30 days", price: "$12" },
+      { provider: "eSIM Access", data: "3GB", validity: "30 days", price: "$12" },
     ],
   },
   ZA: {
@@ -170,8 +170,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Africa",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "5GB", validity: "30 days", price: "$15" },
-      { provider: "Truphone", data: "10GB", validity: "30 days", price: "$28" },
+      { provider: "eSIM Access", data: "5GB", validity: "30 days", price: "$15" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$28" },
     ],
   },
   EG: {
@@ -179,7 +179,7 @@ const countriesData: Record<string, CountryData> = {
     region: "Africa",
     coverage: "partial",
     plans: [
-      { provider: "Airalo", data: "3GB", validity: "30 days", price: "$10" },
+      { provider: "eSIM Access", data: "3GB", validity: "30 days", price: "$10" },
     ],
   },
   AE: {
@@ -187,8 +187,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Middle East",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "5GB", validity: "30 days", price: "$18" },
-      { provider: "eSIM Go", data: "10GB", validity: "30 days", price: "$32" },
+      { provider: "eSIM Access", data: "5GB", validity: "30 days", price: "$18" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$32" },
     ],
   },
   IN: {
@@ -196,7 +196,7 @@ const countriesData: Record<string, CountryData> = {
     region: "Asia",
     coverage: "partial",
     plans: [
-      { provider: "Airalo", data: "5GB", validity: "30 days", price: "$14" },
+      { provider: "eSIM Access", data: "5GB", validity: "30 days", price: "$14" },
     ],
   },
   SG: {
@@ -204,8 +204,8 @@ const countriesData: Record<string, CountryData> = {
     region: "Asia",
     coverage: "full",
     plans: [
-      { provider: "Airalo", data: "10GB", validity: "30 days", price: "$20" },
-      { provider: "Truphone", data: "5GB", validity: "14 days", price: "$14" },
+      { provider: "eSIM Access", data: "10GB", validity: "30 days", price: "$20" },
+      { provider: "eSIM Access", data: "5GB", validity: "14 days", price: "$14" },
     ],
   },
 };

@@ -22,10 +22,9 @@ const DelayedItem = ({ delay, children, className = "" }: { delay: number; child
 
 export function ProvidersVisual() {
   const providers = [
-    { name: "Airalo", status: "Connected", color: "bg-green-500" },
-    { name: "eSIM Go", status: "Connected", color: "bg-green-500" },
-    { name: "MobiMatter", status: "Active", color: "bg-green-500" },
-    { name: "RedteaGo", status: "Pending", color: "bg-yellow-500" },
+    { name: "eSIM Access", status: "Active", color: "bg-green-500" },
+    { name: "190+ Countries", status: "Covered", color: "bg-green-500" },
+    { name: "Real-time Plans", status: "Live", color: "bg-green-500" },
   ];
   return (
     <div className="space-y-3 p-4">

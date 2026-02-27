@@ -21,8 +21,26 @@ declare global {
 }
 
 /**
+ * For /api/v1: try session cookie (Prisma DB) first, then Bearer (JWT or API key).
+ * So logged-in users can call eSIM Access API without storing an API key in localStorage.
+ */
+export async function authenticateSessionOrApiKey(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  const { authenticateSessionCookie } = await import('./sessionAuth');
+  await authenticateSessionCookie(req, res, async () => {
+    if (req.merchant) return next();
+    return authenticateApiKey(req, res, next);
+  });
+}
+
+/**
  * API Key Authentication Middleware
- * Validates Bearer token API key from Authorization header
+ * Validates Bearer token - accepts either API key or JWT token
+ * For dashboard/internal use: JWT tokens are preferred (works across devices)
+ * For external API use: API keys are required
  */
 export async function authenticateApiKey(
   req: Request,
@@ -36,12 +54,37 @@ export async function authenticateApiKey(
       res.status(401).json({
         success: false,
         errorCode: 'UNAUTHORIZED',
-        errorMessage: 'Missing or invalid Authorization header. Use: Bearer YOUR_API_KEY',
+        errorMessage: 'Missing or invalid Authorization header. Use: Bearer YOUR_API_KEY or JWT_TOKEN',
       });
       return;
     }
 
-    const apiKey = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+    // Determine if token is JWT or API key
+    // JWT tokens have 3 parts separated by dots (header.payload.signature)
+    // API keys start with "sk_live_"
+    const isJWT = token.includes('.') && token.split('.').length === 3;
+    const isAPIKey = token.startsWith('sk_live_');
+
+    // Try JWT authentication first (for dashboard/internal use)
+    if (isJWT) {
+      const { authenticateJWT } = await import('./jwtAuth');
+      // authenticateJWT will handle the response if it fails
+      return authenticateJWT(req, res, next);
+    }
+
+    // If not JWT, try API key authentication
+    if (!isAPIKey) {
+      res.status(401).json({
+        success: false,
+        errorCode: 'UNAUTHORIZED',
+        errorMessage: 'Invalid token format. Use JWT token or API key (starting with sk_live_)',
+      });
+      return;
+    }
+
+    const apiKey = token;
 
     if (!apiKey || apiKey.length < 20) {
       res.status(401).json({
@@ -52,11 +95,13 @@ export async function authenticateApiKey(
       return;
     }
 
-    // Find API key in database
-    // We store hashed keys, so we need to check all active keys
+    // Find API key in database using prefix to narrow candidates first,
+    // then bcrypt-compare only the matching prefix rows (avoids O(n) full-table scan).
+    const keyPrefix = apiKey.substring(0, 12);
     const apiKeys = await prisma.apiKey.findMany({
       where: {
         isActive: true,
+        keyPrefix,
       },
       include: {
         merchant: {
@@ -72,7 +117,6 @@ export async function authenticateApiKey(
 
     let matchedKey = null;
     for (const keyRecord of apiKeys) {
-      // Compare the provided key with the hashed key
       const isValid = await bcrypt.compare(apiKey, keyRecord.key);
       if (isValid) {
         matchedKey = keyRecord;
@@ -213,8 +257,7 @@ export function createRateLimiter() {
       standardHeaders: true,
       legacyHeaders: false,
       keyGenerator: (req) => {
-        // Use API key ID as the rate limit key
-        return req.apiKey?.id || req.ip;
+        return req.apiKey?.id ?? req.ip ?? 'unknown';
       },
     });
 
@@ -246,6 +289,10 @@ export async function optionalAuth(
     next(); // Continue even if auth fails
   }
 }
+
+
+
+
 
 
 

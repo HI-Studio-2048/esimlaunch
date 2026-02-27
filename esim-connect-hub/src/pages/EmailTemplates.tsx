@@ -109,13 +109,15 @@ export default function EmailTemplates() {
         textBody: selectedTemplate.textBody,
       });
 
-      if (result && result.success) {
+      // The API returns { message: '...' } for successful updates
+      // If result exists (not undefined), the update was successful
+      if (result !== undefined) {
         toast({
           title: "Success",
-          description: "Email template updated successfully",
+          description: result.message || "Email template updated successfully",
         });
       } else {
-        throw new Error(result?.errorMessage || 'Failed to update template');
+        throw new Error('Failed to update template');
       }
     } catch (error: any) {
       toast({

@@ -3,15 +3,16 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 // ClerkProvider moved to main.tsx per Clerk's React (Vite) guidelines
-import { ReactNode, useEffect } from "react";
-import { apiClient } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
+import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { CookieBanner } from "@/components/CookieBanner";
 import { DemoStoreProvider } from "@/contexts/DemoStoreContext";
 import { DemoStoreLayout } from "@/components/demo-store/DemoStoreLayout";
+import { SubdomainStoreLoader } from "@/components/demo-store/SubdomainStoreLoader";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
@@ -35,7 +36,6 @@ import Community from "./pages/Community";
 import Status from "./pages/Status";
 import ROICalculator from "./pages/ROICalculator";
 import Demo from "./pages/Demo";
-import Partners from "./pages/Partners";
 import CaseStudies from "./pages/CaseStudies";
 import Changelog from "./pages/Changelog";
 import Login from "./pages/Login";
@@ -64,9 +64,16 @@ import VerifyEmail from "./pages/VerifyEmail";
 import TwoFactorSetup from "./pages/TwoFactorSetup";
 import Settings from "./pages/Settings";
 import Onboarding from "./pages/Onboarding";
-import CoverageChecker from "./pages/CoverageChecker";
+import SSOCallback from "./pages/SSOCallback";
 import StorePreview from "./pages/StorePreview";
-import WorldCoverage from "./pages/WorldCoverage";
+import { PublicStoreInvalidationProvider } from "@/contexts/PublicStoreInvalidationContext";
+import PackageBrowser from "./pages/PackageBrowser";
+import CreateOrder from "./pages/CreateOrder";
+import ProfileManagement from "./pages/ProfileManagement";
+import Balance from "./pages/Balance";
+import OrderHistory from "./pages/OrderHistory";
+import PaymentSettings from "./pages/PaymentSettings";
+import Developer from "./pages/Developer";
 import BlogPost from "./pages/BlogPost";
 import NotFound from "./pages/NotFound";
 import DemoStoreHome from "./pages/demo-store/DemoStoreHome";
@@ -88,39 +95,33 @@ import DemoStoreRefundPolicy from "./pages/demo-store/DemoStoreRefundPolicy";
 
 const queryClient = new QueryClient();
 
-// Shared routes component
-const AppRoutes = () => (
-  <>
-    <ScrollToTop />
-    <Routes>
-      {/* Demo Store Routes - separate layout, no main navbar/footer */}
-      <Route path="/demo-store" element={<DemoStoreLayout />}>
-        <Route index element={<DemoStoreHome />} />
-        <Route path="destinations" element={<DemoStoreDestinations />} />
-        <Route path="country/:countrySlug" element={<DemoStoreCountry />} />
-        <Route path="checkout" element={<DemoStoreCheckout />} />
-        <Route path="about" element={<DemoStoreAbout />} />
-        <Route path="contact" element={<DemoStoreContact />} />
-        <Route path="help-center" element={<DemoStoreHelpCenter />} />
-        <Route path="esim-setup-guide" element={<DemoStoreSetupGuide />} />
-        <Route path="faq" element={<DemoStoreFAQ />} />
-        <Route path="careers" element={<DemoStoreCareers />} />
-        <Route path="press" element={<DemoStorePress />} />
-        <Route path="partners" element={<DemoStorePartners />} />
-        <Route path="terms" element={<DemoStoreTerms />} />
-        <Route path="privacy" element={<DemoStorePrivacy />} />
-        <Route path="cookies" element={<DemoStoreCookies />} />
-        <Route path="refund-policy" element={<DemoStoreRefundPolicy />} />
-      </Route>
+// Determines whether the current path should show the dashboard sidebar
+const isDashboardPath = (pathname: string) =>
+  pathname.startsWith("/dashboard") ||
+  pathname.startsWith("/settings") ||
+  pathname === "/package-selector" ||
+  pathname === "/pricing-config" ||
+  pathname === "/store-preview" ||
+  pathname.startsWith("/stores/");
 
-      {/* Main App Routes */}
-      <Route
-        path="*"
-        element={
-          <div className="min-h-screen flex flex-col">
-            <Navbar />
-            <main className="flex-1">
-              <Routes>
+// Main shell – renders Navbar + optional sidebar + content + optional footer
+const MainShell = () => {
+  const location = useLocation();
+  const inDashboard = isDashboardPath(location.pathname);
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Navbar />
+      <div
+        className={cn(
+          "flex-1 pt-16 md:pt-20",
+          inDashboard ? "flex" : ""
+        )}
+      >
+        {inDashboard && <DashboardSidebar />}
+        <main className={cn(inDashboard ? "flex-1 min-w-0" : "flex-1")}>
+          <Routes>
+            {/* All main app routes */}
                 <Route path="/" element={<Index />} />
                 <Route path="/pricing" element={<Pricing />} />
                 <Route path="/features" element={<Features />} />
@@ -147,11 +148,11 @@ const AppRoutes = () => (
                 <Route path="/status" element={<Status />} />
                 <Route path="/roi-calculator" element={<ROICalculator />} />
                 <Route path="/demo" element={<Demo />} />
-                <Route path="/partners" element={<Partners />} />
                 <Route path="/case-studies" element={<CaseStudies />} />
                 <Route path="/changelog" element={<Changelog />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/sso-callback" element={<SSOCallback />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route path="/checkout" element={<Checkout />} />
@@ -260,6 +261,62 @@ const AppRoutes = () => (
                   } 
                 />
                 <Route 
+                  path="/dashboard/packages" 
+                  element={
+                    <ProtectedRoute>
+                      <PackageBrowser />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/create-order" 
+                  element={
+                    <ProtectedRoute>
+                      <CreateOrder />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/profiles" 
+                  element={
+                    <ProtectedRoute>
+                      <ProfileManagement />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/balance" 
+                  element={
+                    <ProtectedRoute>
+                      <Balance />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/orders" 
+                  element={
+                    <ProtectedRoute>
+                      <OrderHistory />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/payment-settings" 
+                  element={
+                    <ProtectedRoute>
+                      <PaymentSettings />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/developer" 
+                  element={
+                    <ProtectedRoute>
+                      <Developer />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
                   path="/stores/:storeId/domain" 
                   element={
                     <ProtectedRoute>
@@ -275,7 +332,6 @@ const AppRoutes = () => (
                     </ProtectedRoute>
                   } 
                 />
-                <Route path="/coverage" element={<CoverageChecker />} />
                 <Route 
                   path="/store-preview" 
                   element={
@@ -284,15 +340,89 @@ const AppRoutes = () => (
                     </ProtectedRoute>
                   } 
                 />
-                <Route path="/world-coverage" element={<WorldCoverage />} />
                 <Route path="*" element={<NotFound />} />
-              </Routes>
-            </main>
-            <Footer />
-            <CookieBanner />
-          </div>
-        }
-      />
+          </Routes>
+        </main>
+      </div>
+      {!inDashboard && <Footer />}
+      <CookieBanner />
+    </div>
+  );
+};
+
+/**
+ * If the user visits *.esimlaunch.com (a merchant subdomain), redirect to /store/:subdomain/*
+ * so the SubdomainStoreLoader can pick up the correct store.
+ * This is a no-op in local dev (localhost) and on www.esimlaunch.com.
+ */
+function SubdomainRedirect() {
+  const hostname = window.location.hostname;
+  const isEsimlaunchSubdomain =
+    hostname.endsWith(".esimlaunch.com") &&
+    hostname !== "esimlaunch.com" &&
+    !hostname.startsWith("www.");
+
+  if (!isEsimlaunchSubdomain) return null;
+
+  const sub = hostname.replace(/\.esimlaunch\.com$/, "");
+  const path = window.location.pathname;
+  // Avoid redirect loop if already under /store/:sub
+  if (path.startsWith(`/store/${sub}`)) return null;
+
+  // Strip any leading slash and reconstruct under /store/:sub
+  const rest = path === "/" ? "" : path;
+  const search = window.location.search;
+  return <Navigate to={`/store/${sub}${rest}${search}`} replace />;
+}
+
+// Shared routes component
+const AppRoutes = () => (
+  <>
+    <SubdomainRedirect />
+    <ScrollToTop />
+    <Routes>
+      {/* Demo Store Routes - separate layout, no main navbar/footer */}
+      <Route path="/demo-store" element={<DemoStoreLayout />}>
+        <Route index element={<DemoStoreHome />} />
+        <Route path="destinations" element={<DemoStoreDestinations />} />
+        <Route path="country/:countrySlug" element={<DemoStoreCountry />} />
+        <Route path="checkout" element={<DemoStoreCheckout />} />
+        <Route path="about" element={<DemoStoreAbout />} />
+        <Route path="contact" element={<DemoStoreContact />} />
+        <Route path="help-center" element={<DemoStoreHelpCenter />} />
+        <Route path="esim-setup-guide" element={<DemoStoreSetupGuide />} />
+        <Route path="faq" element={<DemoStoreFAQ />} />
+        <Route path="careers" element={<DemoStoreCareers />} />
+        <Route path="press" element={<DemoStorePress />} />
+        <Route path="partners" element={<DemoStorePartners />} />
+        <Route path="terms" element={<DemoStoreTerms />} />
+        <Route path="privacy" element={<DemoStorePrivacy />} />
+        <Route path="cookies" element={<DemoStoreCookies />} />
+        <Route path="refund-policy" element={<DemoStoreRefundPolicy />} />
+      </Route>
+
+      {/* Live Store Routes — /store/:subdomain/* loads the store by subdomain */}
+      <Route path="/store/:subdomain" element={<SubdomainStoreLoader />}>
+        <Route index element={<DemoStoreHome />} />
+        <Route path="destinations" element={<DemoStoreDestinations />} />
+        <Route path="country/:countrySlug" element={<DemoStoreCountry />} />
+        <Route path="checkout" element={<DemoStoreCheckout />} />
+        <Route path="about" element={<DemoStoreAbout />} />
+        <Route path="contact" element={<DemoStoreContact />} />
+        <Route path="help-center" element={<DemoStoreHelpCenter />} />
+        <Route path="esim-setup-guide" element={<DemoStoreSetupGuide />} />
+        <Route path="faq" element={<DemoStoreFAQ />} />
+        <Route path="careers" element={<DemoStoreCareers />} />
+        <Route path="press" element={<DemoStorePress />} />
+        <Route path="partners" element={<DemoStorePartners />} />
+        <Route path="terms" element={<DemoStoreTerms />} />
+        <Route path="privacy" element={<DemoStorePrivacy />} />
+        <Route path="cookies" element={<DemoStoreCookies />} />
+        <Route path="refund-policy" element={<DemoStoreRefundPolicy />} />
+      </Route>
+
+      {/* Main App Routes (with Navbar, optional sidebar, optional footer) */}
+      <Route path="*" element={<MainShell />} />
     </Routes>
   </>
 );
@@ -315,9 +445,11 @@ const App = () => {
               {clerkPubKey && <ClerkAuthSync />}
               <CustomerAuthProvider>
                 <DemoStoreProvider>
-                  <Toaster />
-                  <Sonner />
-                  <AppRoutes />
+                  <PublicStoreInvalidationProvider>
+                    <Toaster />
+                    <Sonner />
+                    <AppRoutes />
+                  </PublicStoreInvalidationProvider>
                 </DemoStoreProvider>
               </CustomerAuthProvider>
             </AuthProvider>

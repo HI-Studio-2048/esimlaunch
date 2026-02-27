@@ -1,9 +1,26 @@
 import express from 'express';
 import { z } from 'zod';
 import { authService } from '../services/authService';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateJWT, authenticateSessionOrJWT } from '../middleware/jwtAuth';
+import { sessionService } from '../services/sessionService';
+import { SESSION_COOKIE_NAME } from '../middleware/sessionAuth';
 
 const router = express.Router();
+
+const SESSION_DAYS = 7;
+function setSessionCookie(res: express.Response, token: string) {
+  res.cookie(SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
+    path: '/',
+  });
+}
+
+function clearSessionCookie(res: express.Response) {
+  res.clearCookie(SESSION_COOKIE_NAME, { path: '/', httpOnly: true });
+}
 
 // Validation schemas
 const registerSchema = z.object({
@@ -11,6 +28,7 @@ const registerSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
   name: z.string().optional(),
   serviceType: z.enum(['EASY', 'ADVANCED']).optional(),
+  referralCode: z.string().optional(),
 });
 
 const loginSchema = z.object({
@@ -20,12 +38,28 @@ const loginSchema = z.object({
 
 /**
  * POST /api/auth/register
- * Register a new merchant
+ * Register a new merchant. Creates DB session and sets httpOnly cookie.
  */
 router.post('/register', async (req, res, next) => {
   try {
     const data = registerSchema.parse(req.body);
     const result = await authService.register(data);
+    // Track referral if provided
+    if (data.referralCode) {
+      try {
+        const { affiliateService } = await import('../services/affiliateService');
+        await affiliateService.trackReferral(result.merchant.id, data.referralCode);
+      } catch (refErr) {
+        console.warn('Referral tracking failed:', refErr);
+      }
+    }
+    const session = await sessionService.createSession(
+      result.merchant.id,
+      req.ip,
+      req.get('user-agent'),
+      SESSION_DAYS
+    );
+    setSessionCookie(res, session.token);
     res.json({
       success: true,
       data: result,
@@ -49,12 +83,19 @@ router.post('/register', async (req, res, next) => {
 
 /**
  * POST /api/auth/login
- * Login merchant
+ * Login merchant. Creates DB session and sets httpOnly cookie so auth works across devices (no localStorage).
  */
 router.post('/login', async (req, res, next) => {
   try {
     const data = loginSchema.parse(req.body);
     const result = await authService.login(data);
+    const session = await sessionService.createSession(
+      result.merchant.id,
+      req.ip,
+      req.get('user-agent'),
+      SESSION_DAYS
+    );
+    setSessionCookie(res, session.token);
     res.json({
       success: true,
       data: result,
@@ -78,9 +119,9 @@ router.post('/login', async (req, res, next) => {
 
 /**
  * GET /api/auth/me
- * Get current merchant info (requires JWT auth)
+ * Get current merchant. Accepts session cookie or JWT (DB-backed session works on any device).
  */
-router.get('/me', authenticateJWT, async (req, res, next) => {
+router.get('/me', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const merchant = await authService.getMerchantById(req.merchant!.id);
     res.json({
@@ -189,9 +230,9 @@ router.post('/reset-password', async (req, res, next) => {
  * POST /api/auth/refresh
  * Refresh JWT token
  */
-router.post('/refresh', authenticateJWT, async (req, res, next) => {
+router.post('/refresh', authenticateSessionOrJWT, async (req, res, next) => {
   try {
-    // If we get here, the token is valid (authenticateJWT passed)
+    // If we get here, session or JWT is valid
     // Generate a new token for the merchant
     const merchant = await authService.getMerchantById(req.merchant!.id);
     const newToken = authService.generateToken(merchant.id);
@@ -220,12 +261,28 @@ const updateProfileSchema = z.object({
   name: z.string().optional(),
   email: z.string().email('Invalid email address').optional(),
   serviceType: z.enum(['EASY', 'ADVANCED']).optional(),
+  smtpHost: z.string().optional(),
+  smtpPort: z.number().int().optional(),
+  smtpUser: z.string().optional(),
+  smtpPass: z.string().optional(),
+  smtpFromName: z.string().optional(),
+  smtpFromEmail: z.string().email().optional().or(z.literal('')),
 });
 
-router.put('/profile', authenticateJWT, async (req, res, next) => {
+router.put('/profile', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const data = updateProfileSchema.parse(req.body);
-    const merchant = await authService.updateProfile(req.merchant!.id, data);
+    const merchant = await authService.updateProfile(req.merchant!.id, {
+      name: data.name,
+      email: data.email,
+      serviceType: data.serviceType as any,
+      smtpHost: data.smtpHost,
+      smtpPort: data.smtpPort,
+      smtpUser: data.smtpUser,
+      smtpPass: data.smtpPass,
+      smtpFromName: data.smtpFromName,
+      smtpFromEmail: data.smtpFromEmail,
+    });
     res.json({
       success: true,
       data: merchant,
@@ -256,7 +313,7 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(8, 'New password must be at least 8 characters'),
 });
 
-router.put('/change-password', authenticateJWT, async (req, res, next) => {
+router.put('/change-password', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const data = changePasswordSchema.parse(req.body);
     await authService.changePassword(req.merchant!.id, data.currentPassword, data.newPassword);
@@ -285,7 +342,7 @@ router.put('/change-password', authenticateJWT, async (req, res, next) => {
  * DELETE /api/auth/account
  * Delete merchant account (soft delete)
  */
-router.delete('/account', authenticateJWT, async (req, res, next) => {
+router.delete('/account', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     await authService.deleteAccount(req.merchant!.id);
     res.json({
@@ -314,11 +371,17 @@ router.post('/clerk-sync', async (req, res, next) => {
     const data = clerkSyncSchema.parse(req.body);
     const { clerkService } = await import('../services/clerkService');
     
-    // Sync or create merchant from Clerk user
     const merchant = await clerkService.getOrCreateMerchantFromClerk(data.clerkUserId);
-    
-    // Generate JWT token
     const token = authService.generateToken(merchant.id);
+    
+    // Create DB session and set cookie (same as login — no localStorage)
+    const session = await sessionService.createSession(
+      merchant.id,
+      req.ip,
+      req.get('user-agent'),
+      SESSION_DAYS
+    );
+    setSessionCookie(res, session.token);
     
     res.json({
       success: true,
@@ -403,7 +466,7 @@ router.post('/verify-email/:token', async (req, res, next) => {
  * POST /api/auth/resend-verification
  * Resend verification email (requires JWT auth)
  */
-router.post('/resend-verification', authenticateJWT, async (req, res, next) => {
+router.post('/resend-verification', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     await authService.resendVerificationEmail(req.merchant!.id);
     res.json({
@@ -423,7 +486,7 @@ router.post('/resend-verification', authenticateJWT, async (req, res, next) => {
  * POST /api/auth/2fa/setup
  * Generate 2FA secret and QR code (requires JWT auth)
  */
-router.post('/2fa/setup', authenticateJWT, async (req, res, next) => {
+router.post('/2fa/setup', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const { twoFactorService } = await import('../services/twoFactorService');
     const merchant = await authService.getMerchantById(req.merchant!.id);
@@ -449,7 +512,7 @@ const verify2FASetupSchema = z.object({
   token: z.string().length(6, 'Token must be 6 digits'),
 });
 
-router.post('/2fa/verify', authenticateJWT, async (req, res, next) => {
+router.post('/2fa/verify', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const data = verify2FASetupSchema.parse(req.body);
     const { twoFactorService } = await import('../services/twoFactorService');
@@ -491,7 +554,7 @@ router.post('/2fa/verify', authenticateJWT, async (req, res, next) => {
  * POST /api/auth/2fa/disable
  * Disable 2FA (requires JWT auth)
  */
-router.post('/2fa/disable', authenticateJWT, async (req, res, next) => {
+router.post('/2fa/disable', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const { twoFactorService } = await import('../services/twoFactorService');
     await twoFactorService.disable(req.merchant!.id);
@@ -512,7 +575,7 @@ router.post('/2fa/disable', authenticateJWT, async (req, res, next) => {
  * GET /api/auth/2fa/status
  * Get 2FA status (requires JWT auth)
  */
-router.get('/2fa/status', authenticateJWT, async (req, res, next) => {
+router.get('/2fa/status', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const { twoFactorService } = await import('../services/twoFactorService');
     const isEnabled = await twoFactorService.isEnabled(req.merchant!.id);
@@ -537,7 +600,7 @@ const verify2FALoginSchema = z.object({
   token: z.string().length(6, 'Token must be 6 digits'),
 });
 
-router.post('/2fa/login', authenticateJWT, async (req, res, next) => {
+router.post('/2fa/login', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const data = verify2FALoginSchema.parse(req.body);
     const { twoFactorService } = await import('../services/twoFactorService');
@@ -573,10 +636,26 @@ router.post('/2fa/login', authenticateJWT, async (req, res, next) => {
 });
 
 /**
+ * POST /api/auth/logout
+ * Log out: delete DB session and clear session cookie (no localStorage).
+ */
+router.post('/logout', async (req, res) => {
+  const cookieHeader = req.headers.cookie;
+  if (cookieHeader) {
+    const match = cookieHeader.match(new RegExp(`${SESSION_COOKIE_NAME}=([^;]+)`));
+    if (match?.[1]) {
+      await sessionService.deleteSession(match[1].trim());
+    }
+  }
+  clearSessionCookie(res);
+  res.json({ success: true, message: 'Logged out' });
+});
+
+/**
  * GET /api/auth/sessions
  * Get all active sessions for the merchant (requires JWT auth)
  */
-router.get('/sessions', authenticateJWT, async (req, res, next) => {
+router.get('/sessions', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const { sessionService } = await import('../services/sessionService');
     const sessions = await sessionService.getMerchantSessions(req.merchant!.id);
@@ -597,7 +676,7 @@ router.get('/sessions', authenticateJWT, async (req, res, next) => {
  * DELETE /api/auth/sessions/:id
  * Delete a specific session (requires JWT auth)
  */
-router.delete('/sessions/:id', authenticateJWT, async (req, res, next) => {
+router.delete('/sessions/:id', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const { id } = req.params;
     const { sessionService } = await import('../services/sessionService');
@@ -619,7 +698,7 @@ router.delete('/sessions/:id', authenticateJWT, async (req, res, next) => {
  * DELETE /api/auth/sessions
  * Delete all sessions except current (requires JWT auth)
  */
-router.delete('/sessions', authenticateJWT, async (req, res, next) => {
+router.delete('/sessions', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const { sessionService } = await import('../services/sessionService');
     // Get current session token from JWT (we'd need to track this)
@@ -635,6 +714,68 @@ router.delete('/sessions', authenticateJWT, async (req, res, next) => {
       errorCode: 'DELETE_SESSIONS_FAILED',
       errorMessage: error.message || 'Failed to delete sessions',
     });
+  }
+});
+
+/**
+ * POST /api/auth/test-email
+ * Send a test email using the merchant's SMTP settings (or Resend if no SMTP).
+ */
+router.post('/test-email', authenticateSessionOrJWT, async (req, res, next) => {
+  try {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    const merchantId = req.merchant!.id;
+
+    const nodemailer = await import('nodemailer');
+    const { env } = await import('../config/env');
+    const { Resend } = await import('resend');
+    const { prisma } = await import('../lib/prisma');
+
+    const smtp = await prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { smtpHost: true, smtpPort: true, smtpUser: true, smtpPass: true, smtpFromName: true, smtpFromEmail: true },
+    });
+    let sent = false;
+
+    if (smtp?.smtpHost && smtp.smtpUser && smtp.smtpPass) {
+      const transport = nodemailer.default.createTransport({
+        host: smtp.smtpHost,
+        port: smtp.smtpPort || 587,
+        secure: (smtp.smtpPort || 587) === 465,
+        auth: { user: smtp.smtpUser, pass: smtp.smtpPass },
+      });
+      await transport.sendMail({
+        from: `"${smtp?.smtpFromName || 'eSIM Launch'}" <${smtp?.smtpFromEmail || smtp?.smtpUser}>`,
+        to: email,
+        subject: 'Test Email - eSIM Launch',
+        html: '<p>This is a test email from your eSIM Launch SMTP configuration. It works!</p>',
+      });
+      sent = true;
+    }
+
+    if (!sent) {
+      if (!env.resendApiKey) {
+        return res.status(400).json({
+          success: false,
+          errorCode: 'NO_EMAIL_CONFIG',
+          errorMessage: 'No SMTP or Resend configuration found. Please configure SMTP settings first.',
+        });
+      }
+      const resend = new Resend(env.resendApiKey);
+      await resend.emails.send({
+        from: env.resendFromEmail,
+        to: email,
+        subject: 'Test Email - eSIM Launch',
+        html: '<p>This is a test email from eSIM Launch. Your email configuration is working!</p>',
+      });
+    }
+
+    res.json({ success: true, message: `Test email sent to ${email}` });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ success: false, errorCode: 'VALIDATION_ERROR', errorMessage: error.errors[0].message });
+    }
+    res.status(500).json({ success: false, errorCode: 'TEST_EMAIL_FAILED', errorMessage: error.message || 'Failed to send test email' });
   }
 });
 

@@ -54,8 +54,17 @@ const CheckoutForm = ({ paymentIntentClientSecret, amount, onSuccess }: Checkout
         setError(confirmError.message || "Payment failed");
         setIsProcessing(false);
       } else if (paymentIntent && paymentIntent.status === "succeeded") {
-        await apiClient.confirmPayment(paymentIntent.id);
-        onSuccess(paymentIntent.id);
+        try {
+          await apiClient.confirmPayment(paymentIntent.id);
+          onSuccess(paymentIntent.id);
+        } catch (err: any) {
+          const message =
+            err?.errorCode === "INSUFFICIENT_BALANCE"
+              ? "Your balance is too low to fulfill this order. Please top up your balance and try again."
+              : err?.message || "Payment succeeded, but we could not create the eSIM order. Please contact support.";
+          setError(message);
+          setIsProcessing(false);
+        }
       } else {
         setIsProcessing(false);
       }
@@ -254,6 +263,11 @@ export default function Checkout() {
     </div>
   );
 }
+
+
+
+
+
 
 
 

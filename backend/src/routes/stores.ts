@@ -1,16 +1,256 @@
 import express from 'express';
 import { z } from 'zod';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { prisma } from '../lib/prisma';
 import { ServiceType } from '@prisma/client';
 import { domainVerificationService } from '../services/domainVerificationService';
+import { esimAccessService } from '../services/esimAccessService';
 
 const router = express.Router();
 
-// All routes require JWT authentication
-router.use(authenticateJWT);
+// Helper: apply merchant markup to a base price (USD)
+function applyMarkup(basePrice: number, pricingMarkup: any, locationCode: string, packageCode: string): number {
+  if (!pricingMarkup) return Math.round(basePrice * 100) / 100;
+  if (pricingMarkup.packages && pricingMarkup.packages[packageCode] !== undefined) {
+    const rate = Number(pricingMarkup.packages[packageCode]);
+    return Math.round(basePrice * (1 + rate / 100) * 100) / 100;
+  }
+  if (pricingMarkup.countries && pricingMarkup.countries[locationCode] !== undefined) {
+    const rate = Number(pricingMarkup.countries[locationCode]);
+    return Math.round(basePrice * (1 + rate / 100) * 100) / 100;
+  }
+  const globalRate = Number(pricingMarkup.global ?? pricingMarkup.globalMarkup ?? 0);
+  return Math.round(basePrice * (1 + globalRate / 100) * 100) / 100;
+}
+
+// Helper: convert bytes to human-readable data size
+function formatDataSize(bytes: number): string {
+  if (!bytes) return 'Unlimited';
+  if (bytes >= 1073741824) return `${Math.round(bytes / 1073741824)}GB`;
+  if (bytes >= 1048576) return `${Math.round(bytes / 1048576)}MB`;
+  return `${bytes}B`;
+}
+
+/**
+ * GET /api/stores/:storeId/public
+ * Public endpoint — no authentication required.
+ * Returns store branding and packages with markup applied.
+ */
+router.get('/:storeId/public', async (req, res) => {
+  try {
+    const { storeId } = req.params;
+
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: {
+        id: true,
+        businessName: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
+        logoUrl: true,
+        selectedPackages: true,
+        pricingMarkup: true,
+        defaultCurrency: true,
+        isActive: true,
+        templateKey: true,
+        templateSettings: true,
+      },
+    });
+
+    if (!store || !store.isActive) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'STORE_NOT_FOUND',
+        errorMessage: 'Store not found',
+      });
+    }
+
+    let packages: any[] = [];
+    try {
+      const result = await esimAccessService.getPackages();
+      if (result.success && result.obj?.packageList) {
+        let allPackages = result.obj.packageList;
+        const selectedPackages = store.selectedPackages as string[] | null;
+        if (selectedPackages && selectedPackages.length > 0) {
+          allPackages = allPackages.filter(pkg =>
+            selectedPackages.includes(pkg.packageCode) ||
+            selectedPackages.includes(pkg.slug)
+          );
+        }
+        const pricingMarkup = store.pricingMarkup as any;
+        packages = allPackages.map(pkg => {
+          const basePrice = pkg.price / 10000;
+          const finalPrice = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode);
+          return {
+            packageCode: pkg.packageCode,
+            slug: pkg.slug,
+            name: pkg.name,
+            data: formatDataSize(pkg.volume),
+            validity: `${pkg.duration} ${pkg.durationUnit}`,
+            price: finalPrice,
+            currency: 'USD',
+            location: pkg.location,
+            locationCode: pkg.locationCode,
+            activeType: pkg.activeType,
+            dataType: pkg.dataType,
+          };
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch eSIM Access packages:', err);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        branding: {
+          businessName: store.businessName,
+          primaryColor: store.primaryColor,
+          secondaryColor: store.secondaryColor,
+          accentColor: store.accentColor,
+          logoUrl: store.logoUrl || null,
+        },
+        packages,
+        currency: store.defaultCurrency || 'USD',
+        templateKey: store.templateKey || 'default',
+        templateSettings: (store.templateSettings as object) || undefined,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'FETCH_FAILED',
+      errorMessage: error.message || 'Failed to fetch store data',
+    });
+  }
+});
+
+/**
+ * GET /api/stores/by-subdomain/:subdomain
+ * Public endpoint — no authentication required.
+ * Looks up a store by its subdomain and returns the same shape as /:storeId/public.
+ */
+router.get('/by-subdomain/:subdomain', async (req, res) => {
+  try {
+    const { subdomain } = req.params;
+
+    const store = await prisma.store.findUnique({
+      where: { subdomain },
+      select: {
+        id: true,
+        businessName: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
+        logoUrl: true,
+        selectedPackages: true,
+        pricingMarkup: true,
+        defaultCurrency: true,
+        isActive: true,
+        templateKey: true,
+        templateSettings: true,
+      },
+    });
+
+    if (!store || !store.isActive) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'STORE_NOT_FOUND',
+        errorMessage: 'Store not found',
+      });
+    }
+
+    let packages: any[] = [];
+    try {
+      const result = await esimAccessService.getPackages();
+      if (result.success && result.obj?.packageList) {
+        let allPackages = result.obj.packageList;
+        const selectedPackages = store.selectedPackages as string[] | null;
+        if (selectedPackages && selectedPackages.length > 0) {
+          allPackages = allPackages.filter(pkg =>
+            selectedPackages.includes(pkg.packageCode) ||
+            selectedPackages.includes(pkg.slug)
+          );
+        }
+        const pricingMarkup = store.pricingMarkup as any;
+        packages = allPackages.map(pkg => {
+          const basePrice = pkg.price / 10000;
+          const finalPrice = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode);
+          return {
+            packageCode: pkg.packageCode,
+            slug: pkg.slug,
+            name: pkg.name,
+            data: formatDataSize(pkg.volume),
+            validity: `${pkg.duration} ${pkg.durationUnit}`,
+            price: finalPrice,
+            currency: 'USD',
+            location: pkg.location,
+            locationCode: pkg.locationCode,
+            activeType: pkg.activeType,
+            dataType: pkg.dataType,
+          };
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch eSIM Access packages:', err);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        storeId: store.id,
+        branding: {
+          businessName: store.businessName,
+          primaryColor: store.primaryColor,
+          secondaryColor: store.secondaryColor,
+          accentColor: store.accentColor,
+          logoUrl: store.logoUrl || null,
+        },
+        packages,
+        currency: store.defaultCurrency || 'USD',
+        templateKey: store.templateKey || 'default',
+        templateSettings: (store.templateSettings as object) || undefined,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'FETCH_FAILED',
+      errorMessage: error.message || 'Failed to fetch store data',
+    });
+  }
+});
+
+// All routes below require JWT authentication
+router.use(authenticateSessionOrJWT);
 
 // Validation schemas
+const templateSettingsSchema = z.object({
+  heroStyle: z.enum(['gradient', 'minimal', 'image', 'split']).optional(),
+  showTestimonials: z.boolean().optional(),
+  showFeatures: z.boolean().optional(),
+  showEsimInfo: z.boolean().optional(),
+  heroHeadline: z.string().max(120).optional(),
+  heroSubheadline: z.string().max(200).optional(),
+  // Contact page content
+  contactEmail: z.string().email().optional(),
+  contactPhone: z.string().max(30).optional(),
+  contactAddress: z.string().max(200).optional(),
+  contactHours: z.string().max(100).optional(),
+  // About page content
+  aboutTagline: z.string().max(200).optional(),
+  aboutMission: z.string().max(1000).optional(),
+  // FAQ content
+  faqs: z.array(z.object({
+    question: z.string().min(1).max(300),
+    answer: z.string().min(1).max(1000),
+  })).max(20).optional(),
+  // Legal pages
+  legalCompanyName: z.string().max(100).optional(),
+  legalLastUpdated: z.string().max(50).optional(),
+}).optional();
+
 const createStoreSchema = z.object({
   name: z.string().min(1, 'Store name is required'),
   domain: z.string().optional(),
@@ -19,9 +259,11 @@ const createStoreSchema = z.object({
   primaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid color format').optional(),
   secondaryColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid color format').optional(),
   accentColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, 'Invalid color format').optional(),
-  logoUrl: z.string().url('Invalid logo URL').optional(),
+  logoUrl: z.union([z.string().url(), z.string().startsWith('data:')]).optional(),
   selectedPackages: z.array(z.string()).optional(),
-  pricingMarkup: z.record(z.any()).optional(), // Flexible pricing markup configuration
+  pricingMarkup: z.record(z.any()).optional(),
+  templateKey: z.enum(['default', 'minimal', 'bold', 'travel']).optional(),
+  templateSettings: templateSettingsSchema.optional(),
 });
 
 const updateStoreSchema = createStoreSchema.partial();
@@ -84,6 +326,8 @@ router.post('/', async (req, res, next) => {
         logoUrl: data.logoUrl || null,
         selectedPackages: data.selectedPackages || [],
         pricingMarkup: data.pricingMarkup || {},
+        templateKey: data.templateKey || 'default',
+        templateSettings: data.templateSettings ?? undefined,
       },
     });
 

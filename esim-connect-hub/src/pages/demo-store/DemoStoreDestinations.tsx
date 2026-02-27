@@ -1,81 +1,72 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, MapPin, Globe, Wifi, Zap, Shield, CreditCard, ArrowRight } from "lucide-react";
+import { Search, MapPin, Globe, Wifi, Zap, Shield, CreditCard, ArrowRight, Loader2 } from "lucide-react";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { usePublicStore } from "@/hooks/usePublicStore";
+import { useStorePath } from "@/hooks/useStorePath";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-const allCountries = [
-  { name: "Afghanistan", flag: "🇦🇫", price: 16.00, network: "3G", region: "Asia" },
-  { name: "Albania", flag: "🇦🇱", price: 16.00, network: "4G", region: "Europe" },
-  { name: "Algeria", flag: "🇩🇿", price: 19.00, network: "4G", region: "Africa" },
-  { name: "Anguilla", flag: "🇦🇮", price: 19.00, network: "4G", region: "Americas" },
-  { name: "Argentina", flag: "🇦🇷", price: 12.00, network: "4G", region: "Americas" },
-  { name: "Armenia", flag: "🇦🇲", price: 14.00, network: "4G", region: "Asia" },
-  { name: "Australia", flag: "🇦🇺", price: 10.00, network: "5G", region: "Oceania" },
-  { name: "Austria", flag: "🇦🇹", price: 9.00, network: "5G", region: "Europe" },
-  { name: "Azerbaijan", flag: "🇦🇿", price: 16.00, network: "4G", region: "Asia" },
-  { name: "Bahamas", flag: "🇧🇸", price: 22.00, network: "4G", region: "Americas" },
-  { name: "Belgium", flag: "🇧🇪", price: 9.00, network: "5G", region: "Europe" },
-  { name: "Brazil", flag: "🇧🇷", price: 11.00, network: "4G", region: "Americas" },
-  { name: "Canada", flag: "🇨🇦", price: 10.00, network: "5G", region: "Americas" },
-  { name: "China", flag: "🇨🇳", price: 15.00, network: "5G", region: "Asia" },
-  { name: "Denmark", flag: "🇩🇰", price: 9.00, network: "5G", region: "Europe" },
-  { name: "Egypt", flag: "🇪🇬", price: 18.00, network: "4G", region: "Africa" },
-  { name: "Finland", flag: "🇫🇮", price: 9.00, network: "5G", region: "Europe" },
-  { name: "France", flag: "🇫🇷", price: 9.00, network: "5G", region: "Europe" },
-  { name: "Germany", flag: "🇩🇪", price: 9.00, network: "5G", region: "Europe" },
-  { name: "Greece", flag: "🇬🇷", price: 10.00, network: "4G", region: "Europe" },
-  { name: "Hong Kong", flag: "🇭🇰", price: 8.00, network: "5G", region: "Asia" },
-  { name: "Iceland", flag: "🇮🇸", price: 12.00, network: "4G", region: "Europe" },
-  { name: "India", flag: "🇮🇳", price: 12.00, network: "4G", region: "Asia" },
-  { name: "Indonesia", flag: "🇮🇩", price: 14.00, network: "4G", region: "Asia" },
-  { name: "Ireland", flag: "🇮🇪", price: 9.00, network: "5G", region: "Europe" },
-  { name: "Israel", flag: "🇮🇱", price: 15.00, network: "4G", region: "Asia" },
-  { name: "Italy", flag: "🇮🇹", price: 9.00, network: "5G", region: "Europe" },
-  { name: "Japan", flag: "🇯🇵", price: 12.00, network: "5G", region: "Asia" },
-  { name: "Malaysia", flag: "🇲🇾", price: 10.00, network: "4G", region: "Asia" },
-  { name: "Mexico", flag: "🇲🇽", price: 11.00, network: "4G", region: "Americas" },
-  { name: "Netherlands", flag: "🇳🇱", price: 9.00, network: "5G", region: "Europe" },
-  { name: "New Zealand", flag: "🇳🇿", price: 12.00, network: "4G", region: "Oceania" },
-  { name: "Norway", flag: "🇳🇴", price: 10.00, network: "5G", region: "Europe" },
-  { name: "Philippines", flag: "🇵🇭", price: 12.00, network: "4G", region: "Asia" },
-  { name: "Poland", flag: "🇵🇱", price: 9.00, network: "4G", region: "Europe" },
-  { name: "Portugal", flag: "🇵🇹", price: 9.00, network: "4G", region: "Europe" },
-  { name: "Singapore", flag: "🇸🇬", price: 8.00, network: "5G", region: "Asia" },
-  { name: "South Korea", flag: "🇰🇷", price: 10.00, network: "5G", region: "Asia" },
-  { name: "Spain", flag: "🇪🇸", price: 9.00, network: "5G", region: "Europe" },
-  { name: "Sweden", flag: "🇸🇪", price: 9.00, network: "5G", region: "Europe" },
-  { name: "Switzerland", flag: "🇨🇭", price: 12.00, network: "5G", region: "Europe" },
-  { name: "Thailand", flag: "🇹🇭", price: 9.00, network: "4G", region: "Asia" },
-  { name: "Turkey", flag: "🇹🇷", price: 9.00, network: "4G", region: "Europe" },
-  { name: "United Arab Emirates", flag: "🇦🇪", price: 16.00, network: "5G", region: "Asia" },
-  { name: "United Kingdom", flag: "🇬🇧", price: 10.00, network: "5G", region: "Europe" },
-  { name: "United States", flag: "🇺🇸", price: 9.00, network: "5G", region: "Americas" },
-  { name: "Vietnam", flag: "🇻🇳", price: 10.00, network: "4G", region: "Asia" },
-];
-
-const regionalPlans = [
-  { name: "Africa", icon: "🌍", price: 54.00, network: "5G", countries: 30 },
-  { name: "Caribbean Islands", icon: "🏝️", price: 30.00, network: "4G", countries: 20 },
-  { name: "Middle East and North Africa", icon: "🕌", price: 30.00, network: "4G", countries: 15 },
-  { name: "World", icon: "🌐", price: 18.00, network: "4G", countries: 100 },
-  { name: "Europe", icon: "🇪🇺", price: 15.00, network: "5G", countries: 40 },
-  { name: "Asia Pacific", icon: "🌏", price: 20.00, network: "4G", countries: 25 },
-  { name: "Americas", icon: "🌎", price: 25.00, network: "4G", countries: 30 },
-];
+function countryCodeToFlag(code: string): string {
+  if (!code || code.length !== 2) return "🌍";
+  return String.fromCodePoint(
+    ...code.toUpperCase().split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
+  );
+}
 
 const alphabetGroups = ["A-B", "C-E", "F-H", "I-Z"];
 
 export default function DemoStoreDestinations() {
-  const { config } = useDemoStore();
+  const { config, storeId } = useDemoStore();
+  const { data: storeData, isLoading: packagesLoading } = usePublicStore(storeId);
+  const basePath = useStorePath();
   const [search, setSearch] = useState("");
   const [destinationType, setDestinationType] = useState<"local" | "regional">("local");
   const [activeAlphabet, setActiveAlphabet] = useState("A-B");
 
+  // Derive country list from live packages
+  const allCountries = useMemo(() => {
+    if (!storeData?.packages?.length) return [];
+    const byLocation: Record<string, { name: string; code: string; minPrice: number }> = {};
+    for (const pkg of storeData.packages) {
+      const code = pkg.locationCode;
+      if (!code || code.length > 3) continue;
+      if (!byLocation[code]) {
+        byLocation[code] = { name: pkg.location, code, minPrice: pkg.price };
+      } else if (pkg.price < byLocation[code].minPrice) {
+        byLocation[code].minPrice = pkg.price;
+      }
+    }
+    return Object.values(byLocation)
+      .map(loc => ({
+        name: loc.name,
+        flag: countryCodeToFlag(loc.code),
+        price: loc.minPrice,
+        network: "4G",
+        region: "International",
+        locationCode: loc.code,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [storeData]);
+
+  // Derive regional plans (packages with locationCode length > 2 or containing multi-country location names)
+  const regionalPlans = useMemo(() => {
+    if (!storeData?.packages?.length) return [];
+    const seen = new Set<string>();
+    return storeData.packages
+      .filter(pkg => pkg.locationCode && pkg.locationCode.length > 2)
+      .reduce<Array<{ name: string; icon: string; price: number; network: string; countries: number }>>((acc, pkg) => {
+        if (!seen.has(pkg.location)) {
+          seen.add(pkg.location);
+          acc.push({ name: pkg.location, icon: "🌐", price: pkg.price, network: "4G", countries: 0 });
+        }
+        return acc;
+      }, []);
+  }, [storeData]);
+
   const filteredCountries = useMemo(() => {
-    let filtered = allCountries;
+    let filtered = [...allCountries];
     
     if (search) {
       filtered = filtered.filter(c => 
@@ -96,7 +87,7 @@ export default function DemoStoreDestinations() {
     }
 
     return filtered;
-  }, [search, activeAlphabet]);
+  }, [search, activeAlphabet, allCountries]);
 
   const popularCountries = allCountries.slice(0, 5);
 
@@ -161,7 +152,7 @@ export default function DemoStoreDestinations() {
                       {popularCountries.map(c => (
                         <Link
                           key={c.name}
-                          to={`/demo-store/country/${c.name.toLowerCase().replace(/\s+/g, "-")}`}
+                          to={`${basePath}/country/${c.name.toLowerCase().replace(/\s+/g, "-")}`}
                           className="flex items-center gap-2 hover:text-primary transition-colors"
                         >
                           <span>{c.flag}</span>
@@ -224,7 +215,7 @@ export default function DemoStoreDestinations() {
                       transition={{ delay: i * 0.02 }}
                     >
                       <Link
-                        to={`/demo-store/country/${country.name.toLowerCase().replace(/\s+/g, "-")}`}
+                        to={`${basePath}/country/${country.name.toLowerCase().replace(/\s+/g, "-")}`}
                         className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors"
                       >
                         <span className="text-2xl">{country.flag}</span>

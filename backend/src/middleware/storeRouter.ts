@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
+import { env } from '../config/env';
 
 /**
  * Store Router Middleware
@@ -21,7 +22,7 @@ export async function storeRouter(
       'localhost',
       'esimlaunch.com',
       'www.esimlaunch.com',
-      process.env.MAIN_DOMAIN || 'localhost',
+      ...(env.mainDomain ? [env.mainDomain] : []),
     ];
 
     if (mainDomains.includes(hostname)) {
@@ -34,7 +35,7 @@ export async function storeRouter(
       const [, subdomain, baseDomain] = subdomainMatch;
       
       // Check if base domain is our domain
-      if (baseDomain.includes('esimlaunch.com') || process.env.ALLOWED_BASE_DOMAIN?.includes(baseDomain)) {
+      if (baseDomain.includes('esimlaunch.com') || (env.allowedBaseDomain && env.allowedBaseDomain.includes(baseDomain))) {
         const store = await prisma.store.findUnique({
           where: { subdomain },
           include: {
@@ -117,6 +118,11 @@ export function requireStore(
   }
   next();
 }
+
+
+
+
+
 
 
 

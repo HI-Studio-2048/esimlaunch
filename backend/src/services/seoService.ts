@@ -46,7 +46,7 @@ export const seoService = {
     return prisma.store.update({
       where: { id: storeId },
       data: {
-        seoConfig: config,
+        seoConfig: config as any,
       },
     });
   },
@@ -115,6 +115,11 @@ Allow: /
 Sitemap: ${baseUrl}/sitemap.xml`;
   },
 };
+
+
+
+
+
 
 
 

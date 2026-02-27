@@ -1,8 +1,13 @@
 import { motion } from "framer-motion";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { usePublicStore } from "@/hooks/usePublicStore";
 
 export default function DemoStoreTerms() {
-  const { config } = useDemoStore();
+  const { config, storeId } = useDemoStore();
+  const { data: storeData } = usePublicStore(storeId);
+  const ts = storeData?.templateSettings || {};
+  const companyName = ts.legalCompanyName || config.businessName;
+  const lastUpdated = ts.legalLastUpdated || new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
   return (
     <div className="min-h-screen bg-background">
@@ -25,7 +30,7 @@ export default function DemoStoreTerms() {
             transition={{ delay: 0.1 }}
             className="text-white/90 text-lg"
           >
-            Last updated: January 15, 2024
+            Last updated: {lastUpdated}
           </motion.p>
         </div>
       </section>
@@ -41,29 +46,33 @@ export default function DemoStoreTerms() {
             {[
               {
                 title: "1. Acceptance of Terms",
-                content: "By purchasing and using our eSIM services, you agree to be bound by these Terms of Service. If you do not agree, please do not use our services.",
+                content: `By purchasing and using the eSIM services provided by ${companyName}, you agree to be bound by these Terms of Service. If you do not agree to these terms, please do not use our services.`,
               },
               {
                 title: "2. Service Description",
-                content: "We provide eSIM connectivity services for travel. Service availability, coverage, and speeds may vary by location and carrier.",
+                content: `${companyName} provides eSIM connectivity services for international travel. Service availability, coverage, and speeds may vary by location and carrier partner. We do not guarantee uninterrupted service in all locations.`,
               },
               {
                 title: "3. Purchase and Payment",
-                content: "All purchases are final. Prices are displayed in your local currency. Payment is required before eSIM activation.",
+                content: "All purchases are processed securely. Prices are displayed in your selected currency. Full payment is required before your eSIM is activated and delivered. We reserve the right to modify pricing at any time.",
               },
               {
                 title: "4. Activation and Usage",
-                content: "eSIMs activate automatically upon arrival at your destination. You are responsible for ensuring your device is eSIM-compatible.",
+                content: "Your eSIM will be delivered via email as a QR code. You are responsible for ensuring your device supports eSIM technology and is carrier-unlocked. Data plans activate upon first connection to a local network at your destination.",
               },
               {
                 title: "5. Refund Policy",
-                content: "Refunds are available within 30 days of purchase if the eSIM has not been activated. See our Refund Policy for details.",
+                content: "Refunds may be requested within 30 days of purchase, provided the eSIM has not been activated or used. Once an eSIM has been activated or any data has been consumed, no refund will be issued. Please contact our support team to initiate a refund request.",
               },
               {
                 title: "6. Limitation of Liability",
-                content: "We are not liable for any indirect damages resulting from service interruptions or connectivity issues.",
+                content: `${companyName} shall not be liable for any indirect, incidental, special, or consequential damages arising from your use of, or inability to use, our services. Our total liability shall not exceed the amount you paid for the affected service.`,
               },
-            ].map((section, i) => (
+              {
+                title: "7. Contact",
+                content: `If you have questions about these Terms of Service, please contact our support team through the Contact page on our website.`,
+              },
+            ].map((section) => (
               <div key={section.title}>
                 <h2 className="text-xl font-bold mb-3" style={{ color: config.primaryColor }}>
                   {section.title}
@@ -77,13 +86,3 @@ export default function DemoStoreTerms() {
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-

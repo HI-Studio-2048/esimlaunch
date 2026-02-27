@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { Search, Menu, X, User, ShoppingCart, ChevronDown, MapPin, Globe } from "lucide-react";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
 import { Button } from "@/components/ui/button";
@@ -29,15 +29,19 @@ export function DemoStoreNavbar() {
   const { config } = useDemoStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
+  const params = useParams<{ subdomain?: string }>();
 
-  const isActive = (path: string) => location.pathname === path;
+  // Derive base path: /store/:subdomain when accessed via subdomain route, else /demo-store
+  const basePath = params.subdomain ? `/store/${params.subdomain}` : "/demo-store";
+
+  const isActive = (suffix: string) => location.pathname === `${basePath}${suffix}`;
 
   return (
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b border-border">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link to="/demo-store" className="flex items-center gap-3">
+          <Link to={basePath} className="flex items-center gap-3">
             {config.logo ? (
               <img src={config.logo} alt="Logo" className="h-8 object-contain" />
             ) : (
@@ -68,7 +72,7 @@ export function DemoStoreNavbar() {
                     {popularDestinations.map((dest) => (
                       <DropdownMenuItem key={dest.name} asChild>
                         <Link
-                          to={`/demo-store/country/${dest.name.toLowerCase().replace(/\s+/g, "-")}`}
+                          to={`${basePath}/country/${dest.name.toLowerCase().replace(/\s+/g, "-")}`}
                           className="flex items-center gap-2"
                         >
                           <span>{dest.flag}</span>
@@ -85,7 +89,7 @@ export function DemoStoreNavbar() {
                     {regionalPlans.map((region) => (
                       <DropdownMenuItem key={region.name} asChild>
                         <Link
-                          to="/demo-store/destinations"
+                          to={`${basePath}/destinations`}
                           className="flex items-center gap-2"
                         >
                           <span>{region.icon}</span>
@@ -97,7 +101,7 @@ export function DemoStoreNavbar() {
                 </div>
                 <div className="mt-4 pt-4 border-t border-border">
                   <Link
-                    to="/demo-store/destinations"
+                    to={`${basePath}/destinations`}
                     className="text-sm font-medium hover:underline"
                     style={{ color: config.primaryColor }}
                   >
@@ -108,17 +112,17 @@ export function DemoStoreNavbar() {
             </DropdownMenu>
 
             <Link
-              to="/demo-store/about"
+              to={`${basePath}/about`}
               className={`text-sm font-medium transition-colors ${
-                isActive("/demo-store/about") ? "text-primary" : "hover:text-primary"
+                isActive("/about") ? "text-primary" : "hover:text-primary"
               }`}
             >
               About us
             </Link>
             <Link
-              to="/demo-store/contact"
+              to={`${basePath}/contact`}
               className={`text-sm font-medium transition-colors ${
-                isActive("/demo-store/contact") ? "text-primary" : "hover:text-primary"
+                isActive("/contact") ? "text-primary" : "hover:text-primary"
               }`}
             >
               Contact Us
@@ -156,21 +160,21 @@ export function DemoStoreNavbar() {
           <div className="md:hidden py-4 border-t border-border">
             <nav className="flex flex-col gap-4">
               <Link
-                to="/demo-store/destinations"
+                to={`${basePath}/destinations`}
                 className="text-sm font-medium"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Destinations
               </Link>
               <Link
-                to="/demo-store/about"
+                to={`${basePath}/about`}
                 className="text-sm font-medium"
                 onClick={() => setMobileMenuOpen(false)}
               >
                 About us
               </Link>
               <Link
-                to="/demo-store/contact"
+                to={`${basePath}/contact`}
                 className="text-sm font-medium"
                 onClick={() => setMobileMenuOpen(false)}
               >

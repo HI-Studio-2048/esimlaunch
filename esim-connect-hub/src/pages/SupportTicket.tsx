@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { API_BASE_URL } from "@/lib/api";
 
 const priorityColors: Record<string, string> = {
   low: "bg-gray-500",
@@ -64,7 +65,7 @@ export default function SupportTicket() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`/api/support/tickets/${ticketId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/support/tickets/${ticketId}`, {
         headers,
       });
 
@@ -97,7 +98,7 @@ export default function SupportTicket() {
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`/api/support/tickets/${ticketId}/messages`, {
+      const response = await fetch(`${API_BASE_URL}/api/support/tickets/${ticketId}/messages`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ message: newMessage }),

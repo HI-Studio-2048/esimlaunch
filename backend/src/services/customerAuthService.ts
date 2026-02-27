@@ -58,7 +58,7 @@ export const customerAuthService = {
     const token = jwt.sign(
       { customerId: customer.id, email: customer.email },
       env.jwtSecret,
-      { expiresIn: env.jwtExpiresIn }
+      { expiresIn: env.jwtExpiresIn as any }
     );
 
     return {
@@ -92,7 +92,7 @@ export const customerAuthService = {
     const token = jwt.sign(
       { customerId: customer.id, email: customer.email },
       env.jwtSecret,
-      { expiresIn: env.jwtExpiresIn }
+      { expiresIn: env.jwtExpiresIn as any }
     );
 
     return {
@@ -211,6 +211,11 @@ export const customerAuthService = {
     });
   },
 };
+
+
+
+
+
 
 
 

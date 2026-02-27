@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, EyeOff, Mail, Lock, User, Building, Globe } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Building, Globe, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSignUp, useUser, useClerk } from "@clerk/clerk-react";
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
@@ -19,24 +19,22 @@ const Signup = () => {
     password: "",
     confirmPassword: "",
   });
+
+  // Read referral code from URL ?ref=CODE
+  const referralCode = useRef<string | null>(
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') : null
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const { register, isLoading, error, isAuthenticated, clearError } = useAuth();
-  const { signUp, isLoaded: isClerkLoaded, setActive } = useSignUp();
-  const { user: clerkUser, isLoaded: isClerkUserLoaded } = useUser();
-  const clerk = useClerk();
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const { signUp, isLoaded: isClerkLoaded } = useSignUp();
 
   // Redirect if already authenticated
   useEffect(() => {
-    // If user explicitly logged out, stay on signup page — don't auto-redirect
-    const explicitLogout = localStorage.getItem('explicit_logout') || sessionStorage.getItem('explicit_logout');
-    if (explicitLogout === 'true') {
-      return;
-    }
-    
     if (isAuthenticated) {
       navigate("/dashboard", { replace: true });
     }
@@ -79,7 +77,8 @@ const Signup = () => {
         formData.email,
         formData.password,
         formData.fullName || undefined,
-        'ADVANCED' // Default to ADVANCED, can be changed later
+        'ADVANCED',
+        referralCode.current || undefined
       );
       toast({
         title: "Account created!",
@@ -97,21 +96,15 @@ const Signup = () => {
     }
   };
 
-  const startOAuthRedirect = async (redirectUrl: string) => {
-    if (!signUp) {
-      throw new Error('SignUp is not available');
-    }
-    await signUp.authenticateWithRedirect({
-      strategy: 'oauth_google',
-      redirectUrl: redirectUrl,
-      redirectUrlComplete: redirectUrl,
-    });
-  };
-
   const handleSocialSignup = async (e: React.MouseEvent, provider: 'google' | 'apple') => {
     e.preventDefault();
     e.stopPropagation();
-    
+
+    if (provider === 'apple') {
+      toast({ title: "Coming Soon", description: "Apple signup will be available soon." });
+      return;
+    }
+
     if (!clerkPubKey) {
       toast({
         title: "Authentication unavailable",
@@ -122,53 +115,31 @@ const Signup = () => {
     }
 
     if (!isClerkLoaded || !signUp) {
-      toast({
-        title: "Loading...",
-        description: "Please wait while authentication loads.",
-      });
+      toast({ title: "Loading...", description: "Please wait while authentication loads." });
       return;
     }
 
-    if (provider === 'google') {
-      const redirectUrl = `${window.location.origin}/onboarding`;
-      
-      // Clear explicit logout flag (user is actively trying to sign up)
-      localStorage.removeItem('explicit_logout');
-      sessionStorage.removeItem('explicit_logout');
-      
-      try {
-        await startOAuthRedirect(redirectUrl);
-      } catch (err: any) {
-        // If Clerk says "already signed in", sign out first then retry once
-        if (err?.message?.includes('already signed in') || err?.message?.includes('single session mode')) {
-          console.log('Clerk has stale session, clearing and retrying OAuth...');
-          try {
-            if (clerk) {
-              await clerk.signOut();
-            }
-            // Retry after clearing session
-            await startOAuthRedirect(redirectUrl);
-          } catch (retryErr: any) {
-            console.error('OAuth retry error:', retryErr);
-            toast({
-              title: "Signup failed",
-              description: retryErr?.message || "Failed to start Google sign-up. Please try again.",
-              variant: "destructive",
-            });
-          }
-        } else {
-          console.error('OAuth error:', err);
-          toast({
-            title: "Signup failed",
-            description: err?.message || "Failed to start Google sign-up. Please check your Clerk dashboard settings.",
-            variant: "destructive",
-          });
-        }
-      }
-    } else if (provider === 'apple') {
+    if (oauthLoading) return;
+    setOauthLoading(true);
+
+    // Clear the explicit logout flag — user is actively signing up
+    localStorage.removeItem('explicit_logout');
+    sessionStorage.removeItem('explicit_logout');
+
+    try {
+      await signUp.authenticateWithRedirect({
+        strategy: 'oauth_google',
+        redirectUrl: `${window.location.origin}/sso-callback`,
+        redirectUrlComplete: `${window.location.origin}/onboarding`,
+      });
+      // Note: page will redirect — setOauthLoading(false) is not needed here
+    } catch (err: any) {
+      console.error('OAuth signup error:', err);
+      setOauthLoading(false);
       toast({
-        title: "Coming Soon",
-        description: "Apple signup will be available soon.",
+        title: "Signup failed",
+        description: err?.message || "Failed to start Google sign-up. Please try again.",
+        variant: "destructive",
       });
     }
   };
@@ -243,15 +214,20 @@ const Signup = () => {
                 type="button"
                 variant="outline"
                 className="w-full"
+                disabled={oauthLoading}
                 onClick={(e) => handleSocialSignup(e, "google")}
               >
-                <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                  <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                  <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-                  <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-                </svg>
-                Google
+                {oauthLoading ? (
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                ) : (
+                  <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                  </svg>
+                )}
+                {oauthLoading ? 'Redirecting...' : 'Google'}
               </Button>
               <Button
                 type="button"

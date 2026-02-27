@@ -1,6 +1,8 @@
 import { motion } from "framer-motion";
 import { Smartphone, Download, Scan, CheckCircle } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { useStorePath } from "@/hooks/useStorePath";
 import { Button } from "@/components/ui/button";
 
 const steps = [
@@ -28,6 +30,7 @@ const steps = [
 
 export default function DemoStoreSetupGuide() {
   const { config } = useDemoStore();
+  const basePath = useStorePath();
 
   return (
     <div className="min-h-screen bg-background">
@@ -153,7 +156,7 @@ export default function DemoStoreSetupGuide() {
             className="text-white hover:opacity-90"
             asChild
           >
-            <a href="/demo-store/contact">Contact Support</a>
+            <Link to={`${basePath}/contact`}>Contact Support</Link>
           </Button>
         </div>
       </section>

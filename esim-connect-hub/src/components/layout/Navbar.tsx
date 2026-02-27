@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, LogOut, User, Settings, Rocket, Store, ChevronDown, Globe, Calculator, BookOpen, Handshake, History, Map, Signal } from "lucide-react";
+import { Menu, X, LogOut, User, Settings, Rocket, Store, ChevronDown, Globe, Calculator, BookOpen, History, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "@/components/shared/ThemeToggle";
@@ -36,11 +36,8 @@ const navLinks = [
 ];
 
 const resourceLinks = [
-  { name: "Coverage Checker", href: "/coverage", icon: Signal },
-  { name: "World Coverage", href: "/world-coverage", icon: Map },
   { name: "ROI Calculator", href: "/roi-calculator", icon: Calculator },
   { name: "Case Studies", href: "/case-studies", icon: BookOpen },
-  { name: "Partners", href: "/partners", icon: Handshake },
   { name: "Changelog", href: "/changelog", icon: History },
 ];
 
@@ -48,9 +45,10 @@ export function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [resourcesOpen, setResourcesOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { isAuthenticated, user, logout } = useAuth();
+  const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
   // Use Clerk hook - must be called unconditionally per React rules
   // If ClerkProvider isn't present, the hook will handle it gracefully
   let clerk: any = null;
@@ -76,24 +74,32 @@ export function Navbar() {
   }, [location.pathname]);
 
   const handleLogout = async () => {
-    // Set a flag to prevent auto-reauth on reload
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+
+    // Set flag BEFORE anything else so ClerkAuthSync won't re-sync on page load
     localStorage.setItem('explicit_logout', 'true');
     sessionStorage.setItem('explicit_logout', 'true');
-    
-    // Clear local authentication state
+
+    // Clear our local state (user, JWT, API key)
     logout();
-    
-    // Sign out from Clerk and WAIT for it to complete before navigating
+
     if (clerkPubKey && clerk) {
       try {
-        await clerk.signOut();
+        // Pass redirectUrl to clerk.signOut() so Clerk itself navigates after
+        // the session is FULLY invalidated on Clerk's servers. This prevents the
+        // race condition where window.location.href fired before Clerk finished
+        // clearing its session, causing "You're already signed in" on next login.
+        await clerk.signOut({ redirectUrl: window.location.origin + '/' });
+        // clerk.signOut with redirectUrl triggers a full page navigation —
+        // the lines below are only reached if Clerk is unavailable.
       } catch (e) {
         console.error('Error signing out from Clerk:', e);
+        window.location.href = '/';
       }
+    } else {
+      window.location.href = '/';
     }
-    
-    // Now navigate (Clerk session is fully cleared)
-    navigate("/");
   };
 
   return (
@@ -178,7 +184,11 @@ export function Navbar() {
             {/* CTA Buttons */}
             <div className="hidden md:flex items-center gap-3 overflow-visible">
               <ThemeToggle />
-              {isAuthenticated ? (
+              {authLoading ? (
+                // While ClerkAuthSync is running its backend sync, show a spinner
+                // so the navbar doesn't flash "Sign In" between OAuth and full auth.
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+              ) : isAuthenticated ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="sm" className="flex items-center gap-2 outline-none focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-transparent">
@@ -225,10 +235,15 @@ export function Navbar() {
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={handleLogout}
+                      disabled={isLoggingOut}
                       className="flex items-center gap-2 cursor-pointer text-destructive focus:text-destructive"
                     >
-                      <LogOut className="w-4 h-4" />
-                      Logout
+                      {isLoggingOut ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <LogOut className="w-4 h-4" />
+                      )}
+                      {isLoggingOut ? 'Signing out...' : 'Logout'}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -344,7 +359,11 @@ export function Navbar() {
                 </motion.div>
 
                 <div className="pt-4 space-y-2 border-t border-border">
-                  {isAuthenticated ? (
+                  {authLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : isAuthenticated ? (
                     <>
                       <div className="px-4 py-2 text-sm">
                         <p className="font-medium">{user?.name || user?.email}</p>
@@ -365,13 +384,18 @@ export function Navbar() {
                       <Button
                         variant="destructive"
                         className="w-full"
+                        disabled={isLoggingOut}
                         onClick={() => {
                           setIsMobileMenuOpen(false);
                           handleLogout();
                         }}
                       >
-                        <LogOut className="w-4 h-4 mr-2" />
-                        Logout
+                        {isLoggingOut ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <LogOut className="w-4 h-4 mr-2" />
+                        )}
+                        {isLoggingOut ? 'Signing out...' : 'Logout'}
                       </Button>
                     </>
                   ) : (

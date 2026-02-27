@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, CheckCircle2, Search, Eye } from "lucide-react";
 import { apiClient } from "@/lib/api";
@@ -34,26 +35,26 @@ export default function SEOSettings() {
   }, [storeId]);
 
   const loadSEOConfig = async () => {
+    if (!storeId) return;
     setIsLoading(true);
     try {
-      const response = await fetch(`/api/seo/store/${storeId}`);
-      const result = await response.json();
-      if (result.success && result.data) {
+      const data = await (apiClient as any).getStoreSEO(storeId);
+      if (data) {
         setConfig({
-          title: result.data.title || "",
-          description: result.data.description || "",
-          keywords: result.data.keywords || [],
-          ogImage: result.data.ogImage || "",
-          ogTitle: result.data.ogTitle || "",
-          ogDescription: result.data.ogDescription || "",
-          twitterCard: result.data.twitterCard || "summary",
-          canonicalUrl: result.data.canonicalUrl || "",
+          title: data.title || "",
+          description: data.description || "",
+          keywords: data.keywords || [],
+          ogImage: data.ogImage || "",
+          ogTitle: data.ogTitle || "",
+          ogDescription: data.ogDescription || "",
+          twitterCard: data.twitterCard || "summary",
+          canonicalUrl: data.canonicalUrl || "",
         });
       }
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to load SEO settings",
+        description: error?.errorMessage || error?.message || "Failed to load SEO settings",
         variant: "destructive",
       });
     } finally {
@@ -82,28 +83,15 @@ export default function SEOSettings() {
     if (!storeId) return;
     setIsSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`/api/seo/store/${storeId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(config),
+      await (apiClient as any).updateStoreSEO(storeId, config);
+      toast({
+        title: "Success",
+        description: "SEO settings updated successfully",
       });
-      const result = await response.json();
-      if (result.success) {
-        toast({
-          title: "Success",
-          description: "SEO settings updated successfully",
-        });
-      } else {
-        throw new Error(result.errorMessage || 'Failed to update SEO settings');
-      }
     } catch (error: any) {
       toast({
         title: "Error",
-        description: error.message || "Failed to update SEO settings",
+        description: error?.errorMessage || error?.message || "Failed to update SEO settings",
         variant: "destructive",
       });
     } finally {

@@ -3,7 +3,7 @@
  * Provides typed functions for all API endpoints
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
 
 interface ApiResponse<T> {
   success: boolean;
@@ -85,46 +85,49 @@ class ApiClient {
       ...options.headers,
     };
 
-    // Check if this is an eSIM Access API endpoint (requires API key)
+    // Check if this is an eSIM Access API endpoint
     const isESIMAccessAPI = endpoint.startsWith('/api/v1/');
     
-    // Add authentication header - use the freshly loaded values
-    if (isESIMAccessAPI) {
-      // eSIM Access API endpoints require API key
-      if (!storedApiKey) {
-        throw new ApiError(
-          'API_KEY_REQUIRED',
-          'API key is required for eSIM Access API endpoints. Please create an API key in Settings.',
-          401
-        );
-      }
+    // Add authentication: session cookie (credentials: 'include') is always sent.
+    // For eSIM Access API: backend accepts session (Prisma DB) or Bearer (JWT/API key).
+    // Send Bearer when we have one; do not require localStorage — logged-in users use session.
+    if (storedJwtToken) {
+      headers['Authorization'] = `Bearer ${storedJwtToken}`;
+    } else if (storedApiKey) {
       headers['Authorization'] = `Bearer ${storedApiKey}`;
-    } else {
-      // Other endpoints can use API key or JWT token - prefer JWT token for merchant endpoints
-      if (storedJwtToken) {
-        headers['Authorization'] = `Bearer ${storedJwtToken}`;
-      } else if (storedApiKey) {
-        headers['Authorization'] = `Bearer ${storedApiKey}`;
-      }
     }
+    // If neither: request still goes with credentials: 'include' so session cookie can auth (Prisma DB)
 
     const response = await fetch(url, {
       ...options,
       headers,
+      credentials: 'include', // Send session cookie (DB-backed auth, works on any device)
     });
 
-    // Check content type before parsing
+    const text = await response.text();
     const contentType = response.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
-      const text = await response.text();
       throw new ApiError(
         'INVALID_RESPONSE',
-        `Expected JSON but got ${contentType}. Response: ${text.substring(0, 100)}`,
+        response.ok
+          ? `Expected JSON but got ${contentType || 'unknown'}.`
+          : `Request failed (${response.status}). ${text.trimStart().startsWith('<') ? 'Server returned an error page.' : text.substring(0, 120)}`,
         response.status
       );
     }
 
-    const data: ApiResponse<T> = await response.json();
+    let data: ApiResponse<T>;
+    try {
+      data = JSON.parse(text) as ApiResponse<T>;
+    } catch {
+      throw new ApiError(
+        'INVALID_RESPONSE',
+        text.trimStart().startsWith('<')
+          ? `Server returned an error page instead of JSON (${response.status}). Check that the API is running and the URL is correct.`
+          : `Invalid JSON in response.`,
+        response.status
+      );
+    }
 
     // Handle 401 Unauthorized - try to refresh token (only for non-API-key endpoints)
     if (response.status === 401 && !isESIMAccessAPI && !storedApiKey && storedJwtToken && retryCount === 0) {
@@ -144,11 +147,14 @@ class ApiClient {
     }
 
     if (!response.ok || !data.success) {
-      // Provide better error message for API key issues
+      // Better error for eSIM Access API 401: may be session or API key
       if (response.status === 401 && isESIMAccessAPI) {
+        const msg = (data as any).errorMessage || '';
         throw new ApiError(
-          data.errorCode || 'INVALID_API_KEY',
-          'Invalid or expired API key. Please check your API key in Settings.',
+          data.errorCode || 'UNAUTHORIZED',
+          msg.includes('Log in') || msg.includes('Authorization')
+            ? msg
+            : 'Please log in or provide an API key in Developer to use eSIM Access API.',
           response.status
         );
       }
@@ -167,14 +173,21 @@ class ApiClient {
     }
 
     // Regular API endpoints wrap data in { success, data }
-    return (data as any).data as T;
+    // Some endpoints return { success, message } without a data field
+    // In that case, return the entire response object (minus success if needed)
+    if ((data as any).data !== undefined) {
+      return (data as any).data as T;
+    }
+    // If no data field, return the response object itself (excluding success)
+    const { success, ...rest } = data as any;
+    return rest as T;
   }
 
   // Authentication endpoints
-  async register(email: string, password: string, name?: string, serviceType?: 'EASY' | 'ADVANCED') {
+  async register(email: string, password: string, name?: string, serviceType?: 'EASY' | 'ADVANCED', referralCode?: string) {
     return this.request<{ merchant: any; token: string }>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email, password, name, serviceType }),
+      body: JSON.stringify({ email, password, name, serviceType, referralCode }),
     });
   }
 
@@ -189,6 +202,33 @@ class ApiClient {
 
   async getCurrentMerchant() {
     return this.request<any>('/api/auth/me');
+  }
+
+  /** Preferences stored in DB (no localStorage). */
+  async getMerchantPreferences() {
+    return this.request<{
+      onboarding_progress: Record<string, boolean>;
+      step_completion_dates: Record<string, string>;
+      last_selected_store_id: string | null;
+      preferred_currency: string | null;
+    }>('/api/merchant/preferences');
+  }
+
+  async patchMerchantPreferences(updates: {
+    onboarding_progress?: Record<string, boolean>;
+    step_completion_dates?: Record<string, string>;
+    last_selected_store_id?: string | null;
+    preferred_currency?: string;
+  }) {
+    return this.request<{
+      onboarding_progress: Record<string, boolean>;
+      step_completion_dates: Record<string, string>;
+      last_selected_store_id: string | null;
+      preferred_currency: string | null;
+    }>('/api/merchant/preferences', {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
   }
 
   async forgotPassword(email: string) {
@@ -217,10 +257,16 @@ class ApiClient {
     return result;
   }
 
-  async updateProfile(name?: string, email?: string, serviceType?: 'EASY' | 'ADVANCED') {
+  /** Logout: clear DB session and cookie (no localStorage). */
+  async logout() {
+    return this.request<{ message: string }>('/api/auth/logout', { method: 'POST' });
+  }
+
+  async updateProfile(nameOrData?: string | Record<string, any>, email?: string, extra?: Record<string, any>) {
+    const body = typeof nameOrData === 'object' ? nameOrData : { name: nameOrData, email, ...extra };
     return this.request<any>('/api/auth/profile', {
       method: 'PUT',
-      body: JSON.stringify({ name, email, serviceType }),
+      body: JSON.stringify(body),
     });
   }
 
@@ -381,6 +427,10 @@ class ApiClient {
     return this.request<any>(`/api/v1/packages${query ? `?${query}` : ''}`);
   }
 
+  async getTopUpPackages(iccid: string) {
+    return this.getPackages({ type: 'TOPUP', iccid });
+  }
+
   async createOrder(data: {
     transactionId: string;
     amount?: number;
@@ -428,6 +478,13 @@ class ApiClient {
     }
     const query = queryParams.toString();
     return this.request<any>(`/api/v1/profiles${query ? `?${query}` : ''}`);
+  }
+
+  async saveProfileNickname(esimTranNo: string, nickname: string) {
+    return this.request<{ nickname: string }>(`/api/v1/profiles/${esimTranNo}/nickname`, {
+      method: 'PUT',
+      body: JSON.stringify({ nickname }),
+    });
   }
 
   async cancelProfile(esimTranNo: string) {
@@ -547,6 +604,8 @@ class ApiClient {
     logoUrl?: string;
     selectedPackages?: string[];
     pricingMarkup?: Record<string, any>;
+    templateKey?: 'default' | 'minimal' | 'bold' | 'travel';
+    templateSettings?: Record<string, unknown>;
   }) {
     return this.request<any>('/api/stores', {
       method: 'POST',
@@ -573,6 +632,8 @@ class ApiClient {
     logoUrl: string;
     selectedPackages: string[];
     pricingMarkup: Record<string, any>;
+    templateKey: 'default' | 'minimal' | 'bold' | 'travel';
+    templateSettings: Record<string, unknown>;
   }>) {
     return this.request<any>(`/api/stores/${storeId}`, {
       method: 'PUT',
@@ -674,6 +735,69 @@ class ApiClient {
         ...data 
       }),
     });
+  }
+
+  async createSubscription(data: {
+    plan: 'starter' | 'growth' | 'scale';
+    billingPeriod?: 'monthly' | 'yearly';
+    paymentMethodId?: string;
+  }) {
+    return this.request<{
+      id: string;
+      plan: string;
+      status: string;
+      currentPeriodStart: string;
+      currentPeriodEnd: string;
+      trialEnd: string | null;
+    }>('/api/subscriptions', {
+      method: 'POST',
+      body: JSON.stringify({
+        plan: data.plan,
+        billingPeriod: data.billingPeriod || 'monthly',
+        paymentMethodId: data.paymentMethodId,
+      }),
+    });
+  }
+
+  async topupBalance(amountCents: number, currency?: string) {
+    return this.request<{
+      clientSecret: string;
+      id: string;
+      amount: number;
+      currency: string;
+    }>('/api/payments/topup-balance', {
+      method: 'POST',
+      body: JSON.stringify({ amount: amountCents, currency: currency || 'usd' }),
+    });
+  }
+
+  async confirmTopup(paymentIntentId: string) {
+    return this.request<{ id: string; status: string; amount: number }>(
+      '/api/payments/confirm-topup',
+      {
+        method: 'POST',
+        body: JSON.stringify({ paymentIntentId }),
+      }
+    );
+  }
+
+  async getBalanceTransactions(page?: number, pageSize?: number) {
+    const params = new URLSearchParams();
+    if (page) params.append('page', String(page));
+    if (pageSize) params.append('pageSize', String(pageSize));
+    const query = params.toString();
+    return this.request<{
+      transactions: Array<{
+        id: string;
+        amount: number;
+        type: string;
+        description: string | null;
+        createdAt: string;
+      }>;
+      total: number;
+      page: number;
+      pageSize: number;
+    }>(`/api/balance/transactions${query ? `?${query}` : ''}`);
   }
 
   async refundPayment(paymentIntentId: string, amount?: number) {
@@ -834,6 +958,87 @@ class ApiClient {
     });
   }
 
+  async requestAffiliatePayout() {
+    return this.request<{ message: string }>('/api/affiliates/payout-request', {
+      method: 'POST',
+    });
+  }
+
+  async getPublicStore(storeId: string) {
+    return this.request<{
+      branding: {
+        businessName: string;
+        primaryColor: string;
+        secondaryColor: string;
+        accentColor: string;
+        logoUrl: string | null;
+      };
+      packages: Array<{
+        packageCode: string;
+        slug: string;
+        name: string;
+        data: string;
+        validity: string;
+        price: number;
+        currency: string;
+        location: string;
+        locationCode: string;
+        activeType?: string;
+        dataType?: number;
+      }>;
+      currency: string;
+    }>(`/api/stores/${storeId}/public`);
+  }
+
+  async getStoreBySubdomain(subdomain: string) {
+    return this.request<{
+      storeId: string;
+      branding: {
+        businessName: string;
+        primaryColor: string;
+        secondaryColor: string;
+        accentColor: string;
+        logoUrl: string | null;
+      };
+      packages: Array<{
+        packageCode: string;
+        slug: string;
+        name: string;
+        data: string;
+        validity: string;
+        price: number;
+        currency: string;
+        location: string;
+        locationCode: string;
+        activeType?: string;
+        dataType?: number;
+      }>;
+      currency: string;
+      templateKey?: string;
+      templateSettings?: Record<string, unknown>;
+    }>(`/api/stores/by-subdomain/${subdomain}`);
+  }
+
+  async createSetupIntent() {
+    return this.request<{ clientSecret: string; setupIntentId: string }>('/api/payments/setup-intent', {
+      method: 'POST',
+    });
+  }
+
+  async applyCoupon(couponCode: string) {
+    return this.request<{ message: string }>('/api/subscriptions/apply-coupon', {
+      method: 'POST',
+      body: JSON.stringify({ couponCode }),
+    });
+  }
+
+  async sendTestEmail(email: string) {
+    return this.request<{ message: string }>('/api/auth/test-email', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
   // Support ticket endpoints
   async getSupportTickets(params?: {
     status?: string;
@@ -955,6 +1160,44 @@ export const currencyService = {
     method: 'POST',
     body: JSON.stringify({ sampleVariables }),
   });
+};
+
+// Additional methods for Developer, PaymentSettings pages
+(apiClient as any).getApiKeys = function() {
+  return this.listApiKeys();
+};
+
+(apiClient as any).getWebhooks = function() {
+  return this.getWebhook();
+};
+
+(apiClient as any).createWebhook = function(url: string, events: string[]) {
+  return this.configureWebhook(url, events);
+};
+
+// Backend has no PUT /webhooks; POST /webhooks upserts by merchant, so update = configure
+(apiClient as any).updateWebhook = function(_id: string, url: string, events: string[]) {
+  return this.configureWebhook(url, events);
+};
+
+(apiClient as any).getMerchantProfile = function() {
+  return this.request('/api/auth/me');
+};
+
+(apiClient as any).updateMerchantProfile = function(updates: any) {
+  return this.request('/api/auth/profile', {
+    method: 'PUT',
+    body: JSON.stringify(updates),
+  });
+};
+
+(apiClient as any).getPaymentMethods = function() {
+  // Return empty on any failure so UI doesn't break; errors are not surfaced to caller
+  return this.request('/api/payments/methods').catch(() => ({ paymentMethods: [] }));
+};
+
+(apiClient as any).deletePaymentMethod = function(methodId: string) {
+  return this.request(`/api/payments/methods/${methodId}`, { method: 'DELETE' });
 };
 
 export { ApiError };

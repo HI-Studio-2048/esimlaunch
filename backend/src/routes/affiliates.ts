@@ -1,12 +1,12 @@
 import express from 'express';
 import { z } from 'zod';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { affiliateService } from '../services/affiliateService';
 
 const router = express.Router();
 
 // All routes require JWT authentication
-router.use(authenticateJWT);
+router.use(authenticateSessionOrJWT);
 
 // Validation schemas
 const trackReferralSchema = z.object({
@@ -113,6 +113,43 @@ router.get('/commissions', async (req, res, next) => {
 });
 
 /**
+ * POST /api/affiliates/payout-request
+ * Request a payout for pending commissions.
+ */
+router.post('/payout-request', async (req, res, next) => {
+  try {
+    const merchantId = (req as any).merchant!.id;
+    const stats = await affiliateService.getAffiliateStats(merchantId);
+
+    if (stats.pendingCommissions === 0) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'NO_PENDING_COMMISSIONS',
+        errorMessage: 'No pending commissions to pay out',
+      });
+    }
+
+    // Mark all pending commissions as paid
+    const { prisma } = await import('../lib/prisma');
+    await prisma.affiliateCommission.updateMany({
+      where: { affiliateId: merchantId, status: 'pending' },
+      data: { status: 'paid', paidAt: new Date() },
+    });
+
+    res.json({
+      success: true,
+      message: 'Payout request submitted. Your commissions have been marked for payout.',
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'PAYOUT_REQUEST_FAILED',
+      errorMessage: error.message || 'Failed to submit payout request',
+    });
+  }
+});
+
+/**
  * POST /api/affiliates/track-referral
  * Track referral (called when merchant signs up with referral code)
  */
@@ -145,6 +182,11 @@ router.post('/track-referral', async (req, res, next) => {
 });
 
 export default router;
+
+
+
+
+
 
 
 

@@ -37,14 +37,11 @@ Not all eSIM businesses are the same. Consider focusing on:
 
 ## Step 2: Select Your Providers
 
-The provider you choose determines your coverage, pricing, and reliability. Top providers to consider:
+eSIMLaunch is powered exclusively by eSIM Access, a leading global eSIM infrastructure provider:
 
-- **Airalo** — Largest marketplace with 200+ countries
-- **eSIM Go** — Enterprise-focused with robust APIs
-- **GigSky** — Premium quality, fewer destinations
-- **Truphone** — Strong in business connectivity
+- **eSIM Access** — 190+ countries, enterprise-grade APIs, real-time eSIM provisioning, competitive wholesale rates
 
-Most successful resellers work with 2-3 providers to maximize coverage and negotiate better rates.
+Your store automatically taps into the full eSIM Access catalog, giving you instant access to thousands of plans across every major region.
 
 ## Step 3: Build Your Storefront
 
@@ -211,10 +208,7 @@ Not all providers have the same reliability. Ask for activation success rate dat
 
 | Provider | Countries | API | Best For |
 |----------|-----------|-----|----------|
-| Airalo | 200+ | Good | Volume & variety |
-| eSIM Go | 160+ | Excellent | Enterprise/API |
-| GigSky | 100+ | Good | Premium quality |
-| Truphone | 100+ | Good | Business users |
+| eSIM Access | 190+ | Excellent | Global coverage & enterprise API |
 
 ## Our Recommendation
 
@@ -363,7 +357,7 @@ export default function BlogPost() {
 
   if (!post) {
     return (
-      <div className="min-h-screen pt-32 text-center">
+      <div className="min-h-screen pt-12 text-center">
         <h1 className="text-3xl font-bold mb-4">Post not found</h1>
         <p className="text-muted-foreground mb-8">The blog post you're looking for doesn't exist.</p>
         <Button asChild>
@@ -399,7 +393,7 @@ export default function BlogPost() {
   };
 
   return (
-    <div className="pt-20">
+    <div>
       {/* Hero */}
       <section className="relative">
         <div className="aspect-[3/1] max-h-[400px] w-full overflow-hidden bg-muted">

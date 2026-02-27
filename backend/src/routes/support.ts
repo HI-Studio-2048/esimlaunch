@@ -1,8 +1,9 @@
 import express from 'express';
 import { z } from 'zod';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { authenticateCustomer } from '../middleware/customerAuth';
 import { supportService } from '../services/supportService';
+import { prisma } from '../lib/prisma';
 
 const router = express.Router();
 
@@ -11,6 +12,7 @@ const createTicketSchema = z.object({
   customerEmail: z.string().email('Invalid email address'),
   customerName: z.string().optional(),
   merchantId: z.string().uuid().optional(),
+  storeId: z.string().uuid().optional(),
   orderId: z.string().uuid().optional(),
   subject: z.string().min(1, 'Subject is required'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
@@ -44,8 +46,20 @@ router.post('/tickets', async (req, res, next) => {
     // If customer is authenticated, use their ID
     const customerId = (req as any).customer?.id;
 
+    // Resolve storeId to merchantId if provided
+    let merchantId = data.merchantId;
+    if (!merchantId && data.storeId) {
+      const store = await prisma.store.findUnique({
+        where: { id: data.storeId },
+        select: { merchantId: true },
+      });
+      if (store) merchantId = store.merchantId;
+    }
+
+    const { storeId, ...ticketData } = data;
     const ticket = await supportService.createTicket({
-      ...data,
+      ...ticketData,
+      merchantId,
       customerId,
     });
 
@@ -74,7 +88,7 @@ router.post('/tickets', async (req, res, next) => {
  * GET /api/support/tickets
  * Get tickets (requires merchant authentication via JWT)
  */
-router.get('/tickets', authenticateJWT, async (req, res, next) => {
+router.get('/tickets', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const merchant = (req as any).merchant;
 
@@ -103,6 +117,37 @@ router.get('/tickets', authenticateJWT, async (req, res, next) => {
       success: false,
       errorCode: 'FETCH_FAILED',
       errorMessage: error.message || 'Failed to fetch tickets',
+    });
+  }
+});
+
+/**
+ * GET /api/support/tickets/number/:ticketNumber
+ * Get ticket by ticket number (public, for email links)
+ * MUST be defined before /tickets/:ticketId to avoid route shadowing
+ */
+router.get('/tickets/number/:ticketNumber', async (req, res, next) => {
+  try {
+    const ticketNumber = req.params.ticketNumber;
+    const ticket = await supportService.getTicketByNumber(ticketNumber);
+
+    if (!ticket) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'TICKET_NOT_FOUND',
+        errorMessage: 'Ticket not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: ticket,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'FETCH_FAILED',
+      errorMessage: error.message || 'Failed to fetch ticket',
     });
   }
 });
@@ -141,36 +186,6 @@ router.get('/tickets/:ticketId', async (req, res, next) => {
         success: false,
         errorCode: 'FORBIDDEN',
         errorMessage: 'You do not have access to this ticket',
-      });
-    }
-
-    res.json({
-      success: true,
-      data: ticket,
-    });
-  } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      errorCode: 'FETCH_FAILED',
-      errorMessage: error.message || 'Failed to fetch ticket',
-    });
-  }
-});
-
-/**
- * GET /api/support/tickets/number/:ticketNumber
- * Get ticket by ticket number (public, for email links)
- */
-router.get('/tickets/number/:ticketNumber', async (req, res, next) => {
-  try {
-    const ticketNumber = req.params.ticketNumber;
-    const ticket = await supportService.getTicketByNumber(ticketNumber);
-
-    if (!ticket) {
-      return res.status(404).json({
-        success: false,
-        errorCode: 'TICKET_NOT_FOUND',
-        errorMessage: 'Ticket not found',
       });
     }
 
@@ -283,7 +298,7 @@ router.post('/tickets/:ticketId/messages', async (req, res, next) => {
  * PUT /api/support/tickets/:ticketId/status
  * Update ticket status (merchant only)
  */
-router.put('/tickets/:ticketId/status', authenticateJWT, async (req, res, next) => {
+router.put('/tickets/:ticketId/status', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const ticketId = req.params.ticketId;
     const merchantId = (req as any).merchant!.id;
@@ -339,7 +354,7 @@ router.put('/tickets/:ticketId/status', authenticateJWT, async (req, res, next) 
  * PUT /api/support/tickets/:ticketId/priority
  * Update ticket priority (merchant only)
  */
-router.put('/tickets/:ticketId/priority', authenticateJWT, async (req, res, next) => {
+router.put('/tickets/:ticketId/priority', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const ticketId = req.params.ticketId;
     const merchantId = (req as any).merchant!.id;
@@ -394,7 +409,7 @@ router.put('/tickets/:ticketId/priority', authenticateJWT, async (req, res, next
  * GET /api/support/stats
  * Get ticket statistics (merchant only)
  */
-router.get('/stats', authenticateJWT, async (req, res, next) => {
+router.get('/stats', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const merchantId = (req as any).merchant!.id;
     const stats = await supportService.getTicketStats(merchantId);

@@ -1,8 +1,59 @@
 import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { env } from '../config/env';
 import { qrCodeService } from './qrCodeService';
+import { emailTemplateService } from './emailTemplateService';
+import { prisma } from '../lib/prisma';
 
 const resend = new Resend(env.resendApiKey);
+
+interface MerchantSmtpConfig {
+  smtpHost?: string | null;
+  smtpPort?: number | null;
+  smtpUser?: string | null;
+  smtpPass?: string | null;
+  smtpFromName?: string | null;
+  smtpFromEmail?: string | null;
+}
+
+async function getMerchantSmtp(merchantId: string): Promise<MerchantSmtpConfig | null> {
+  try {
+    return await prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { smtpHost: true, smtpPort: true, smtpUser: true, smtpPass: true, smtpFromName: true, smtpFromEmail: true },
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function sendEmail(params: {
+  to: string;
+  subject: string;
+  html: string;
+  merchantSmtp?: MerchantSmtpConfig | null;
+}): Promise<void> {
+  const { to, subject, html, merchantSmtp } = params;
+
+  if (merchantSmtp?.smtpHost && merchantSmtp.smtpUser && merchantSmtp.smtpPass) {
+    const transport = nodemailer.createTransport({
+      host: merchantSmtp.smtpHost,
+      port: merchantSmtp.smtpPort || 587,
+      secure: (merchantSmtp.smtpPort || 587) === 465,
+      auth: { user: merchantSmtp.smtpUser, pass: merchantSmtp.smtpPass },
+    });
+    const fromName = merchantSmtp.smtpFromName || 'eSIM Launch';
+    const fromEmail = merchantSmtp.smtpFromEmail || merchantSmtp.smtpUser;
+    await transport.sendMail({ from: `"${fromName}" <${fromEmail}>`, to, subject, html });
+    return;
+  }
+
+  if (!env.resendApiKey) {
+    console.warn('RESEND_API_KEY not configured, skipping email send');
+    return;
+  }
+  await resend.emails.send({ from: env.resendFromEmail, to, subject, html });
+}
 
 interface SendPasswordResetEmailParams {
   email: string;
@@ -121,19 +172,98 @@ export const emailService = {
     order,
     packages,
     customerName,
+    merchantId,
+  }: {
+    email: string;
+    order: { id: string; totalAmount: number; status: string; createdAt: string };
+    packages: Array<{ data?: string; validity?: string; location?: string }>;
+    customerName?: string;
+    merchantId?: string;
+  }): Promise<void> {
+    const orderTrackingUrl = `${env.frontendUrl}/order-tracking?orderId=${order.id}`;
+    const merchantSmtp = merchantId ? await getMerchantSmtp(merchantId) : null;
+
+    // Try to use merchant's custom template
+    if (merchantId) {
+      try {
+        const template = await emailTemplateService.getTemplate(merchantId, 'order-confirmation');
+        if (template) {
+          const rendered = emailTemplateService.renderTemplate(template, {
+            orderNumber: order.id.substring(0, 8).toUpperCase(),
+            customerName: customerName || 'Customer',
+            totalAmount: `$${(order.totalAmount / 100).toFixed(2)}`,
+            orderDate: new Date(order.createdAt).toLocaleDateString(),
+          });
+          await sendEmail({ to: email, subject: rendered.subject, html: rendered.htmlBody, merchantSmtp });
+          return;
+        }
+      } catch (templateErr) {
+        console.error('Template render failed, falling back to hardcoded HTML:', templateErr);
+      }
+    }
+
+    const fallbackHtml = `
+    <!DOCTYPE html>
+    <html>
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Order Confirmation</title></head>
+      <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+        <div style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+          <h1 style="color:white;margin:0;font-size:24px;">eSIM Launch</h1>
+        </div>
+        <div style="background:#fff;padding:40px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;">
+          <h2 style="color:#1f2937;margin-top:0;">Order Confirmation</h2>
+          <p style="color:#6b7280;">Hello${customerName ? ` ${customerName}` : ''},</p>
+          <p style="color:#6b7280;">Thank you for your order! We're processing your eSIM purchase and will send you the QR code shortly.</p>
+          <div style="background:#f9fafb;padding:20px;border-radius:8px;margin:20px 0;">
+            <p style="margin:0;font-weight:600;color:#1f2937;">Order Details</p>
+            <p style="margin:5px 0;color:#6b7280;font-size:14px;">Order ID: ${order.id.substring(0, 8)}...</p>
+            <p style="margin:5px 0;color:#6b7280;font-size:14px;">Total: $${(order.totalAmount / 100).toFixed(2)}</p>
+            <p style="margin:5px 0;color:#6b7280;font-size:14px;">Status: ${order.status}</p>
+          </div>
+          <div style="text-align:center;margin:30px 0;">
+            <a href="${orderTrackingUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);color:white;padding:12px 30px;text-decoration:none;border-radius:6px;font-weight:600;">Track Your Order</a>
+          </div>
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0;">
+          <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">© ${new Date().getFullYear()} eSIM Launch. All rights reserved.</p>
+        </div>
+      </body>
+    </html>`;
+
+    try {
+      await sendEmail({ to: email, subject: 'Order Confirmation - eSIM Launch', html: fallbackHtml, merchantSmtp });
+    } catch (error) {
+      console.error('Failed to send order confirmation email:', error);
+      throw new Error('Failed to send order confirmation email');
+    }
+  },
+
+  // legacy overload keeping old signature
+  async _sendOrderConfirmationEmailLegacy({
+    email,
+    order,
+    packages,
+    customerName,
   }: {
     email: string;
     order: { id: string; totalAmount: number; status: string; createdAt: string };
     packages: Array<{ data?: string; validity?: string; location?: string }>;
     customerName?: string;
   }): Promise<void> {
-    if (!env.resendApiKey) {
-      console.warn('RESEND_API_KEY not configured, skipping email send');
-      return;
-    }
+    // Just wraps the main method with no merchantId
+    return this.sendOrderConfirmationEmail({ email, order, packages, customerName });
+  },
 
+  // ---- DEAD CODE kept for build compat (remove in future cleanup) ----
+  async _legacyResendOrderConfirm({
+    email, order, packages, customerName,
+  }: {
+    email: string;
+    order: { id: string; totalAmount: number; status: string; createdAt: string };
+    packages: Array<{ data?: string; validity?: string; location?: string }>;
+    customerName?: string;
+  }): Promise<void> {
+    if (!env.resendApiKey) return;
     const orderTrackingUrl = `${env.frontendUrl}/order-tracking?orderId=${order.id}`;
-
     try {
       await resend.emails.send({
         from: env.resendFromEmail,
@@ -176,8 +306,7 @@ export const emailService = {
         `,
       });
     } catch (error) {
-      console.error('Failed to send order confirmation email:', error);
-      throw new Error('Failed to send order confirmation email');
+      console.error('Failed to send order confirmation email (legacy):', error);
     }
   },
 
@@ -205,11 +334,6 @@ export const emailService = {
     customerName?: string;
     storeName?: string;
   }): Promise<void> {
-    if (!env.resendApiKey) {
-      console.warn('RESEND_API_KEY not configured, skipping email send');
-      return;
-    }
-
     const orderTrackingUrl = `${env.frontendUrl}/order-tracking?orderId=${order.id}`;
 
     // Build QR code images HTML
@@ -225,11 +349,7 @@ export const emailService = {
     }).join('');
 
     try {
-      await resend.emails.send({
-        from: env.resendFromEmail,
-        to: email,
-        subject: 'Your eSIM is Ready! - QR Code Delivery',
-        html: `
+      const esimHtml = `
           <!DOCTYPE html>
           <html>
             <head>
@@ -274,9 +394,8 @@ export const emailService = {
                 <p style="color: #9ca3af; font-size: 12px; text-align: center; margin: 0;">© ${new Date().getFullYear()} ${storeName || 'eSIM Launch'}. All rights reserved.</p>
               </div>
             </body>
-          </html>
-        `,
-      });
+          </html>`;
+      await sendEmail({ to: email, subject: 'Your eSIM is Ready! - QR Code Delivery', html: esimHtml });
     } catch (error) {
       console.error('Failed to send eSIM delivery email:', error);
       throw new Error('Failed to send eSIM delivery email');

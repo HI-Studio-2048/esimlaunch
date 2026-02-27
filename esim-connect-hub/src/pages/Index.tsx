@@ -80,7 +80,7 @@ const faqs = [
   },
   { 
     question: "What providers are available?", 
-    answer: "We partner with leading global eSIM providers covering 190+ countries. You can connect to multiple providers simultaneously for the best coverage and pricing."
+    answer: "eSIMLaunch is powered by eSIM Access, giving your store coverage in 190+ countries. All eSIM plans are instantly provisioned via our real-time integration."
   },
   { 
     question: "Can I set my own prices?", 

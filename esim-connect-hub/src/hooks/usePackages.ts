@@ -62,9 +62,9 @@ export function usePackages(options: UsePackagesOptions = {}) {
         console.error('Failed to fetch packages:', err);
         // Provide user-friendly error messages
         if (err.errorCode === 'API_KEY_REQUIRED' || err.errorCode === 'INVALID_API_KEY') {
-          setError("API key required. Please create an API key in Settings to access packages.");
+          setError("API key required. Please create an API key in Developer to access packages.");
         } else if (err.status === 401 || err.errorCode === 'UNAUTHORIZED') {
-          setError("Authentication required. Please configure your API key in Settings.");
+          setError("Authentication required. Please configure your API key in Developer.");
         } else {
           setError(err.message || "Failed to fetch packages");
         }
@@ -120,7 +120,7 @@ export function usePackages(options: UsePackagesOptions = {}) {
         } catch (err: any) {
           console.error('Failed to fetch packages after API key update:', err);
           if (err.errorCode === 'API_KEY_REQUIRED' || err.errorCode === 'INVALID_API_KEY') {
-            setError("API key required. Please create an API key in Settings to access packages.");
+            setError("API key required. Please create an API key in Developer to access packages.");
           } else {
             setError(err.message || "Failed to fetch packages");
           }

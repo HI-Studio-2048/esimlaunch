@@ -3,7 +3,7 @@ import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
 
 const stripe = new Stripe(env.stripeSecretKey, {
-  apiVersion: '2024-11-20.acacia',
+  apiVersion: '2026-01-28.clover' as any,
 });
 
 export type SubscriptionPlan = 'starter' | 'growth' | 'scale';
@@ -107,9 +107,10 @@ export const subscriptionService = {
       },
     });
 
-    // Calculate period dates
-    const currentPeriodStart = new Date(subscription.current_period_start * 1000);
-    const currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+    // Calculate period dates (cast to any — Stripe SDK types vary by API version)
+    const sub = subscription as any;
+    const currentPeriodStart = new Date(sub.current_period_start * 1000);
+    const currentPeriodEnd = new Date(sub.current_period_end * 1000);
 
     // Store subscription in database
     const dbSubscription = await prisma.subscription.upsert({
@@ -202,8 +203,8 @@ export const subscriptionService = {
       data: {
         plan: newPlan,
         status: updatedSubscription.status as SubscriptionStatus,
-        currentPeriodStart: new Date(updatedSubscription.current_period_start * 1000),
-        currentPeriodEnd: new Date(updatedSubscription.current_period_end * 1000),
+        currentPeriodStart: new Date((updatedSubscription as any).current_period_start * 1000),
+        currentPeriodEnd: new Date((updatedSubscription as any).current_period_end * 1000),
         updatedAt: new Date(),
       },
     });
@@ -294,8 +295,8 @@ export const subscriptionService = {
       where: { merchantId: dbSubscription.merchantId },
       data: {
         status: subscription.status as SubscriptionStatus,
-        currentPeriodStart: new Date(subscription.current_period_start * 1000),
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
+        currentPeriodStart: new Date((subscription as any).current_period_start * 1000),
+        currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
         cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
         updatedAt: new Date(),
       },
@@ -308,14 +309,15 @@ export const subscriptionService = {
   async handleInvoiceWebhook(event: Stripe.Event): Promise<void> {
     const invoice = event.data.object as Stripe.Invoice;
 
-    if (!invoice.customer || !invoice.subscription) {
+    const invoiceAny = invoice as any;
+    if (!invoiceAny.customer || !invoiceAny.subscription) {
       return;
     }
 
     // Find subscription
-    const subscriptionId = typeof invoice.subscription === 'string' 
-      ? invoice.subscription 
-      : invoice.subscription.id;
+    const subscriptionId = typeof invoiceAny.subscription === 'string' 
+      ? invoiceAny.subscription 
+      : invoiceAny.subscription.id;
 
     const dbSubscription = await prisma.subscription.findUnique({
       where: { stripeSubscriptionId: subscriptionId },

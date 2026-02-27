@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
 import { Globe, Users, Award, Heart, Zap, Shield, Clock, MapPin } from "lucide-react";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { usePublicStore } from "@/hooks/usePublicStore";
 
 const stats = [
   { value: "190+", label: "Countries Covered" },
-  { value: "2M+", label: "Happy Customers" },
   { value: "99.9%", label: "Uptime Guarantee" },
+  { value: "4G/5G", label: "Network Speed" },
   { value: "24/7", label: "Customer Support" },
 ];
 
@@ -16,15 +17,12 @@ const values = [
   { icon: Heart, title: "Passion for Travel", desc: "We're travelers too. We understand the joy of exploring new places." },
 ];
 
-const team = [
-  { name: "Sarah Chen", role: "CEO & Founder", image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=300&q=80" },
-  { name: "Michael Park", role: "CTO", image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&q=80" },
-  { name: "Emily Rodriguez", role: "Head of Operations", image: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=300&q=80" },
-  { name: "David Kim", role: "Head of Partnerships", image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=300&q=80" },
-];
-
 export default function DemoStoreAbout() {
-  const { config } = useDemoStore();
+  const { config, storeId } = useDemoStore();
+  const { data: storeData } = usePublicStore(storeId);
+  const ts = storeData?.templateSettings || {};
+  const tagline = ts.aboutTagline || `We're on a mission to keep the world connected. Our eSIM technology makes it easy to stay online wherever your adventures take you.`;
+  const mission = ts.aboutMission || `Founded by frequent travelers who experienced the pain of expensive roaming charges and unreliable local SIMs, ${config.businessName} makes it easy for anyone to stay connected in 190+ countries — instantly, affordably, and without the hassle of physical SIM cards.`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -47,7 +45,7 @@ export default function DemoStoreAbout() {
             transition={{ delay: 0.1 }}
             className="text-white/90 text-lg max-w-2xl mx-auto"
           >
-            We're on a mission to keep the world connected. Our eSIM technology makes it easy to stay online wherever your adventures take you.
+            {tagline}
           </motion.p>
         </div>
       </section>
@@ -81,15 +79,9 @@ export default function DemoStoreAbout() {
             <div>
               <h2 className="text-2xl md:text-3xl font-bold mb-6">Our Story</h2>
               <div className="space-y-4 text-muted-foreground">
-                <p>
-                  Founded in 2020, {config.businessName} was born from a simple frustration: why is it so hard to stay connected when traveling abroad?
-                </p>
-                <p>
-                  Our founders, seasoned travelers themselves, experienced the pain of expensive roaming charges, unreliable local SIMs, and the hassle of swapping physical cards. They knew there had to be a better way.
-                </p>
-                <p>
-                  Today, we've helped millions of travelers stay connected across 190+ countries. Our eSIM technology provides instant, affordable connectivity without the hassle of physical SIM cards.
-                </p>
+                {mission.split('\n').filter(Boolean).map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))}
               </div>
             </div>
             <div className="relative">
@@ -133,32 +125,6 @@ export default function DemoStoreAbout() {
           </div>
         </div>
       </section>
-
-      {/* Team - Hidden */}
-      {/* <section className="py-16">
-        <div className="container mx-auto px-4">
-          <h2 className="text-2xl md:text-3xl font-bold mb-8 text-center">Meet Our Team</h2>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-8 max-w-5xl mx-auto">
-            {team.map((member, i) => (
-              <motion.div
-                key={member.name}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1 }}
-                className="text-center"
-              >
-                <img
-                  src={member.image}
-                  alt={member.name}
-                  className="w-32 h-32 rounded-full mx-auto mb-4 object-cover"
-                />
-                <h3 className="font-semibold">{member.name}</h3>
-                <p className="text-sm text-muted-foreground">{member.role}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section> */}
 
       {/* Features */}
       <section

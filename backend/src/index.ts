@@ -25,8 +25,8 @@ app.use(cors({
   exposedHeaders: ['Content-Type', 'Authorization'],
 }));
 // Note: Webhook routes need raw body, so they're handled in the route itself
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Store router middleware (detects domain/subdomain and loads store)
 // Note: This is optional - can be handled on frontend or via reverse proxy
@@ -55,8 +55,11 @@ import analyticsRoutes from './routes/analytics';
 import seoRoutes from './routes/seo';
 import emailTemplateRoutes from './routes/emailTemplates';
 import affiliateRoutes from './routes/affiliates';
+import balanceRoutes from './routes/balance';
+import preferencesRoutes from './routes/preferences';
 
 app.use('/api/auth', authRoutes);
+app.use('/api/merchant/preferences', preferencesRoutes);
 app.use('/api/api-keys', apiKeyRoutes);
 app.use('/api/v1', apiRoutes);
 app.use('/api/webhooks', webhookRoutes);
@@ -72,6 +75,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/seo', seoRoutes);
 app.use('/api/email-templates', emailTemplateRoutes);
 app.use('/api/affiliates', affiliateRoutes);
+app.use('/api/balance', balanceRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

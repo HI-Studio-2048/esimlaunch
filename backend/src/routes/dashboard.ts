@@ -1,12 +1,12 @@
 import express from 'express';
 import { z } from 'zod';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { prisma } from '../lib/prisma';
 
 const router = express.Router();
 
 // All routes require JWT authentication
-router.use(authenticateJWT);
+router.use(authenticateSessionOrJWT);
 
 /**
  * GET /api/dashboard/stats
@@ -16,34 +16,31 @@ router.get('/stats', async (req, res, next) => {
   try {
     const merchantId = req.merchant!.id;
 
-    // Get order statistics
-    const [totalOrders, completedOrders, pendingOrders, totalRevenue] = await Promise.all([
-      prisma.order.count({
-        where: { merchantId },
-      }),
-      prisma.order.count({
-        where: {
-          merchantId,
-          status: 'COMPLETED',
-        },
-      }),
-      prisma.order.count({
-        where: {
-          merchantId,
-          status: { in: ['PENDING', 'PROCESSING'] },
-        },
-      }),
+    // Order statistics: include both Order (Advanced API) and CustomerOrder (Easy Way store)
+    const [advOrders, advCompleted, advPending, advRevenue, easyTotal, easyCompleted, easyPending, easyRevenue] = await Promise.all([
+      prisma.order.count({ where: { merchantId } }),
+      prisma.order.count({ where: { merchantId, status: 'COMPLETED' } }),
+      prisma.order.count({ where: { merchantId, status: { in: ['PENDING', 'PROCESSING'] } } }),
       prisma.order.aggregate({
-        where: {
-          merchantId,
-          status: 'COMPLETED',
-          totalAmount: { not: null },
-        },
-        _sum: {
-          totalAmount: true,
-        },
+        where: { merchantId, status: 'COMPLETED', totalAmount: { not: null } },
+        _sum: { totalAmount: true },
+      }),
+      prisma.customerOrder.count({ where: { merchantId } }),
+      prisma.customerOrder.count({ where: { merchantId, status: 'COMPLETED' } }),
+      prisma.customerOrder.count({ where: { merchantId, status: { in: ['PENDING', 'PROCESSING'] } } }),
+      prisma.customerOrder.aggregate({
+        where: { merchantId, status: 'COMPLETED' },
+        _sum: { totalAmount: true },
       }),
     ]);
+
+    const totalOrders = advOrders + easyTotal;
+    const completedOrders = advCompleted + easyCompleted;
+    const pendingOrders = advPending + easyPending;
+    // Order.totalAmount is in 1/10000 USD; CustomerOrder.totalAmount is in cents
+    const advRevenueDollars = advRevenue._sum.totalAmount ? Number(advRevenue._sum.totalAmount) / 10000 : 0;
+    const easyRevenueDollars = easyRevenue._sum.totalAmount ? Number(easyRevenue._sum.totalAmount) / 100 : 0;
+    const totalRevenueDollars = advRevenueDollars + easyRevenueDollars;
 
     // Get API key count
     const apiKeyCount = await prisma.apiKey.count({
@@ -53,12 +50,12 @@ router.get('/stats', async (req, res, next) => {
       },
     });
 
-    // Get merchant balance from database
+    // Get merchant balance from database (stored in cents; return USD)
     const merchant = await prisma.merchant.findUnique({
       where: { id: merchantId },
       select: { balance: true },
     });
-    const balance = merchant?.balance ? Number(merchant.balance) / 10000 : 0;
+    const balance = merchant?.balance ? Number(merchant.balance) / 100 : 0;
 
     res.json({
       success: true,
@@ -69,9 +66,7 @@ router.get('/stats', async (req, res, next) => {
           pending: pendingOrders,
         },
         revenue: {
-          total: totalRevenue._sum.totalAmount
-            ? Number(totalRevenue._sum.totalAmount) / 10000
-            : 0, // Convert from smallest unit to USD
+          total: totalRevenueDollars,
         },
         apiKeys: {
           active: apiKeyCount,

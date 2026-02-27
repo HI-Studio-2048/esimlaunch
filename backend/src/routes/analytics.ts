@@ -1,12 +1,12 @@
 import express from 'express';
 import { z } from 'zod';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { analyticsService } from '../services/analyticsService';
 
 const router = express.Router();
 
 // All routes require JWT authentication
-router.use(authenticateJWT);
+router.use(authenticateSessionOrJWT);
 
 // Validation schemas
 const analyticsFiltersSchema = z.object({
@@ -181,6 +181,11 @@ router.get('/summary', async (req, res, next) => {
 });
 
 export default router;
+
+
+
+
+
 
 
 

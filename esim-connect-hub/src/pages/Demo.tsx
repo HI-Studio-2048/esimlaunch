@@ -430,7 +430,7 @@ export default function Demo() {
                         <FormItem>
                           <FormLabel>Current eSIM Solution (Optional)</FormLabel>
                           <FormControl>
-                            <Input placeholder="e.g., Airalo, Custom solution, None" {...field} />
+                            <Input placeholder="e.g., Custom solution, None, Other platform" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>

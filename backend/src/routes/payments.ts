@@ -1,8 +1,10 @@
 import express from 'express';
 import { z } from 'zod';
+import { BalanceTransactionType } from '@prisma/client';
 import { paymentService } from '../services/paymentService';
 import { customerOrderService } from '../services/customerOrderService';
-import { authenticateJWT } from '../middleware/jwtAuth';
+import { prisma } from '../lib/prisma';
+import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { env } from '../config/env';
 import Stripe from 'stripe';
 
@@ -34,6 +36,97 @@ const confirmPaymentSchema = z.object({
 const refundPaymentSchema = z.object({
   paymentIntentId: z.string().min(1, 'Payment intent ID is required'),
   amount: z.number().int().positive().optional(),
+});
+
+/**
+ * GET /api/payments/methods
+ * List saved Stripe payment methods for the authenticated merchant.
+ */
+router.get('/methods', authenticateSessionOrJWT, async (req, res) => {
+  try {
+    const merchantId = (req as any).merchant!.id;
+    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2024-11-20.acacia' as any });
+    const { prisma } = await import('../lib/prisma');
+    const sub = await prisma.subscription.findUnique({
+      where: { merchantId },
+      select: { stripeCustomerId: true },
+    });
+    if (!sub?.stripeCustomerId) {
+      return res.json({ success: true, paymentMethods: [] });
+    }
+    const methods = await stripe.paymentMethods.list({
+      customer: sub.stripeCustomerId,
+      type: 'card',
+    });
+    const formatted = methods.data.map(m => ({
+      id: m.id,
+      card: {
+        brand: m.card?.brand,
+        last4: m.card?.last4,
+        exp_month: m.card?.exp_month,
+        exp_year: m.card?.exp_year,
+      },
+      isDefault: false,
+    }));
+    res.json({ success: true, paymentMethods: formatted });
+  } catch (e: any) {
+    res.status(500).json({ success: false, errorCode: 'FAILED', errorMessage: e.message || 'Failed to load payment methods' });
+  }
+});
+
+/**
+ * POST /api/payments/setup-intent
+ * Create a Stripe SetupIntent so the merchant can save a payment method.
+ */
+router.post('/setup-intent', authenticateSessionOrJWT, async (req, res) => {
+  try {
+    const merchantId = (req as any).merchant!.id;
+    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2024-11-20.acacia' as any });
+    const { prisma } = await import('../lib/prisma');
+
+    // Get or create Stripe customer
+    let sub = await prisma.subscription.findUnique({
+      where: { merchantId },
+      select: { stripeCustomerId: true },
+    });
+
+    let customerId = sub?.stripeCustomerId;
+    if (!customerId) {
+      const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { email: true, name: true } });
+      if (!merchant) {
+        return res.status(404).json({
+          success: false,
+          errorCode: 'MERCHANT_NOT_FOUND',
+          errorMessage: 'Merchant not found',
+        });
+      }
+      const customer = await stripe.customers.create({
+        email: merchant.email,
+        name: merchant.name || undefined,
+        metadata: { merchantId },
+      });
+      customerId = customer.id;
+    }
+
+    const setupIntent = await stripe.setupIntents.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+    });
+
+    res.json({
+      success: true,
+      data: {
+        clientSecret: setupIntent.client_secret,
+        setupIntentId: setupIntent.id,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'SETUP_INTENT_FAILED',
+      errorMessage: error.message || 'Failed to create setup intent',
+    });
+  }
 });
 
 /**
@@ -150,6 +243,15 @@ router.post('/confirm', async (req, res, next) => {
           });
         }
       } catch (orderError: any) {
+        // Surface insufficient balance errors to the frontend
+        if (orderError?.code === 'INSUFFICIENT_BALANCE') {
+          return res.status(400).json({
+            success: false,
+            errorCode: 'INSUFFICIENT_BALANCE',
+            errorMessage: 'Store balance is too low to fulfill this order. Please try again later.',
+          });
+        }
+
         console.error('Error creating customer order:', orderError);
         // Payment succeeded but order creation failed - still return success for payment
         // The order can be created manually later
@@ -237,10 +339,117 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 });
 
 /**
+ * POST /api/payments/topup-balance
+ * Create a Stripe payment intent for topping up a merchant's balance (requires JWT auth)
+ */
+router.post('/topup-balance', authenticateSessionOrJWT, async (req, res, next) => {
+  try {
+    const schema = z.object({
+      amount: z.number().int().positive('Amount must be a positive integer (cents)'),
+      currency: z.string().default('usd'),
+    });
+    const data = schema.parse(req.body);
+    const merchantId = (req as any).merchant!.id;
+
+    const paymentIntent = await paymentService.createPaymentIntent({
+      amount: data.amount,
+      currency: data.currency || 'usd',
+      metadata: { type: 'TOPUP', merchantId },
+      merchantId,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        clientSecret: paymentIntent.client_secret,
+        id: paymentIntent.id,
+        amount: paymentIntent.amount,
+        currency: paymentIntent.currency,
+      },
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: error.errors[0].message,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        errorCode: 'TOPUP_INTENT_FAILED',
+        errorMessage: error.message || 'Failed to create top-up payment intent',
+      });
+    }
+  }
+});
+
+/**
+ * POST /api/payments/confirm-topup
+ * Confirm a topup payment intent and credit the merchant's balance
+ */
+router.post('/confirm-topup', authenticateSessionOrJWT, async (req, res, next) => {
+  try {
+    const schema = z.object({
+      paymentIntentId: z.string().min(1),
+    });
+    const { paymentIntentId } = schema.parse(req.body);
+    const merchantId = (req as any).merchant!.id;
+
+    const paymentIntent = await paymentService.confirmPayment({ paymentIntentId });
+
+    if (paymentIntent.status === 'succeeded') {
+      const { prisma } = await import('../lib/prisma');
+      const amountCents = paymentIntent.amount; // already in cents from Stripe
+
+      // Credit merchant balance and record transaction
+      await prisma.$transaction([
+        prisma.merchant.update({
+          where: { id: merchantId },
+          data: { balance: { increment: BigInt(amountCents) } },
+        }),
+        prisma.balanceTransaction.create({
+          data: {
+            merchantId,
+            amount: BigInt(amountCents),
+            type: 'TOPUP',
+            description: `Balance top-up via Stripe (${paymentIntent.id})`,
+          },
+        }),
+      ]);
+
+      return res.json({
+        success: true,
+        data: { id: paymentIntent.id, status: paymentIntent.status, amount: amountCents },
+      });
+    }
+
+    res.json({
+      success: true,
+      data: { id: paymentIntent.id, status: paymentIntent.status },
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: error.errors[0].message,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        errorCode: 'TOPUP_CONFIRM_FAILED',
+        errorMessage: error.message || 'Failed to confirm top-up',
+      });
+    }
+  }
+});
+
+/**
  * POST /api/payments/refund
  * Refund a payment (requires JWT authentication)
  */
-router.post('/refund', authenticateJWT, async (req, res, next) => {
+router.post('/refund', authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const data = refundPaymentSchema.parse(req.body);
     const merchantId = (req as any).merchant!.id;
@@ -269,6 +478,33 @@ router.post('/refund', authenticateJWT, async (req, res, next) => {
       data.paymentIntentId,
       data.amount
     );
+
+    // If this was a store (Easy) order, credit merchant balance and record refund
+    const customerOrder = await prisma.customerOrder.findUnique({
+      where: { paymentIntentId: data.paymentIntentId },
+      select: { id: true, merchantId: true, totalAmount: true },
+    });
+    if (customerOrder && customerOrder.merchantId === merchantId) {
+      const refundCents = Number(customerOrder.totalAmount);
+      await prisma.$transaction([
+        prisma.customerOrder.update({
+          where: { id: customerOrder.id },
+          data: { status: 'CANCELLED', updatedAt: new Date() },
+        }),
+        prisma.merchant.update({
+          where: { id: merchantId },
+          data: { balance: { increment: BigInt(refundCents) } },
+        }),
+        prisma.balanceTransaction.create({
+          data: {
+            merchantId,
+            amount: BigInt(refundCents),
+            type: BalanceTransactionType.REFUND,
+            description: `Refund for customer order (payment ${data.paymentIntentId})`,
+          },
+        }),
+      ]);
+    }
 
     res.json({
       success: true,

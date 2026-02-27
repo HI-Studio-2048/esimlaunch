@@ -1,448 +1,140 @@
-import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { Globe, ArrowRight, Check, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { apiClient } from "@/lib/api";
-import { useToast } from "@/hooks/use-toast";
-import { 
-  Globe, CheckCircle2, XCircle, Loader2, Copy, RefreshCw, 
-  AlertCircle, ExternalLink, Shield
-} from "lucide-react";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
 
 export default function DomainVerification() {
-  const { storeId } = useParams<{ storeId: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
-  
-  const [domain, setDomain] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState<{
-    verified: boolean;
-    method: string | null;
-    error?: string;
-    instructions?: any;
-  } | null>(null);
 
-  useEffect(() => {
-    if (storeId) {
-      loadDomainStatus();
-    }
-  }, [storeId]);
-
-  const loadDomainStatus = async () => {
-    if (!storeId) return;
-    
-    setIsLoading(true);
-    try {
-      const result = await apiClient.getDomainStatus(storeId);
-      if (result) {
-        setDomain(result.domain || "");
-        setVerificationStatus({
-          verified: result.verified || false,
-          method: result.sslActive ? 'dns' : null,
-          instructions: result,
-        });
-      }
-    } catch (error: any) {
-      console.error('Failed to load domain status:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleStartVerification = async () => {
-    if (!storeId || !domain.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a domain name",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const result = await apiClient.verifyDomain(storeId, domain, 'dns');
-      
-      setVerificationStatus({
-        verified: false,
-        method: 'dns',
-        instructions: result.instructions,
-      });
-
-      toast({
-        title: "Verification Started",
-        description: "Please add the DNS records shown below to your domain's DNS settings.",
-      });
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to start verification",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleVerifyDNS = async () => {
-    if (!storeId) return;
-
-    setIsVerifying(true);
-    try {
-      const result = await apiClient.verifyDNS(storeId, 'dns');
-      
-      setVerificationStatus({
-        verified: result.verified,
-        method: result.method || 'dns',
-        error: result.error,
-      });
-
-      if (result.verified) {
-        toast({
-          title: "Success!",
-          description: "Domain verified successfully! Your store is now accessible via your custom domain.",
-        });
-        // Refresh status
-        setTimeout(() => loadDomainStatus(), 1000);
-      } else {
-        toast({
-          title: "Verification Failed",
-          description: result.error || "DNS records not found. Please check your DNS settings.",
-          variant: "destructive",
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to verify domain",
-        variant: "destructive",
-      });
-    } finally {
-      setIsVerifying(false);
-    }
-  };
-
-  const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: "Copied",
-      description: `${label} copied to clipboard`,
-    });
-  };
-
-  if (isLoading && !verificationStatus) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    );
-  }
+  const plans = [
+    {
+      name: "Starter",
+      domain: "yourstore.esimlaunch.com",
+      custom: false,
+      desc: "Free subdomain included with all plans",
+    },
+    {
+      name: "Growth",
+      domain: "yourstore.esimlaunch.com",
+      custom: false,
+      desc: "Free subdomain included",
+    },
+    {
+      name: "Scale",
+      domain: "yourdomain.com",
+      custom: true,
+      desc: "Custom domain setup handled by our team",
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-primary/5 p-6">
+      <div className="container-custom max-w-3xl py-12">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          className="text-center mb-10"
         >
-          <Button
-            variant="ghost"
-            onClick={() => navigate(-1)}
-            className="mb-4"
-          >
-            ← Back
-          </Button>
-          <h1 className="text-3xl font-bold mb-2">Domain Verification</h1>
-          <p className="text-muted-foreground">
-            Connect your custom domain to your eSIM store. This allows customers to access your store via your own domain name.
+          <div className="w-16 h-16 rounded-2xl gradient-bg flex items-center justify-center mx-auto mb-4">
+            <Globe className="w-8 h-8 text-primary-foreground" />
+          </div>
+          <h1 className="text-3xl font-bold mb-3">Domain setup</h1>
+          <p className="text-muted-foreground max-w-lg mx-auto">
+            Domain configuration for your store is handled by the eSIMLaunch team. You don't need to touch any DNS settings yourself.
           </p>
         </motion.div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Globe className="h-5 w-5" />
-              Custom Domain Setup
-            </CardTitle>
-            <CardDescription>
-              Verify ownership of your domain to enable custom domain access
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Domain Input */}
-            <div className="space-y-2">
-              <Label htmlFor="domain">Domain Name</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="domain"
-                  type="text"
-                  placeholder="example.com"
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  disabled={verificationStatus?.verified}
-                />
-                {!verificationStatus?.verified && (
-                  <Button
-                    onClick={handleStartVerification}
-                    disabled={isLoading || !domain.trim()}
-                  >
-                    {isLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      "Start Verification"
-                    )}
-                  </Button>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="grid sm:grid-cols-3 gap-4 mb-8"
+        >
+          {plans.map((plan) => (
+            <div
+              key={plan.name}
+              className={`rounded-2xl border p-5 ${plan.custom ? "border-primary/50 bg-primary/5" : "border-border bg-card"}`}
+            >
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-semibold">{plan.name} Plan</span>
+                {plan.custom && (
+                  <span className="text-xs px-2 py-0.5 rounded-full gradient-bg text-primary-foreground font-medium">Custom</span>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">
-                Enter your domain without http:// or www (e.g., example.com)
+              <p className="text-xs text-muted-foreground font-mono bg-muted rounded-lg px-3 py-2 mb-3 break-all">
+                {plan.domain}
               </p>
-            </div>
-
-            {/* Verification Status */}
-            {verificationStatus && (
-              <div className={`p-4 rounded-lg border ${
-                verificationStatus.verified
-                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
-                  : 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
-              }`}>
-                <div className="flex items-center gap-2 mb-2">
-                  {verificationStatus.verified ? (
-                    <>
-                      <CheckCircle2 className="h-5 w-5 text-green-600" />
-                      <span className="font-medium text-green-900 dark:text-green-100">
-                        Domain Verified
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <AlertCircle className="h-5 w-5 text-yellow-600" />
-                      <span className="font-medium text-yellow-900 dark:text-yellow-100">
-                        Verification Pending
-                      </span>
-                    </>
-                  )}
-                </div>
-                {verificationStatus.error && (
-                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                    {verificationStatus.error}
-                  </p>
-                )}
+              <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                <Check className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                {plan.desc}
               </div>
-            )}
+            </div>
+          ))}
+        </motion.div>
 
-            {/* DNS Instructions */}
-            {verificationStatus?.instructions && !verificationStatus.verified && (
-              <Tabs defaultValue="txt" className="space-y-4">
-                <TabsList>
-                  <TabsTrigger value="txt">TXT Record</TabsTrigger>
-                  <TabsTrigger value="cname">CNAME Record</TabsTrigger>
-                </TabsList>
-
-                <TabsContent value="txt">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">TXT Record Method</CardTitle>
-                      <CardDescription>
-                        Add this TXT record to your domain's DNS settings
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Record Type</Label>
-                        <div className="flex items-center gap-2">
-                          <Badge>TXT</Badge>
-                          <code className="flex-1 bg-muted p-2 rounded text-sm">
-                            {verificationStatus.instructions.txtRecord?.name || '_esimlaunch-verification'}
-                          </code>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => copyToClipboard(
-                              verificationStatus.instructions.txtRecord?.name || '',
-                              'Record Name'
-                            )}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Record Value</Label>
-                        <div className="flex items-center gap-2">
-                          <code className="flex-1 bg-muted p-2 rounded text-sm break-all">
-                            {verificationStatus.instructions.txtRecord?.value || ''}
-                          </code>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => copyToClipboard(
-                              verificationStatus.instructions.txtRecord?.value || '',
-                              'Record Value'
-                            )}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="bg-muted p-4 rounded-lg">
-                        <p className="text-sm font-medium mb-2">Instructions:</p>
-                        <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-                          <li>Log in to your domain registrar or DNS provider</li>
-                          <li>Navigate to DNS settings</li>
-                          <li>Add a new TXT record with the values above</li>
-                          <li>Wait 5-10 minutes for DNS propagation</li>
-                          <li>Click "Verify DNS" below</li>
-                        </ol>
-                      </div>
-                      <Button
-                        onClick={handleVerifyDNS}
-                        disabled={isVerifying}
-                        className="w-full"
-                      >
-                        {isVerifying ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Verifying...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Verify DNS
-                          </>
-                        )}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="cname">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-lg">CNAME Record Method</CardTitle>
-                      <CardDescription>
-                        Point your domain to our servers using a CNAME record
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Record Type</Label>
-                        <div className="flex items-center gap-2">
-                          <Badge>CNAME</Badge>
-                          <code className="flex-1 bg-muted p-2 rounded text-sm">
-                            {domain || 'your-domain.com'}
-                          </code>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Points To</Label>
-                        <div className="flex items-center gap-2">
-                          <code className="flex-1 bg-muted p-2 rounded text-sm">
-                            {verificationStatus.instructions.cnameRecord?.value || `${storeId}.esimlaunch.com`}
-                          </code>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => copyToClipboard(
-                              verificationStatus.instructions.cnameRecord?.value || '',
-                              'CNAME Value'
-                            )}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="bg-muted p-4 rounded-lg">
-                        <p className="text-sm font-medium mb-2">Instructions:</p>
-                        <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-                          <li>Log in to your domain registrar or DNS provider</li>
-                          <li>Navigate to DNS settings</li>
-                          <li>Add a CNAME record pointing to the value above</li>
-                          <li>Wait 5-10 minutes for DNS propagation</li>
-                          <li>Click "Verify DNS" below</li>
-                        </ol>
-                      </div>
-                      <Button
-                        onClick={handleVerifyDNS}
-                        disabled={isVerifying}
-                        className="w-full"
-                      >
-                        {isVerifying ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Verifying...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Verify DNS
-                          </>
-                        )}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-              </Tabs>
-            )}
-
-            {/* SSL Status */}
-            {verificationStatus?.verified && (
-              <div className="border-t pt-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-green-600" />
-                    <div>
-                      <p className="font-medium">SSL Certificate</p>
-                      <p className="text-sm text-muted-foreground">
-                        SSL will be automatically provisioned after domain verification
-                      </p>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Mail className="w-5 h-5 text-primary" />
+                <CardTitle>Want a custom domain?</CardTitle>
+              </div>
+              <CardDescription>
+                On the Scale plan, your store can be served from your own domain (e.g. <span className="font-mono text-foreground">esim.yourbrand.com</span>). Our team handles all DNS configuration, SSL certificates, and deployment — you just point your domain to us.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid sm:grid-cols-3 gap-4">
+                {[
+                  { step: "1", title: "Upgrade to Scale", desc: "Upgrade your plan to unlock custom domain support" },
+                  { step: "2", title: "Contact our team", desc: "Send us your domain name and we handle everything" },
+                  { step: "3", title: "Go live", desc: "Your store is served from your custom domain with SSL" },
+                ].map((item) => (
+                  <div key={item.step} className="p-4 rounded-xl bg-muted/50 border border-border">
+                    <div className="w-7 h-7 rounded-full gradient-bg text-primary-foreground text-xs font-bold flex items-center justify-center mb-2">
+                      {item.step}
                     </div>
+                    <p className="font-medium text-sm mb-1">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">{item.desc}</p>
                   </div>
-                  <Badge variant="outline" className="bg-green-50">
-                    Active
-                  </Badge>
-                </div>
+                ))}
               </div>
-            )}
 
-            {/* Help Links */}
-            <div className="border-t pt-4">
-              <p className="text-sm text-muted-foreground mb-2">Need help?</p>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <a href="/help-center" target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    DNS Setup Guide
-                  </a>
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <Button
+                  className="gap-2"
+                  onClick={() => window.open("mailto:support@esimlaunch.com?subject=Custom Domain Setup", "_blank")}
+                >
+                  <Mail className="w-4 h-4" />
+                  Email Us About Custom Domain
                 </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href="/contact" target="_blank" rel="noopener noreferrer">
-                    Contact Support
-                  </a>
+                <Button
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => navigate("/settings/billing")}
+                >
+                  View Plans
+                  <ArrowRight className="w-4 h-4" />
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <div className="text-center mt-6">
+          <button
+            onClick={() => navigate("/settings")}
+            className="text-sm text-muted-foreground hover:text-foreground underline-offset-4 hover:underline"
+          >
+            Back to Settings
+          </button>
+        </div>
       </div>
     </div>
   );
 }
-
-
-
-
-

@@ -15,7 +15,7 @@ const stats = [
 const values = [
   { icon: Globe, title: "Global Reach", desc: "Empowering businesses worldwide to connect travelers across 190+ countries." },
   { icon: Users, title: "Customer Success", desc: "Your success is our mission. We're here to help you grow your eSIM business." },
-  { icon: Award, title: "Excellence", desc: "We partner with leading providers to deliver the best eSIM solutions." },
+  { icon: Award, title: "Excellence", desc: "Powered by eSIM Access to deliver 190+ country coverage with real-time eSIM provisioning." },
   { icon: Heart, title: "Innovation", desc: "Constantly evolving our platform to meet the needs of modern businesses." },
 ];
 

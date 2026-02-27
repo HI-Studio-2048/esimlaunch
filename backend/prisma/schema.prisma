@@ -39,11 +39,33 @@ model Merchant {
   affiliateCode            String?               @unique // Unique affiliate code
   referredBy               String? // Merchant ID who referred this merchant
   referralCode             String?               @unique // Referral code for this merchant
+  smtpHost                 String?
+  smtpPort                 Int?
+  smtpUser                 String?
+  smtpPass                 String?
+  smtpFromName             String?
+  smtpFromEmail            String?
   affiliateCommissions     AffiliateCommission[] @relation("AffiliateCommissions")
   referredMerchants        AffiliateCommission[] @relation("ReferredBy")
+  emailTemplates           EmailTemplate[]
+  preferences              MerchantPreference[]
+  esimProfiles             EsimProfile[]
 
   @@index([email])
   @@index([serviceType])
+}
+
+// Stored in DB only - no localStorage/cache for onboarding, selected store, currency, etc.
+model MerchantPreference {
+  id         String   @id @default(uuid())
+  merchantId String
+  key        String   // e.g. onboarding_progress, step_completion_dates, last_selected_store_id, preferred_currency
+  value      Json     // flexible value per key
+  updatedAt  DateTime @updatedAt
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, key])
+  @@index([merchantId])
 }
 
 model ApiKey {
@@ -168,27 +190,32 @@ model ApiLog {
 }
 
 model Store {
-  id                  String          @id @default(uuid())
-  merchantId          String
-  name                String
-  domain              String?         @unique
-  subdomain           String?         @unique
-  businessName        String
-  primaryColor        String          @default("#6366f1")
-  secondaryColor      String          @default("#8b5cf6")
-  accentColor         String          @default("#22c55e")
-  logoUrl             String?
-  selectedPackages    Json?
-  pricingMarkup       Json?
-  defaultCurrency     String?         @default("USD") // Default currency for store
-  supportedCurrencies Json? // Array of supported currency codes
-  seoConfig           Json? // SEO configuration (meta tags, etc.)
-  isActive            Boolean         @default(true)
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  customerOrders      CustomerOrder[]
-  paymentIntents      PaymentIntent[]
-  merchant            Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  id                         String          @id @default(uuid())
+  merchantId                 String
+  name                       String
+  domain                     String?         @unique
+  subdomain                  String?         @unique
+  businessName               String
+  primaryColor               String          @default("#6366f1")
+  secondaryColor             String          @default("#8b5cf6")
+  accentColor                String          @default("#22c55e")
+  logoUrl                    String?
+  selectedPackages           Json?
+  pricingMarkup              Json?
+  defaultCurrency            String?         @default("USD") // Default currency for store
+  supportedCurrencies        Json? // Array of supported currency codes
+  seoConfig                  Json? // SEO configuration (meta tags, etc.)
+  templateKey                String?         @default("default") // Storefront template: default | minimal | bold | travel
+  templateSettings           Json?           // Safe overrides: heroStyle, showTestimonials, etc.
+  isActive                   Boolean         @default(true)
+  domainVerified             Boolean         @default(false)
+  domainVerificationMethod   String?         // 'dns' | 'cname'
+  domainVerificationToken    String?
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+  customerOrders             CustomerOrder[]
+  paymentIntents             PaymentIntent[]
+  merchant                   Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
 
   @@index([merchantId])
   @@index([domain])
@@ -411,4 +438,62 @@ model AffiliateCommission {
   @@index([customerOrderId])
   @@index([status])
   @@index([createdAt])
+}
+
+// EsimProfile stores eSIM profile data in our DB.
+// The eSIM Access API does not return dates (createdTime, activatedTime etc.)
+// or coverage/package names - we capture those at order time and on profile query.
+model EsimProfile {
+  id              String    @id @default(uuid())
+  merchantId      String
+  esimTranNo      String    @unique
+  iccid           String?
+  orderNo         String?   // eSIM Access order number
+  orderId         String?   // our DB Order id
+  transactionId   String?   // merchant's transaction ID used when ordering
+  packageCode     String?
+  packageName     String?   // human-readable name from package catalog
+  planPrice       Int?      // package list price (price * 10000 = USD)
+  supportTopUpType String?  // from package catalog
+  locationCode    String?   // country/region code
+  coverage        Json?     // Array<{ country: string; network?: string }>
+  ac              String?   // LPA activation code string
+  qrCodeUrl       String?
+  shortUrl        String?
+  apn             String?
+  smsStatus       Int?
+  dataType        Int?      // 1 = Total, 2 = Daily
+  activeType      Int?      // 1 = Instant, 2 = First Use
+  nickname        String?   // merchant-set label for this eSIM
+  notes           String?
+  orderedAt       DateTime? // when the order was placed in our system
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  merchant        Merchant  @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([esimTranNo])
+  @@index([iccid])
+  @@index([orderNo])
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model EmailTemplate {
+  id         String   @id @default(uuid())
+  merchantId String
+  templateId String // order-confirmation, esim-delivery, ticket-confirmation
+  name       String
+  subject    String
+  htmlBody   String   @db.Text
+  textBody   String?  @db.Text
+  variables  Json? // Array of available variables
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, templateId])
+  @@index([merchantId])
+  @@index([templateId])
 }

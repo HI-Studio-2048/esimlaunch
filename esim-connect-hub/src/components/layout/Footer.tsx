@@ -14,7 +14,6 @@ const footerLinks = {
     { name: "Blog", href: "/blog" },
     { name: "Careers", href: "/careers" },
     { name: "Contact", href: "/contact" },
-    { name: "Partners", href: "/partners" },
     { name: "Case Studies", href: "/case-studies" },
   ],
   resources: [
@@ -23,7 +22,6 @@ const footerLinks = {
     { name: "Community", href: "/community" },
     { name: "Status", href: "/status" },
     { name: "ROI Calculator", href: "/roi-calculator" },
-    { name: "World Coverage", href: "/world-coverage" },
     { name: "Changelog", href: "/changelog" },
   ],
   legal: [
