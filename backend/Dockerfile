@@ -23,6 +23,9 @@ RUN npm run build
 # Production stage
 FROM node:20-slim
 
+# Prisma needs OpenSSL at runtime (node:20-slim has libssl3; we use debian-openssl-3.0.x engine)
+RUN apt-get update -y && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Copy package files
