@@ -64,7 +64,7 @@ export const env: EnvConfig = {
   stripeStarterPriceIdYearly: getEnvVar('STRIPE_STARTER_PRICE_ID_YEARLY', ''),
   stripeGrowthPriceIdYearly: getEnvVar('STRIPE_GROWTH_PRICE_ID_YEARLY', ''),
   stripeScalePriceIdYearly: getEnvVar('STRIPE_SCALE_PRICE_ID_YEARLY', ''),
-  mainDomain: getEnvVar('MAIN_DOMAIN', ''),
-  allowedBaseDomain: getEnvVar('ALLOWED_BASE_DOMAIN', ''),
+  mainDomain: getEnvVar('MAIN_DOMAIN', 'esimlaunch.com'),
+  allowedBaseDomain: getEnvVar('ALLOWED_BASE_DOMAIN', 'esimlaunch.com'),
 };
 
