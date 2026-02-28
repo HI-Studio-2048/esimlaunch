@@ -12,14 +12,12 @@ const footerLinks = {
   company: [
     { name: "About", href: "/about" },
     { name: "Blog", href: "/blog" },
-    { name: "Careers", href: "/careers" },
     { name: "Contact", href: "/contact" },
     { name: "Case Studies", href: "/case-studies" },
   ],
   resources: [
     { name: "FAQ", href: "/faq" },
     { name: "Help Center", href: "/help-center" },
-    { name: "Community", href: "/community" },
     { name: "Status", href: "/status" },
     { name: "ROI Calculator", href: "/roi-calculator" },
     { name: "Changelog", href: "/changelog" },

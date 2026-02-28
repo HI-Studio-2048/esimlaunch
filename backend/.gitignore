@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json kept for Docker/reproducible builds (npm ci)
 yarn.lock
 
 # Environment variables

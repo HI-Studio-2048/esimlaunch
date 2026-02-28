@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Book, CreditCard, Settings, Globe, MessageCircle, ArrowRight } from "lucide-react";
+import { Search, Book, CreditCard, Settings, Globe, MessageCircle, ArrowRight, FileText, HeadphonesIcon } from "lucide-react";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ const categories = [
     icon: Book,
     title: "Getting Started",
     description: "Learn the basics of eSIMLaunch",
+    href: "/faq",
     articles: [
       "How to create your first store",
       "Setting up your account",
@@ -23,6 +24,7 @@ const categories = [
     icon: CreditCard,
     title: "Billing & Payments",
     description: "Manage your subscription and payments",
+    href: "/faq",
     articles: [
       "Understanding pricing plans",
       "Payment methods",
@@ -34,6 +36,7 @@ const categories = [
     icon: Settings,
     title: "Technical",
     description: "API, integrations, and technical guides",
+    href: "/api-docs",
     articles: [
       "API documentation",
       "Webhook setup",
@@ -45,6 +48,7 @@ const categories = [
     icon: Globe,
     title: "Providers & Coverage",
     description: "Learn about eSIM providers and coverage",
+    href: "/faq",
     articles: [
       "Available providers",
       "Coverage maps",
@@ -55,30 +59,18 @@ const categories = [
 ];
 
 const popularArticles = [
-  {
-    title: "How do I get started with eSIMLaunch?",
-    category: "Getting Started",
-    views: "12.5k",
-  },
-  {
-    title: "How to set up webhooks",
-    category: "Technical",
-    views: "8.2k",
-  },
-  {
-    title: "Understanding pricing and margins",
-    category: "Billing & Payments",
-    views: "6.7k",
-  },
-  {
-    title: "Which providers are available?",
-    category: "Providers & Coverage",
-    views: "5.9k",
-  },
+  { title: "How do I get started with eSIMLaunch?", category: "Getting Started", href: "/faq" },
+  { title: "How to set up webhooks", category: "Technical", href: "/api-docs" },
+  { title: "Understanding pricing and margins", category: "Billing & Payments", href: "/pricing" },
+  { title: "Which providers are available?", category: "Providers & Coverage", href: "/faq" },
 ];
 
 export default function HelpCenter() {
   const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    document.title = "Help Center | eSIMLaunch Support";
+  }, []);
 
   return (
     <div className="min-h-screen bg-background pt-20">
@@ -112,8 +104,41 @@ export default function HelpCenter() {
         </div>
       </section>
 
-      {/* Popular Articles */}
+      {/* Quick links */}
       <section className="section-padding">
+        <div className="container-custom">
+          <h2 className="text-2xl font-bold mb-6">Quick links</h2>
+          <div className="flex flex-wrap gap-4">
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/faq" className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                FAQ
+              </Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/api-docs" className="flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                API Documentation
+              </Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/contact" className="flex items-center gap-2">
+                <HeadphonesIcon className="w-5 h-5" />
+                Contact
+              </Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/support/create" className="flex items-center gap-2">
+                <MessageCircle className="w-5 h-5" />
+                Create support ticket
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* Popular Articles */}
+      <section className="section-padding bg-muted/20">
         <div className="container-custom">
           <h2 className="text-2xl font-bold mb-6">Popular Articles</h2>
           <div className="grid sm:grid-cols-2 gap-4">
@@ -125,21 +150,19 @@ export default function HelpCenter() {
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.1 }}
               >
-                <Card className="card-hover cursor-pointer">
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <h3 className="font-semibold mb-2">{article.title}</h3>
-                        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                          <span>{article.category}</span>
-                          <span>•</span>
-                          <span>{article.views} views</span>
+                <Link to={article.href}>
+                  <Card className="card-hover cursor-pointer h-full">
+                    <CardContent className="p-6">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1">
+                          <h3 className="font-semibold mb-2">{article.title}</h3>
+                          <div className="text-sm text-muted-foreground">{article.category}</div>
                         </div>
+                        <ArrowRight className="w-5 h-5 text-muted-foreground shrink-0" />
                       </div>
-                      <ArrowRight className="w-5 h-5 text-muted-foreground shrink-0" />
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                </Link>
               </motion.div>
             ))}
           </div>
@@ -163,23 +186,25 @@ export default function HelpCenter() {
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.1 }}
               >
-                <Card className="card-hover h-full">
-                  <CardContent className="p-6">
-                    <div className="w-12 h-12 rounded-xl gradient-bg flex items-center justify-center mb-4">
-                      <category.icon className="w-6 h-6 text-primary-foreground" />
-                    </div>
-                    <h3 className="font-semibold text-lg mb-2">{category.title}</h3>
-                    <p className="text-sm text-muted-foreground mb-4">{category.description}</p>
-                    <ul className="space-y-2">
-                      {category.articles.map((article, idx) => (
-                        <li key={idx} className="text-sm text-muted-foreground flex items-center gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                          {article}
-                        </li>
-                      ))}
-                    </ul>
-                  </CardContent>
-                </Card>
+                <Link to={category.href}>
+                  <Card className="card-hover h-full">
+                    <CardContent className="p-6">
+                      <div className="w-12 h-12 rounded-xl gradient-bg flex items-center justify-center mb-4">
+                        <category.icon className="w-6 h-6 text-primary-foreground" />
+                      </div>
+                      <h3 className="font-semibold text-lg mb-2">{category.title}</h3>
+                      <p className="text-sm text-muted-foreground mb-4">{category.description}</p>
+                      <ul className="space-y-2">
+                        {category.articles.map((article, idx) => (
+                          <li key={idx} className="text-sm text-muted-foreground flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                            {article}
+                          </li>
+                        ))}
+                      </ul>
+                    </CardContent>
+                  </Card>
+                </Link>
               </motion.div>
             ))}
           </div>

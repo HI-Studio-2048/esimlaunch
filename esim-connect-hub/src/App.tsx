@@ -30,9 +30,7 @@ import Cookies from "./pages/Cookies";
 import Contact from "./pages/Contact";
 import About from "./pages/About";
 import APIDocs from "./pages/APIDocs";
-import Careers from "./pages/Careers";
 import HelpCenter from "./pages/HelpCenter";
-import Community from "./pages/Community";
 import Status from "./pages/Status";
 import ROICalculator from "./pages/ROICalculator";
 import Demo from "./pages/Demo";
@@ -85,7 +83,6 @@ import DemoStoreContact from "./pages/demo-store/DemoStoreContact";
 import DemoStoreHelpCenter from "./pages/demo-store/DemoStoreHelpCenter";
 import DemoStoreSetupGuide from "./pages/demo-store/DemoStoreSetupGuide";
 import DemoStoreFAQ from "./pages/demo-store/DemoStoreFAQ";
-import DemoStoreCareers from "./pages/demo-store/DemoStoreCareers";
 import DemoStorePress from "./pages/demo-store/DemoStorePress";
 import DemoStorePartners from "./pages/demo-store/DemoStorePartners";
 import DemoStoreTerms from "./pages/demo-store/DemoStoreTerms";
@@ -142,9 +139,7 @@ const MainShell = () => {
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/api-docs" element={<APIDocs />} />
-                <Route path="/careers" element={<Careers />} />
                 <Route path="/help-center" element={<HelpCenter />} />
-                <Route path="/community" element={<Community />} />
                 <Route path="/status" element={<Status />} />
                 <Route path="/roi-calculator" element={<ROICalculator />} />
                 <Route path="/demo" element={<Demo />} />
@@ -392,7 +387,6 @@ const AppRoutes = () => (
         <Route path="help-center" element={<DemoStoreHelpCenter />} />
         <Route path="esim-setup-guide" element={<DemoStoreSetupGuide />} />
         <Route path="faq" element={<DemoStoreFAQ />} />
-        <Route path="careers" element={<DemoStoreCareers />} />
         <Route path="press" element={<DemoStorePress />} />
         <Route path="partners" element={<DemoStorePartners />} />
         <Route path="terms" element={<DemoStoreTerms />} />
@@ -412,7 +406,6 @@ const AppRoutes = () => (
         <Route path="help-center" element={<DemoStoreHelpCenter />} />
         <Route path="esim-setup-guide" element={<DemoStoreSetupGuide />} />
         <Route path="faq" element={<DemoStoreFAQ />} />
-        <Route path="careers" element={<DemoStoreCareers />} />
         <Route path="press" element={<DemoStorePress />} />
         <Route path="partners" element={<DemoStorePartners />} />
         <Route path="terms" element={<DemoStoreTerms />} />

@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { Globe, Users, Award, Heart, Zap, Shield, Code2, Rocket } from "lucide-react";
 import { SectionHeader } from "@/components/shared/SectionHeader";
@@ -27,6 +28,10 @@ const team = [
 ];
 
 export default function About() {
+  useEffect(() => {
+    document.title = "About Us | eSIMLaunch – Global eSIM Platform";
+  }, []);
+
   return (
     <div className="min-h-screen bg-background pt-20">
       {/* Hero Section */}
@@ -194,6 +199,31 @@ export default function About() {
                 </div>
               </motion.div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Resources */}
+      <section className="section-padding">
+        <div className="container-custom">
+          <SectionHeader
+            title="Resources"
+            description="Everything you need to launch and grow your eSIM business"
+            align="center"
+          />
+          <div className="mt-10 flex flex-wrap justify-center gap-4">
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/dashboard">Dashboard</Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/api-docs">API Documentation</Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/help-center">Help Center</Link>
+            </Button>
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/faq">FAQ</Link>
+            </Button>
           </div>
         </div>
       </section>
