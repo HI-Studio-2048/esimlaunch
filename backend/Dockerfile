@@ -1,5 +1,6 @@
 # Backend Dockerfile for Production
-FROM node:20-alpine AS builder
+# Use Debian-based image so Prisma engine can load (Alpine lacks libssl.so.1.1 for musl binary)
+FROM node:20-slim AS builder
 
 WORKDIR /app
 
@@ -20,7 +21,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
