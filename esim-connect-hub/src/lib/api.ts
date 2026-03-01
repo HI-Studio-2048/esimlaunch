@@ -3,7 +3,11 @@
  * Provides typed functions for all API endpoints
  */
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+// Prefer VITE_API_BASE_URL; support VITE_API_URL for backward compatibility (e.g. deployment docs)
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:3000';
 
 interface ApiResponse<T> {
   success: boolean;

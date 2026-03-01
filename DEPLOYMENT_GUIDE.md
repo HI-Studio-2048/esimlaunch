@@ -38,10 +38,11 @@ Your application consists of:
 
 3. **Environment Variables** (in Vercel dashboard):
    ```
-   VITE_API_URL=https://api.esimlaunch.com
+   VITE_API_BASE_URL=https://api.esimlaunch.com
    VITE_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
    VITE_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
    ```
+   **Important:** `VITE_API_BASE_URL` must point to your production API (e.g. `https://api.esimlaunch.com` or `https://www.esimlaunch.com` if the API is on the same host). If this is missing or wrong, the app will try to call `localhost:3000` and you'll see `ERR_CONNECTION_REFUSED` for `/api/auth/me` and `/api/auth/clerk-sync`.
 
 4. **Custom Domain**
    - In Vercel project settings → Domains
@@ -302,7 +303,7 @@ Your application consists of:
 - [ ] Set secure `JWT_SECRET` (generate random string)
 
 **Frontend** (`esim-connect-hub/.env`):
-- [ ] Set `VITE_API_URL` to production API URL
+- [ ] Set `VITE_API_BASE_URL` to production API URL (e.g. `https://api.esimlaunch.com`)
 - [ ] Update Stripe publishable key
 - [ ] Update Clerk publishable key
 
@@ -417,7 +418,7 @@ Your backend has a health check at: `https://api.esimlaunch.com/health`
 
 ### CORS errors
 - Verify `CORS_ORIGIN` includes your frontend domain
-- Check frontend is using correct `VITE_API_URL`
+- Check frontend env has `VITE_API_BASE_URL` (or `VITE_API_URL`) set to production API URL
 
 ---
 

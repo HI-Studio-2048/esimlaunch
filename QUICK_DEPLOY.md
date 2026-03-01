@@ -25,7 +25,7 @@
 
 3. **Add Environment Variables** (in Vercel project settings):
    ```
-   VITE_API_URL=https://api.esimlaunch.com
+   VITE_API_BASE_URL=https://api.esimlaunch.com
    VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...
    VITE_CLERK_PUBLISHABLE_KEY=pk_live_...
    ```
@@ -221,7 +221,7 @@ Value: [CNAME provided by Railway]
 - Run migrations: `npx prisma migrate deploy`
 
 ### "API Not Found"
-- Check `VITE_API_URL` in Vercel matches your Railway domain
+- Check `VITE_API_BASE_URL` in Vercel matches your backend URL (e.g. Railway domain)
 - Verify backend is deployed and running
 - Check Railway logs for errors
 
