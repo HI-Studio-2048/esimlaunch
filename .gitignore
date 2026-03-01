@@ -47,9 +47,6 @@ coverage/
 .nyc_output
 *.lcov
 
-# Prisma
-backend/prisma/migrations/
-
 # Database
 *.db
 *.sqlite

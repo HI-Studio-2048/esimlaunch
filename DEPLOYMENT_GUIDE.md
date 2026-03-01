@@ -413,8 +413,10 @@ Your backend has a health check at: `https://api.esimlaunch.com/health`
 
 ### Database connection issues
 - Verify `DATABASE_URL` is correct
+- **Prisma protocol error:** If you see "the URL must start with the protocol `postgresql://` or `postgres://`", your backend `DATABASE_URL` is wrong. It must be a PostgreSQL URL starting with `postgresql://` or `postgres://` (e.g. `postgresql://user:password@host:5432/dbname`). Fix it in your host's env vars (e.g. Railway Variables); do not use a Redis URL, MySQL URL, or placeholder.
 - Check database is accessible from backend
 - Run migrations: `npx prisma migrate deploy`
+- **Missing columns (e.g. `Merchant.clerkUserId` does not exist):** Production DB is behind the Prisma schema. Run all pending migrations from the backend root: `npx prisma migrate deploy`. Pending migrations include `20260301100000_add_clerk_user_id` (Merchant.clerkUserId) and `20260301100001_add_missing_schema_columns` (remaining Merchant and Store columns). See `backend/prisma/migrations/` for the full list.
 
 ### CORS errors
 - Verify `CORS_ORIGIN` includes your frontend domain
