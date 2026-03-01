@@ -368,7 +368,7 @@ class WebhookService {
         order: {
           id: customerOrder.id,
           totalAmount: Number(customerOrder.totalAmount),
-          esimAccessOrderNo: customerOrder.esimAccessOrderNo,
+          esimAccessOrderNo: customerOrder.esimAccessOrderNo ?? undefined,
         },
         qrCodes,
         profiles: profiles.map(p => ({
