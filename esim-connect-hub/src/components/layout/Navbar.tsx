@@ -15,18 +15,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { clerkSignOut, isClerkSignOutRegistered } from "@/lib/clerkBridge";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-
-// Try to get useClerk hook - will be null if Clerk not available
-let useClerkFromClerk: (() => any) | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const clerkModule = require("@clerk/clerk-react");
-  useClerkFromClerk = clerkModule.useClerk;
-} catch {
-  // Clerk package not available
-}
 
 const navLinks = [
   { name: "Features", href: "/features" },
@@ -49,17 +40,6 @@ export function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: authLoading, user, logout } = useAuth();
-  // Use Clerk hook - must be called unconditionally per React rules
-  // If ClerkProvider isn't present, the hook will handle it gracefully
-  let clerk: any = null;
-  if (useClerkFromClerk && clerkPubKey) {
-    try {
-      clerk = useClerkFromClerk();
-    } catch (e) {
-      // Hook failed - ClerkProvider likely not present
-      clerk = null;
-    }
-  }
 
   useEffect(() => {
     const handleScroll = () => {
@@ -84,18 +64,19 @@ export function Navbar() {
     // Clear our local state (user, JWT, API key)
     logout();
 
-    if (clerkPubKey && clerk) {
+    // Kill the Clerk session via the bridge (ClerkAuthSync registers this).
+    // Using a bridge avoids calling useClerk() conditionally in Navbar,
+    // which would violate React's rules of hooks and silently return null.
+    if (clerkPubKey && isClerkSignOutRegistered()) {
       try {
-        // Wait for Clerk to fully invalidate the session on its servers BEFORE
-        // navigating. Previously we passed redirectUrl which caused Clerk to
-        // redirect before the session was actually dead — clerkUser was still
-        // live on the next page load, so ClerkAuthSync re-synced the user back in.
-        await clerk.signOut();
+        await clerkSignOut();
       } catch (e) {
         console.error('Error signing out from Clerk:', e);
       }
     }
-    // Hard navigate after Clerk session is gone so the page starts completely fresh.
+
+    // Hard navigate AFTER Clerk session is fully dead so ClerkAuthSync
+    // won't see a live clerkUser on the next page load and re-sync the user.
     window.location.href = '/';
   };
 

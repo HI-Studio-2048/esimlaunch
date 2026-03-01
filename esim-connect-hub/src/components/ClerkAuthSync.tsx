@@ -3,6 +3,7 @@ import { useUser, useClerk } from "@clerk/clerk-react";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { clearAllOnboardingProgress } from "@/lib/onboardingProgress";
+import { registerClerkSignOut } from "@/lib/clerkBridge";
 
 /**
  * Syncs Clerk authentication with our backend.
@@ -19,6 +20,12 @@ export function ClerkAuthSync() {
   const clerk = useClerk();
   const { setUser, setAuthLoading } = useAuth();
   const hasSynced = useRef<string | null>(null);
+
+  // Register clerk.signOut on the bridge so Navbar can call it without
+  // violating React's rules of hooks (useClerk can't be called conditionally).
+  useEffect(() => {
+    registerClerkSignOut(() => clerk.signOut());
+  }, [clerk]);
 
   useEffect(() => {
     if (!isLoaded) return;
