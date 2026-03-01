@@ -33,7 +33,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
 
-  // Auth from DB: session cookie (or JWT) — no localStorage. Works on any device after login.
+  // Auth from DB: session cookie (or JWT). When Clerk is configured, don't call /me here —
+  // ClerkAuthSync will run and sync the user (avoids 401 before JWT is set).
   useEffect(() => {
     const initAuth = async () => {
       const explicitLogout =
@@ -47,11 +48,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (clerkPubKey) {
+        // Clerk will sync and set user; avoid /api/auth/me 401 before sync
+        setIsLoading(false);
+        return;
+      }
+
       try {
-        // Session cookie is sent automatically (credentials: 'include'). Backend uses DB session.
         const merchant = await apiClient.getCurrentMerchant();
         setUser(merchant ?? null);
-        if (merchant?.id) apiClient.setJwtToken(null); // Prefer cookie; clear any stale in-memory token
+        if (merchant?.id) apiClient.setJwtToken(null);
       } catch (_) {
         setUser(null);
         apiClient.setJwtToken(null);
@@ -61,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     initAuth();
-  }, []);
+  }, [clerkPubKey]);
 
   // Sync Clerk user if Clerk is configured
   useEffect(() => {

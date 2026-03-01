@@ -1,5 +1,8 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { getPostAuthRedirectPath } from "@/lib/authRedirect";
 import { 
   Zap, Globe, Shield, Code2, Palette, Users, 
   Building2, Plane, UserCircle, Rocket, TrendingUp,
@@ -96,6 +99,16 @@ const stats = [
 ];
 
 export default function Index() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // Logged-in users on homepage → onboarding (new) or dashboard (returning)
+  useEffect(() => {
+    if (!isAuthenticated || isLoading || location.pathname !== "/") return;
+    getPostAuthRedirectPath().then((path) => navigate(path, { replace: true }));
+  }, [isAuthenticated, isLoading, location.pathname, navigate]);
+
   return (
     <div className="relative overflow-hidden">
       {/* Hero Section */}

@@ -484,6 +484,13 @@ class ApiClient {
     return this.request<any>(`/api/v1/profiles${query ? `?${query}` : ''}`);
   }
 
+  /** Refresh live status from eSIM Access for this merchant's profiles (updates DB). */
+  async refreshProfiles() {
+    return this.request<{ success: boolean; refreshed: number; message?: string }>('/api/v1/profiles/refresh', {
+      method: 'POST',
+    });
+  }
+
   async saveProfileNickname(esimTranNo: string, nickname: string) {
     return this.request<{ nickname: string }>(`/api/v1/profiles/${esimTranNo}/nickname`, {
       method: 'PUT',

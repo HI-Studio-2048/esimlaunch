@@ -10,6 +10,7 @@ import { Eye, EyeOff, Mail, Lock, Globe, Shield, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient, ApiError } from "@/lib/api";
 import { useSignIn, useUser, useClerk } from "@clerk/clerk-react";
+import { getPostAuthRedirectPath } from "@/lib/authRedirect";
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
 
 const Login = () => {
@@ -26,13 +27,16 @@ const Login = () => {
   const [oauthLoading, setOauthLoading] = useState(false);
   const { signIn, isLoaded: isClerkLoaded } = useSignIn();
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated: returning → dashboard, new → onboarding
   useEffect(() => {
-    if (isAuthenticated) {
-      const from = (location.state as any)?.from?.pathname || "/dashboard";
+    if (!isAuthenticated) return;
+    const from = (location.state as any)?.from?.pathname;
+    if (from && from !== "/" && from !== "/login") {
       navigate(from, { replace: true });
+      return;
     }
-  }, [isAuthenticated, navigate, location]);
+    getPostAuthRedirectPath().then((path) => navigate(path, { replace: true }));
+  }, [isAuthenticated, navigate, location.state]);
 
   // Clear error when component unmounts or user starts typing
   useEffect(() => {
@@ -57,14 +61,11 @@ const Login = () => {
 
         try {
           await apiClient.verify2FALogin(twoFactorCode);
-          // 2FA verified, complete login
           await login(email, password, rememberMe);
-          toast({
-            title: "Welcome back!",
-            description: "You have successfully logged in.",
-          });
-          const from = (location.state as any)?.from?.pathname || "/dashboard";
-          navigate(from, { replace: true });
+          toast({ title: "Welcome back!", description: "You have successfully logged in." });
+          const from = (location.state as any)?.from?.pathname;
+          const target = from && from !== "/" && from !== "/login" ? from : await getPostAuthRedirectPath();
+          navigate(target, { replace: true });
         } catch (err) {
           toast({
             title: "Verification failed",
@@ -95,12 +96,10 @@ const Login = () => {
           console.warn('Could not check 2FA status:', err);
         }
 
-        toast({
-          title: "Welcome back!",
-          description: "You have successfully logged in.",
-        });
-        const from = (location.state as any)?.from?.pathname || "/dashboard";
-        navigate(from, { replace: true });
+        toast({ title: "Welcome back!", description: "You have successfully logged in." });
+        const from = (location.state as any)?.from?.pathname;
+        const target = from && from !== "/" && from !== "/login" ? from : await getPostAuthRedirectPath();
+        navigate(target, { replace: true });
       } catch (err) {
         throw err;
       }
@@ -143,13 +142,11 @@ const Login = () => {
     localStorage.removeItem('explicit_logout');
     sessionStorage.removeItem('explicit_logout');
 
-    const from = (location.state as any)?.from?.pathname || "/dashboard";
-
     try {
       await signIn.authenticateWithRedirect({
         strategy: 'oauth_google',
         redirectUrl: `${window.location.origin}/sso-callback`,
-        redirectUrlComplete: `${window.location.origin}${from}`,
+        redirectUrlComplete: `${window.location.origin}/`,
       });
       // Note: page will redirect — setOauthLoading(false) is not needed here
     } catch (err: any) {

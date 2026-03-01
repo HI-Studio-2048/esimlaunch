@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { clearAllOnboardingProgress } from "@/lib/onboardingProgress";
 import { registerClerkSignOut } from "@/lib/clerkBridge";
+import { getPostAuthRedirectPath } from "@/lib/authRedirect";
 
 /**
  * Syncs Clerk authentication with our backend.
@@ -18,6 +20,8 @@ import { registerClerkSignOut } from "@/lib/clerkBridge";
 export function ClerkAuthSync() {
   const { user: clerkUser, isLoaded } = useUser();
   const clerk = useClerk();
+  const navigate = useNavigate();
+  const location = useLocation();
   const { setUser, setAuthLoading } = useAuth();
   const hasSynced = useRef<string | null>(null);
 
@@ -69,6 +73,13 @@ export function ClerkAuthSync() {
           sessionStorage.removeItem('explicit_logout');
           localStorage.removeItem('explicit_logout');
           console.log('Clerk user synced successfully', result.merchant);
+
+          // First-time or returning: send to onboarding or dashboard (not homepage)
+          const pathname = location.pathname;
+          if (pathname === '/' || pathname === '/sso-callback') {
+            const target = await getPostAuthRedirectPath();
+            navigate(target, { replace: true });
+          }
         } catch (err: any) {
           console.error('Failed to sync Clerk user:', err?.message || err);
           hasSynced.current = null;
@@ -86,7 +97,7 @@ export function ClerkAuthSync() {
     };
 
     syncClerkUser();
-  }, [clerkUser?.id, isLoaded, setUser, setAuthLoading, clerk]);
+  }, [clerkUser?.id, isLoaded, setUser, setAuthLoading, clerk, navigate, location.pathname]);
 
   return null;
 }

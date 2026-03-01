@@ -44,6 +44,8 @@ Your application consists of:
    ```
    **Important:** `VITE_API_BASE_URL` must point to your production API (e.g. `https://api.esimlaunch.com` or `https://www.esimlaunch.com` if the API is on the same host). If this is missing or wrong, the app will try to call `localhost:3000` and you'll see `ERR_CONNECTION_REFUSED` for `/api/auth/me` and `/api/auth/clerk-sync`.
 
+   **Clerk script 525 / CORS:** If you use a custom Clerk domain (e.g. `clerk.esimlaunch.com`) and see "blocked by CORS policy" or "net::ERR_FAILED 525" when loading `clerk.browser.js`, either (1) fix SSL and CORS on that custom domain, or (2) set `VITE_CLERK_JS_URL` to load Clerk from Clerk's default CDN instead, e.g. `https://<your-instance>.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js` (get `<your-instance>` from [Clerk Dashboard → Domains](https://dashboard.clerk.com)). Alternatively, remove the custom domain in Clerk so the default `*.clerk.accounts.dev` is used.
+
 4. **Custom Domain**
    - In Vercel project settings → Domains
    - Add `esimlaunch.com` and `www.esimlaunch.com`

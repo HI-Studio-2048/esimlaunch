@@ -468,6 +468,8 @@ model EsimProfile {
   nickname        String?   // merchant-set label for this eSIM
   notes           String?
   orderedAt       DateTime? // when the order was placed in our system
+  esimStatus      String?   // live status from eSIM Access: GOT_RESOURCE, IN_USE, EXPIRED, etc.
+  smdpStatus      String?   // SMDP status from eSIM Access: ENABLED, RELEASED, etc.
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, Mail, Lock, User, Building, Globe, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSignUp, useUser, useClerk } from "@clerk/clerk-react";
+import { getPostAuthRedirectPath } from "@/lib/authRedirect";
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
 
 const Signup = () => {
@@ -33,11 +34,10 @@ const Signup = () => {
   const [oauthLoading, setOauthLoading] = useState(false);
   const { signUp, isLoaded: isClerkLoaded } = useSignUp();
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated: new → onboarding, returning → dashboard
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate("/dashboard", { replace: true });
-    }
+    if (!isAuthenticated) return;
+    getPostAuthRedirectPath().then((path) => navigate(path, { replace: true }));
   }, [isAuthenticated, navigate]);
 
   // Clear error when component unmounts
@@ -130,7 +130,7 @@ const Signup = () => {
       await signUp.authenticateWithRedirect({
         strategy: 'oauth_google',
         redirectUrl: `${window.location.origin}/sso-callback`,
-        redirectUrlComplete: `${window.location.origin}/onboarding`,
+        redirectUrlComplete: `${window.location.origin}/`,
       });
       // Note: page will redirect — setOauthLoading(false) is not needed here
     } catch (err: any) {

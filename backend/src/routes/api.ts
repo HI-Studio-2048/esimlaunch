@@ -249,136 +249,83 @@ router.get('/orders/:orderNo', async (req, res, next) => {
 
 /**
  * GET /api/v1/profiles
- * Query eSIM profiles - returns live eSIM Access data enriched with DB metadata
- * (packageName, coverage, nickname, orderedAt, etc.)
+ * Query eSIM profiles for the current merchant only (from our DB).
+ * Previously this called eSIM Access with no merchant filter and returned the platform
+ * owner's data to every merchant. Now we return only EsimProfile rows for this merchant.
  */
 router.get('/profiles', async (req, res, next) => {
   try {
     const params = queryProfilesSchema.parse(req.query);
     const merchantId = req.merchant!.id;
-    const result = await esimAccessService.queryProfiles(params);
 
-    if (result.success && result.obj?.esimList?.length) {
-      const apiProfiles = result.obj.esimList;
+    const pageSize = params.pager?.pageSize ?? 50;
+    const pageNum = params.pager?.pageNum ?? 1;
+    const skip = (pageNum - 1) * pageSize;
 
-      // Look up our DB records for these profiles
-      const esimTranNos = apiProfiles.map(p => p.esimTranNo).filter(Boolean);
-      const dbRecords = await prisma.esimProfile.findMany({
-        where: { merchantId, esimTranNo: { in: esimTranNos } },
-      });
-      const dbMap = new Map(dbRecords.map(r => [r.esimTranNo, r]));
+    const where: { merchantId: string; orderNo?: string; iccid?: string | null; esimTranNo?: string } = {
+      merchantId,
+    };
+    if (params.orderNo) where.orderNo = params.orderNo;
+    if (params.iccid) where.iccid = params.iccid;
+    if (params.esimTranNo) where.esimTranNo = params.esimTranNo;
 
-      // Upsert profiles in DB and enrich with package name (async, don't block response)
-      setImmediate(async () => {
-        try {
-          for (const p of apiProfiles) {
-            const existingDb = dbMap.get(p.esimTranNo);
-            const pkgCode = p.packageList?.[0]?.packageCode ?? null;
-            const locCode = p.packageList?.[0]?.locationCode ?? null;
+    const [dbProfiles, total] = await Promise.all([
+      prisma.esimProfile.findMany({
+        where,
+        orderBy: { orderedAt: 'desc' },
+        skip,
+        take: pageSize,
+      }),
+      prisma.esimProfile.count({ where }),
+    ]);
 
-            // Enrich from package catalog when we have a package code
-            let packageName = existingDb?.packageName ?? null;
-            let planPrice: number | null = existingDb?.planPrice ?? null;
-            let supportTopUpType: string | null = existingDb?.supportTopUpType ?? null;
-            if (pkgCode) {
-              try {
-                const pkgList = await esimAccessService.getPackages({ packageCode: pkgCode });
-                const pkg = pkgList.obj?.packageList?.[0];
-                if (pkg) {
-                  if (!packageName) packageName = pkg.name ?? null;
-                  if (planPrice == null && pkg.price != null) planPrice = pkg.price;
-                  const raw = (pkg as any).supportTopUpType;
-                  if (!supportTopUpType && raw != null) supportTopUpType = typeof raw === 'string' ? raw : String(raw);
-                }
-              } catch (_) { /* non-fatal */ }
-            }
+    const orderNos = [...new Set(dbProfiles.map(p => p.orderNo).filter(Boolean))] as string[];
+    const orders = orderNos.length
+      ? await prisma.order.findMany({
+          where: { merchantId, esimAccessOrderNo: { in: orderNos } },
+          select: { esimAccessOrderNo: true, totalAmount: true },
+        })
+      : [];
+    const orderTotalMap = new Map(orders.map(o => [o.esimAccessOrderNo, o.totalAmount]));
 
-            // Build coverage from packageList locationCodes
-            let coverage: Array<{ country: string; locationCode: string }> | null = null;
-            if (p.packageList?.length) {
-              coverage = p.packageList.map(pkg => ({
-                locationCode: pkg.locationCode,
-                country: pkg.locationCode, // frontend will decode with getCountryName
-              }));
-            }
+    const esimList = dbProfiles.map(p => {
+      const orderTotal = p.orderNo ? orderTotalMap.get(p.orderNo) : null;
+      return {
+        esimTranNo: p.esimTranNo,
+        orderNo: p.orderNo ?? undefined,
+        iccid: p.iccid ?? undefined,
+        ac: p.ac ?? undefined,
+        qrCodeUrl: p.qrCodeUrl ?? undefined,
+        shortUrl: p.shortUrl ?? undefined,
+        smsStatus: p.smsStatus ?? undefined,
+        dataType: p.dataType ?? undefined,
+        activeType: p.activeType ?? undefined,
+        packageCode: p.packageCode ?? undefined,
+        packageName: p.packageName ?? undefined,
+        planPrice: p.planPrice != null ? Number(p.planPrice) : undefined,
+        supportTopUpType: p.supportTopUpType ?? undefined,
+        locationCode: p.locationCode ?? undefined,
+        coverage: p.coverage ? (p.coverage as any) : undefined,
+        nickname: p.nickname ?? undefined,
+        orderedAt: p.orderedAt?.toISOString() ?? undefined,
+        dbCreatedAt: p.createdAt.toISOString(),
+        totalAmount: orderTotal != null ? Number(orderTotal) : undefined,
+        esimStatus: p.esimStatus ?? null,
+        smdpStatus: p.smdpStatus ?? null,
+        totalVolume: undefined,
+        orderUsage: undefined,
+        totalDuration: undefined,
+        durationUnit: undefined,
+      };
+    });
 
-            await prisma.esimProfile.upsert({
-              where: { esimTranNo: p.esimTranNo },
-              create: {
-                merchantId,
-                esimTranNo: p.esimTranNo,
-                iccid: p.iccid ?? null,
-                orderNo: p.orderNo ?? null,
-                ac: (p as any).ac ?? null,
-                qrCodeUrl: p.qrCodeUrl ?? null,
-                shortUrl: (p as any).shortUrl ?? null,
-                smsStatus: p.smsStatus ?? null,
-                dataType: p.dataType ?? null,
-                activeType: (p.activeType ? parseInt(String(p.activeType)) : null),
-                packageCode: pkgCode,
-                packageName,
-                planPrice,
-                supportTopUpType: supportTopUpType != null ? supportTopUpType : null,
-                locationCode: locCode,
-                coverage: coverage as any,
-                orderedAt: new Date(),
-              },
-              update: {
-                iccid: p.iccid ?? undefined,
-                ac: (p as any).ac ?? undefined,
-                qrCodeUrl: p.qrCodeUrl ?? undefined,
-                shortUrl: (p as any).shortUrl ?? undefined,
-                activeType: (p.activeType ? parseInt(String(p.activeType)) : undefined),
-                packageCode: pkgCode ?? undefined,
-                packageName: packageName ?? undefined,
-                planPrice: planPrice ?? undefined,
-                supportTopUpType: (supportTopUpType != null ? String(supportTopUpType) : undefined),
-                locationCode: locCode ?? undefined,
-                coverage: coverage ? coverage as any : undefined,
-              },
-            });
-          }
-        } catch (e) {
-          console.error('Failed to upsert eSIM profiles in DB:', e);
-        }
-      });
-
-      // Order totals (our DB): eSIM Access does not return "total amount paid" per profile
-      const orderNos = [...new Set(apiProfiles.map(p => p.orderNo).filter(Boolean))] as string[];
-      const orders = orderNos.length
-        ? await prisma.order.findMany({
-            where: { merchantId, esimAccessOrderNo: { in: orderNos } },
-            select: { esimAccessOrderNo: true, totalAmount: true },
-          })
-        : [];
-      const orderTotalMap = new Map(orders.map(o => [o.esimAccessOrderNo, o.totalAmount]));
-
-      // Merge DB metadata into API response; normalize device fields (API may use snake_case)
-      result.obj.esimList = apiProfiles.map(p => {
-        const raw = p as any;
-        const db = dbMap.get(p.esimTranNo);
-        const orderTotal = p.orderNo ? orderTotalMap.get(p.orderNo) : null;
-        const merged = {
-          ...p,
-          // eSIM Access may return device_brand, device_type, device_model
-          deviceBrand: raw.deviceBrand ?? raw.device_brand ?? undefined,
-          deviceType: raw.deviceType ?? raw.device_type ?? undefined,
-          deviceModel: raw.deviceModel ?? raw.device_model ?? undefined,
-          nickname: db?.nickname ?? undefined,
-          packageName: db?.packageName ?? undefined,
-          coverage: db?.coverage ? (db.coverage as any) : undefined,
-          orderedAt: db?.orderedAt?.toISOString() ?? undefined,
-          dbCreatedAt: db?.createdAt.toISOString() ?? undefined,
-          ac: raw.ac ?? db?.ac ?? undefined,
-          shortUrl: raw.shortUrl ?? db?.shortUrl ?? undefined,
-          planPrice: db?.planPrice ?? undefined,
-          supportTopUpType: db?.supportTopUpType ?? undefined,
-          totalAmount: orderTotal != null ? Number(orderTotal) : undefined,
-        };
-        return merged;
-      });
-    }
-
+    const result = {
+      success: true,
+      obj: {
+        esimList,
+        pager: { pageSize, pageNum, total },
+      },
+    };
     res.json(result);
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -394,6 +341,56 @@ router.get('/profiles', async (req, res, next) => {
         errorMessage: error.message || 'Failed to query profiles',
       });
     }
+  }
+});
+
+/**
+ * POST /api/v1/profiles/refresh
+ * Fetch live status from eSIM Access for this merchant's profiles and update DB.
+ * Call this to refresh esimStatus/smdpStatus (and other live fields) for "My eSIM" page.
+ */
+router.post('/profiles/refresh', async (req, res, next) => {
+  try {
+    const merchantId = req.merchant!.id;
+
+    const orderRows = await prisma.order.findMany({
+      where: { merchantId },
+      select: { esimAccessOrderNo: true },
+    });
+    const orderNos = orderRows.map(o => o.esimAccessOrderNo).filter(Boolean) as string[];
+    if (orderNos.length === 0) {
+      return res.json({ success: true, refreshed: 0, message: 'No orders to refresh' });
+    }
+
+    let refreshed = 0;
+    for (const orderNo of orderNos) {
+      const result = await esimAccessService.queryProfiles({ orderNo });
+      if (!result.success || !result.obj?.esimList?.length) continue;
+      for (const p of result.obj.esimList) {
+        const esimStatus = p.esimStatus != null ? String(p.esimStatus) : null;
+        const smdpStatus = p.smdpStatus != null ? String(p.smdpStatus) : null;
+        const updated = await prisma.esimProfile.updateMany({
+          where: { merchantId, esimTranNo: p.esimTranNo },
+          data: {
+            esimStatus,
+            smdpStatus,
+            iccid: p.iccid ?? undefined,
+            ac: (p as any).ac ?? undefined,
+            qrCodeUrl: p.qrCodeUrl ?? undefined,
+            shortUrl: (p as any).shortUrl ?? undefined,
+          },
+        });
+        refreshed += updated.count;
+      }
+    }
+
+    res.json({ success: true, refreshed, message: `Refreshed ${refreshed} profile(s)` });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'REFRESH_FAILED',
+      errorMessage: error.message || 'Failed to refresh profiles',
+    });
   }
 });
 

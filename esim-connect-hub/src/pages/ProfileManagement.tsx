@@ -439,7 +439,31 @@ export default function ProfileManagement() {
                 Total: <strong>{total}</strong>
                 {total > 0 && <> · Available: <strong>{profiles.filter(p => ["GOT_RESOURCE", "IN_USE", "ACTIVE", "NEW"].includes(resolvedStatus(p))).length}</strong></>}
               </span>
-              <Button variant="outline" size="sm" onClick={() => fetchProfiles(page)} disabled={loading} className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    const r = await apiClient.refreshProfiles();
+                    toast({
+                      title: "Status refreshed",
+                      description: r?.refreshed != null ? `Updated ${r.refreshed} profile(s) with live status.` : "Live status synced.",
+                    });
+                    await fetchProfiles(page);
+                  } catch (e: any) {
+                    toast({
+                      title: "Refresh failed",
+                      description: e?.message || "Could not refresh live status.",
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
+                className="gap-2"
+              >
                 <RefreshCw className={cn("w-4 h-4", loading && "animate-spin")} />
                 Refresh
               </Button>

@@ -258,37 +258,28 @@ class WebhookService {
    */
   async deliverESIMs(orderId: string): Promise<void> {
     try {
-      // Find customer order linked to this merchant order
-      const customerOrder = await prisma.customerOrder.findFirst({
-        where: { orderId },
-        include: {
-          store: true,
-        },
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        select: { id: true, merchantId: true, esimAccessOrderNo: true },
       });
-
-      if (!customerOrder || !customerOrder.esimAccessOrderNo) {
-        console.log(`No customer order found for merchant order ${orderId}`);
+      if (!order?.esimAccessOrderNo) {
+        console.log(`Order ${orderId} not found or missing esimAccessOrderNo`);
         return;
       }
 
-      // Fetch eSIM profiles from eSIM Access
       const profilesResult = await esimAccessService.queryProfiles({
-        orderNo: customerOrder.esimAccessOrderNo,
+        orderNo: order.esimAccessOrderNo,
       });
-
       if (!profilesResult.success || !profilesResult.obj?.esimList) {
         console.error('Failed to fetch eSIM profiles:', profilesResult.errorMessage);
         return;
       }
-
       const profiles = profilesResult.obj.esimList;
 
-      // Upsert eSIM profiles into our DB so future queries have package name, coverage, dates
       for (const p of profiles) {
         try {
           const pkgCode = p.packageList?.[0]?.packageCode ?? null;
           const locCode = p.packageList?.[0]?.locationCode ?? null;
-
           let packageName: string | null = null;
           let planPrice: number | null = null;
           let supportTopUpType: string | null = null;
@@ -302,20 +293,21 @@ class WebhookService {
               supportTopUpType = raw != null ? (typeof raw === 'string' ? raw : String(raw)) : null;
             }
           }
-
           const coverage = p.packageList?.map(pkg => ({
             locationCode: pkg.locationCode,
             country: pkg.locationCode,
           })) ?? null;
 
+          const esimStatus = p.esimStatus != null ? String(p.esimStatus) : null;
+          const smdpStatus = p.smdpStatus != null ? String(p.smdpStatus) : null;
           await prisma.esimProfile.upsert({
             where: { esimTranNo: p.esimTranNo },
             create: {
-              merchantId: customerOrder.merchantId,
+              merchantId: order.merchantId,
               esimTranNo: p.esimTranNo,
               iccid: p.iccid ?? null,
               orderNo: p.orderNo ?? null,
-              orderId: customerOrder.orderId ?? null,
+              orderId: order.id,
               ac: (p as any).ac ?? null,
               qrCodeUrl: p.qrCodeUrl ?? null,
               shortUrl: (p as any).shortUrl ?? null,
@@ -329,6 +321,8 @@ class WebhookService {
               locationCode: locCode,
               coverage: coverage as any,
               orderedAt: new Date(),
+              esimStatus,
+              smdpStatus,
             },
             update: {
               iccid: p.iccid ?? undefined,
@@ -341,6 +335,8 @@ class WebhookService {
               supportTopUpType: (supportTopUpType != null ? supportTopUpType : undefined),
               locationCode: locCode ?? undefined,
               coverage: coverage ? (coverage as any) : undefined,
+              esimStatus: esimStatus ?? undefined,
+              smdpStatus: smdpStatus ?? undefined,
             },
           });
         } catch (e) {
@@ -348,19 +344,25 @@ class WebhookService {
         }
       }
 
-      // Generate QR codes for each profile
+      const customerOrder = await prisma.customerOrder.findFirst({
+        where: { orderId },
+        include: { store: true },
+      });
+      if (!customerOrder) {
+        console.log(`Profiles saved for merchant order ${orderId} (no store order to email)`);
+        return;
+      }
+
       const qrCodes = await Promise.all(
-        profiles.map(async (profile) => {
-          return qrCodeService.generateQRCode({
+        profiles.map((profile) =>
+          qrCodeService.generateQRCode({
             esimTranNo: profile.esimTranNo,
             iccid: profile.iccid,
             imsi: profile.imsi,
             qrCodeUrl: profile.qrCodeUrl,
-          });
-        })
+          })
+        )
       );
-
-      // Send delivery email
       await emailService.sendESIMDeliveryEmail({
         email: customerOrder.customerEmail,
         order: {
@@ -378,7 +380,6 @@ class WebhookService {
         customerName: customerOrder.customerName || undefined,
         storeName: customerOrder.store.businessName || customerOrder.store.name,
       });
-
       console.log(`eSIM delivery email sent for order ${customerOrder.id}`);
     } catch (error: any) {
       console.error('Error in deliverESIMs:', error);
