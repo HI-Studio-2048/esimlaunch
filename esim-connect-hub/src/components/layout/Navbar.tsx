@@ -86,20 +86,17 @@ export function Navbar() {
 
     if (clerkPubKey && clerk) {
       try {
-        // Pass redirectUrl to clerk.signOut() so Clerk itself navigates after
-        // the session is FULLY invalidated on Clerk's servers. This prevents the
-        // race condition where window.location.href fired before Clerk finished
-        // clearing its session, causing "You're already signed in" on next login.
-        await clerk.signOut({ redirectUrl: window.location.origin + '/' });
-        // clerk.signOut with redirectUrl triggers a full page navigation —
-        // the lines below are only reached if Clerk is unavailable.
+        // Wait for Clerk to fully invalidate the session on its servers BEFORE
+        // navigating. Previously we passed redirectUrl which caused Clerk to
+        // redirect before the session was actually dead — clerkUser was still
+        // live on the next page load, so ClerkAuthSync re-synced the user back in.
+        await clerk.signOut();
       } catch (e) {
         console.error('Error signing out from Clerk:', e);
-        window.location.href = '/';
       }
-    } else {
-      window.location.href = '/';
     }
+    // Hard navigate after Clerk session is gone so the page starts completely fresh.
+    window.location.href = '/';
   };
 
   return (
