@@ -29,6 +29,7 @@ interface EnvConfig {
   stripeScalePriceIdYearly: string;
   mainDomain: string;
   allowedBaseDomain: string;
+  adminEmail: string;
 }
 
 function getEnvVar(key: string, defaultValue?: string): string {
@@ -50,7 +51,7 @@ export const env: EnvConfig = {
   esimAccessAccessCode: getEnvVar('ESIM_ACCESS_ACCESS_CODE'),
   esimAccessSecretKey: getEnvVar('ESIM_ACCESS_SECRET_KEY'),
   redisUrl: getEnvVar('REDIS_URL', 'redis://localhost:6379'),
-  corsOrigin: getEnvVar('CORS_ORIGIN', 'http://localhost:8080,http://localhost:5173,https://unsynchronous-theresia-indefinite.ngrok-free.dev'),
+  corsOrigin: getEnvVar('CORS_ORIGIN', 'http://localhost:8080,http://localhost:5173,http://localhost:3001,http://localhost:3002,https://unsynchronous-theresia-indefinite.ngrok-free.dev'),
   resendApiKey: getEnvVar('RESEND_API_KEY', ''),
   resendFromEmail: getEnvVar('RESEND_FROM_EMAIL', 'noreply@esimlaunch.com'),
   frontendUrl: getEnvVar('FRONTEND_URL', 'http://localhost:5173'),
@@ -66,5 +67,6 @@ export const env: EnvConfig = {
   stripeScalePriceIdYearly: getEnvVar('STRIPE_SCALE_PRICE_ID_YEARLY', ''),
   mainDomain: getEnvVar('MAIN_DOMAIN', 'esimlaunch.com'),
   allowedBaseDomain: getEnvVar('ALLOWED_BASE_DOMAIN', 'esimlaunch.com'),
+  adminEmail: getEnvVar('ADMIN_EMAIL', 'admin@esimlaunch.com'),
 };
 

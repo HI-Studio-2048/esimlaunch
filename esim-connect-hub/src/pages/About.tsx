@@ -83,7 +83,7 @@ export default function About() {
                   Founded in 2020, eSIMLaunch was born from a vision to democratize global connectivity. We recognized that businesses wanted to offer eSIM services but were held back by technical complexity and high barriers to entry.
                 </p>
                 <p>
-                  Our team of engineers, entrepreneurs, and travel enthusiasts came together to build a platform that makes it possible for anyone to launch an eSIM business in minutes, not months.
+                  Our team of engineers, entrepreneurs, and travel enthusiasts came together to build a platform that makes it possible for anyone to launch an eSIM business without the usual delays.
                 </p>
                 <p>
                   Today, we power hundreds of businesses worldwide, from travel agencies to tech startups, helping them generate millions in revenue while providing seamless connectivity to travelers everywhere.
@@ -177,7 +177,7 @@ export default function About() {
           />
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">
             {[
-              { icon: Zap, title: "Launch in Minutes", desc: "Get your store up and running faster than ever" },
+              { icon: Zap, title: "Launch Fast", desc: "Get your store up and running faster than ever" },
               { icon: Shield, title: "Enterprise Security", desc: "Bank-grade security protecting your business" },
               { icon: Code2, title: "Developer Friendly", desc: "Powerful API and webhooks for integration" },
               { icon: Rocket, title: "Scale Globally", desc: "Grow your business without limits" },

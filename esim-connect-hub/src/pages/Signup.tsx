@@ -8,8 +8,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, Mail, Lock, User, Building, Globe, Loader2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { apiClient } from "@/lib/api";
 import { useSignUp, useUser, useClerk } from "@clerk/clerk-react";
 import { getPostAuthRedirectPath } from "@/lib/authRedirect";
+
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
 
 const Signup = () => {
@@ -28,11 +30,14 @@ const Signup = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
+  const [awaitingVerification, setAwaitingVerification] = useState(false);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { register, isLoading, error, isAuthenticated, clearError } = useAuth();
+  const { register, setUser, isLoading, error, isAuthenticated, clearError } = useAuth();
   const [oauthLoading, setOauthLoading] = useState(false);
-  const { signUp, isLoaded: isClerkLoaded } = useSignUp();
+  const { signUp, setActive, isLoaded: isClerkLoaded } = useSignUp();
 
   // Redirect if already authenticated: new → onboarding, returning → dashboard
   useEffect(() => {
@@ -51,7 +56,72 @@ const Signup = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
+    // If we've already created the Clerk sign-up and are waiting for the email code,
+    // treat this submit as "verify code and finish".
+    if (awaitingVerification) {
+      if (!verificationCode || verificationCode.length < 4) {
+        toast({
+          title: "Verification code required",
+          description: "Enter the code we emailed to you.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!(clerkPubKey && isClerkLoaded && signUp)) {
+        toast({
+          title: "Verification unavailable",
+          description: "Authentication is still loading. Please try again in a moment.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        setIsVerifying(true);
+        const updated = await signUp.attemptEmailAddressVerification({
+          code: verificationCode,
+        });
+
+        if (updated.status === "complete" && updated.createdSessionId && updated.createdUserId) {
+          await setActive({ session: updated.createdSessionId });
+          const result = await apiClient.clerkSync(updated.createdUserId);
+          if (result?.merchant) {
+            setUser(result.merchant);
+            if (result.token) apiClient.setJwtToken(result.token);
+          }
+          toast({
+            title: "Email verified!",
+            description: "Your account is ready. Welcome to eSIMLaunch.",
+          });
+          navigate("/onboarding", { replace: true });
+          return;
+        }
+
+        toast({
+          title: "Verification failed",
+          description: "The code was not accepted. Please check it and try again.",
+          variant: "destructive",
+        });
+        return;
+      } catch (err: any) {
+        const errorMessage =
+          err?.errors?.[0]?.longMessage ||
+          err?.message ||
+          "Invalid or expired verification code. Please request a new one.";
+        toast({
+          title: "Verification failed",
+          description: errorMessage,
+          variant: "destructive",
+        });
+        return;
+      } finally {
+        setIsVerifying(false);
+      }
+    }
+
+    // Normal initial sign-up submit
     if (formData.password !== formData.confirmPassword) {
       toast({
         title: "Passwords don't match",
@@ -71,13 +141,69 @@ const Signup = () => {
     }
 
     clearError();
-    
+    localStorage.removeItem("explicit_logout");
+    sessionStorage.removeItem("explicit_logout");
+
     try {
+      // When Clerk is configured, create the user in Clerk (email/password) so they're stored there too.
+      // Then either sign them in directly (no verification) or start the email-code verification flow.
+      if (clerkPubKey && isClerkLoaded && signUp) {
+        const nameParts = (formData.fullName || "").trim().split(/\s+/);
+        const firstName = nameParts[0] || undefined;
+        const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : undefined;
+
+        const created = await signUp.create({
+          emailAddress: formData.email,
+          password: formData.password,
+          firstName: firstName || undefined,
+          lastName: lastName || undefined,
+        });
+
+        // If Clerk does not require additional steps, sign in immediately.
+        if (created.status === "complete" && created.createdSessionId && created.createdUserId) {
+          await setActive({ session: created.createdSessionId });
+          const result = await apiClient.clerkSync(created.createdUserId);
+          if (result?.merchant) {
+            setUser(result.merchant);
+            if (result.token) apiClient.setJwtToken(result.token);
+          }
+          toast({
+            title: "Account created!",
+            description: "Welcome to eSIMLaunch. You're signed in.",
+          });
+          navigate("/onboarding", { replace: true });
+          return;
+        }
+
+        // Most common path with your current settings:
+        // email must be verified via a one-time code.
+        if (
+          created.status === "missing_requirements" &&
+          created.unverifiedFields?.includes("email_address")
+        ) {
+          await signUp.prepareEmailAddressVerification({ strategy: "email_code" });
+          setAwaitingVerification(true);
+          toast({
+            title: "Check your email",
+            description: "We sent you a verification code. Enter it below to finish sign-up.",
+          });
+          return;
+        }
+
+        toast({
+          title: "Sign-up incomplete",
+          description: "Please complete any required steps or try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // No Clerk: use backend-only registration (session cookie + Merchant in DB)
       await register(
         formData.email,
         formData.password,
         formData.fullName || undefined,
-        'ADVANCED',
+        "ADVANCED",
         referralCode.current || undefined
       );
       toast({
@@ -85,9 +211,9 @@ const Signup = () => {
         description: "Welcome to eSIMLaunch. Let's get started.",
       });
       navigate("/onboarding", { replace: true });
-    } catch (err) {
-      // Error is handled by AuthContext
-      const errorMessage = error || "Registration failed. Please try again.";
+    } catch (err: any) {
+      const errorMessage =
+        err?.message || error || "Registration failed. Please try again.";
       toast({
         title: "Registration failed",
         description: errorMessage,
@@ -382,21 +508,51 @@ const Signup = () => {
                 </Label>
               </div>
 
-              {error && (
+              {error && !awaitingVerification && (
                 <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-sm text-destructive">
                   {error}
                 </div>
               )}
 
-              <Button type="submit" className="w-full" variant="gradient" disabled={isLoading}>
+              {awaitingVerification && (
+                <div className="space-y-2">
+                  <Label htmlFor="verificationCode" className="text-sm">
+                    Email verification code
+                  </Label>
+                  <Input
+                    id="verificationCode"
+                    placeholder="Enter the 6-digit code"
+                    value={verificationCode}
+                    onChange={(e) => setVerificationCode(e.target.value)}
+                    className="font-mono tracking-widest"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    We sent a one-time code to <span className="font-medium">{formData.email}</span>. Enter it
+                    here to activate your account.
+                  </p>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full"
+                variant="gradient"
+                disabled={isLoading || isVerifying}
+              >
                 {isLoading ? (
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                     className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full"
                   />
+                ) : isVerifying ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                    className="w-5 h-5 border-2 border-primary-foreground border-t-transparent rounded-full"
+                  />
                 ) : (
-                  "Create account"
+                  awaitingVerification ? "Verify email & continue" : "Create account"
                 )}
               </Button>
             </form>
@@ -421,7 +577,7 @@ const Signup = () => {
           
           <h1 className="text-4xl font-bold mb-4">
             Start selling eSIMs{" "}
-            <span className="gradient-text">in minutes</span>
+            <span className="gradient-text">quickly</span>
           </h1>
           
           <p className="text-muted-foreground text-lg mb-8">

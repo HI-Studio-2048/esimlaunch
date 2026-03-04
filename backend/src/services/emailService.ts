@@ -560,5 +560,31 @@ export const emailService = {
       throw error;
     }
   },
+
+  /**
+   * Send a notification to the admin email (admin@esimlaunch.com).
+   * Used for new store requests, etc.
+   */
+  async sendAdminNotification(params: { subject: string; html: string }): Promise<void> {
+    const { subject, html } = params;
+    if (!env.adminEmail) {
+      console.warn('ADMIN_EMAIL not configured, skipping admin notification');
+      return;
+    }
+    if (!env.resendApiKey) {
+      console.warn('RESEND_API_KEY not configured, skipping admin notification');
+      return;
+    }
+    try {
+      await resend.emails.send({
+        from: env.resendFromEmail,
+        to: env.adminEmail,
+        subject,
+        html,
+      });
+    } catch (error) {
+      console.error('Failed to send admin notification:', error);
+    }
+  },
 };
 

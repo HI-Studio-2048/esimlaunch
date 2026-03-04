@@ -5,6 +5,7 @@ export interface User {
   id: string;
   email: string;
   name: string | null;
+  role: 'MERCHANT' | 'ADMIN';
   serviceType: 'EASY' | 'ADVANCED';
   isActive: boolean;
   createdAt?: string;
@@ -44,12 +45,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.removeItem('explicit_logout');
         apiClient.setJwtToken(null);
         setUser(null);
-        setIsLoading(false);
-        return;
-      }
-
-      if (clerkPubKey) {
-        // Clerk will sync and set user; avoid /api/auth/me 401 before sync
         setIsLoading(false);
         return;
       }

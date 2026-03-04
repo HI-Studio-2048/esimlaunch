@@ -2,6 +2,8 @@ import express from 'express';
 import { z } from 'zod';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { subscriptionService } from '../services/subscriptionService';
+import { emailService } from '../services/emailService';
+import { env } from '../config/env';
 
 const router = express.Router();
 
@@ -143,6 +145,21 @@ router.delete('/me', async (req, res, next) => {
       merchantId,
       cancelImmediately
     );
+
+    // Notify admin of cancellation (fire-and-forget)
+    emailService.sendAdminNotification({
+      subject: `[eSIMLaunch] Subscription canceled by merchant ${(req as any).merchant!.email}`,
+      html: `
+        <p>A merchant has canceled their subscription.</p>
+        <ul>
+          <li><strong>Merchant:</strong> ${(req as any).merchant!.email}</li>
+          <li><strong>Merchant ID:</strong> ${merchantId}</li>
+          <li><strong>Immediate:</strong> ${cancelImmediately ? 'Yes' : 'No (at period end)'}</li>
+          <li><strong>Time:</strong> ${new Date().toISOString()}</li>
+        </ul>
+        <p>View in the <a href="${env.frontendUrl}/admin">Admin dashboard</a>.</p>
+      `,
+    }).catch((err) => console.error('Admin notification (subscription cancel) failed:', err));
 
     res.json({
       success: true,

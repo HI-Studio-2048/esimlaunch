@@ -45,7 +45,7 @@ Your store automatically taps into the full eSIM Access catalog, giving you inst
 
 ## Step 3: Build Your Storefront
 
-With platforms like eSIMLaunch, you can have a fully branded store live in under an hour. Key features to look for:
+With platforms like eSIMLaunch, you can get a fully branded store live quickly. Key features to look for:
 
 - White-label branding (your logo, your domain)
 - Automated order fulfillment

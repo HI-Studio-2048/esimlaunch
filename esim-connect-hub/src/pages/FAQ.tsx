@@ -22,7 +22,7 @@ const faqs = {
   "getting-started": [
     {
       question: "How do I create my eSIM store?",
-      answer: "Creating your store is simple! Sign up for an account, complete our quick onboarding wizard, connect your preferred eSIM providers, customize your branding, and you're ready to start selling. Most users are live within 1-2 hours."
+      answer: "Creating your store is simple! Sign up for an account, complete our onboarding wizard, connect your preferred eSIM providers, customize your branding, and you're ready to start selling. We'll guide you through each step."
     },
     {
       question: "Do I need any technical experience?",

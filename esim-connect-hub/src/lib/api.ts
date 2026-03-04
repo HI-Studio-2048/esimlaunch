@@ -628,6 +628,67 @@ class ApiClient {
     return this.request<any[]>('/api/stores');
   }
 
+  /** Admin only: list all store requests with merchant info */
+  // ── Admin endpoints ──────────────────────────────────────────
+
+  async getAdminSummary() {
+    return this.request<any>('/api/admin/summary');
+  }
+
+  async getAdminStoreRequests(params?: { status?: string; email?: string; page?: number; limit?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.email) qs.set('email', params.email);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString() ? `?${qs}` : '';
+    return this.request<any>(`/api/admin/store-requests${query}`);
+  }
+
+  async updateAdminStoreRequest(id: string, data: { adminStatus?: string; adminNotes?: string }) {
+    return this.request<any>(`/api/admin/store-requests/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getAdminMerchants(params?: { search?: string; page?: number; limit?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.search) qs.set('search', params.search);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString() ? `?${qs}` : '';
+    return this.request<any>(`/api/admin/merchants${query}`);
+  }
+
+  async getAdminMerchant(merchantId: string) {
+    return this.request<any>(`/api/admin/merchants/${merchantId}`);
+  }
+
+  async getAdminStore(storeId: string) {
+    return this.request<any>(`/api/admin/stores/${storeId}`);
+  }
+
+  async getAdminSubscriptions(params?: { status?: string; plan?: string; page?: number; limit?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.plan) qs.set('plan', params.plan);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString() ? `?${qs}` : '';
+    return this.request<any>(`/api/admin/subscriptions${query}`);
+  }
+
+  async getAdminSupport(params?: { status?: string; priority?: string; page?: number; limit?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.priority) qs.set('priority', params.priority);
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString() ? `?${qs}` : '';
+    return this.request<any>(`/api/admin/support${query}`);
+  }
+
   async getStore(storeId: string) {
     return this.request<any>(`/api/stores/${storeId}`);
   }

@@ -11,6 +11,7 @@ declare global {
         id: string;
         email: string;
         serviceType: string;
+        role: string;
       };
       apiKey?: {
         id: string;
@@ -109,6 +110,7 @@ export async function authenticateApiKey(
             id: true,
             email: true,
             serviceType: true,
+            role: true,
             isActive: true,
           },
         },
@@ -164,6 +166,7 @@ export async function authenticateApiKey(
       id: matchedKey.merchant.id,
       email: matchedKey.merchant.email,
       serviceType: matchedKey.merchant.serviceType,
+      role: matchedKey.merchant.role,
     };
     req.apiKey = {
       id: matchedKey.id,

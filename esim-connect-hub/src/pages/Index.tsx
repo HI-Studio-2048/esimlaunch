@@ -1,8 +1,5 @@
-import { useEffect } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
-import { getPostAuthRedirectPath } from "@/lib/authRedirect";
+import { Link } from "react-router-dom";
 import { 
   Zap, Globe, Shield, Code2, Palette, Users, 
   Building2, Plane, UserCircle, Rocket, TrendingUp,
@@ -22,7 +19,7 @@ import {
 } from "@/components/ui/accordion";
 
 const valueProps = [
-  { icon: Zap, title: "Launch in 1 Hour", description: "Get your eSIM store up and running faster than ever" },
+  { icon: Zap, title: "Launch Fast", description: "Get your eSIM store up and running faster than ever" },
   { icon: Code2, title: "No Coding Required", description: "Beautiful storefront ready out of the box" },
   { icon: Globe, title: "190+ Countries", description: "Global coverage with major carriers worldwide" },
   { icon: Settings, title: "Plug & Play Admin", description: "Intuitive dashboard to manage everything" },
@@ -39,7 +36,7 @@ const targetAudience = [
 ];
 
 const howItWorks = [
-  { step: "01", title: "Sign Up", description: "Create your account in minutes with just an email" },
+  { step: "01", title: "Sign Up", description: "Create your account quickly with just an email" },
   { step: "02", title: "Connect Providers", description: "Choose from our network of global eSIM providers" },
   { step: "03", title: "Start Selling", description: "Launch your store and watch the sales roll in" },
 ];
@@ -53,7 +50,7 @@ const dashboardPreviews = [
 
 const testimonials = [
   { 
-    quote: "We launched our eSIM store in under 2 hours. The dashboard is incredibly intuitive.", 
+    quote: "We got our eSIM store up and running quickly. The dashboard is incredibly intuitive.", 
     author: "Daniel Philip", 
     role: "CEO, Voyo eSIMs",
     rating: 5
@@ -74,8 +71,8 @@ const testimonials = [
 
 const faqs = [
   { 
-    question: "How quickly can I get started?", 
-    answer: "Most users have their store live within 1-2 hours. Our onboarding wizard guides you through setup, provider selection, and branding customization."
+    question: "How quickly can I get started?",
+    answer: "Our onboarding wizard guides you through setup, provider selection, and branding customization so you can get your store live. The process is straightforward and we're here to help if you need it."
   },
   { 
     question: "Do I need technical experience?", 
@@ -99,20 +96,10 @@ const stats = [
 ];
 
 export default function Index() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { isAuthenticated, isLoading } = useAuth();
-
-  // Logged-in users on homepage → onboarding (new) or dashboard (returning)
-  useEffect(() => {
-    if (!isAuthenticated || isLoading || location.pathname !== "/") return;
-    getPostAuthRedirectPath().then((path) => navigate(path, { replace: true }));
-  }, [isAuthenticated, isLoading, location.pathname, navigate]);
-
   return (
     <div className="relative overflow-hidden">
       {/* Hero Section */}
-      <section className="relative min-h-screen flex items-center pt-20" style={{ background: 'var(--gradient-hero)' }}>
+      <section className="relative flex items-start pt-24 pb-16 md:pt-28 md:pb-24" style={{ background: 'var(--gradient-hero)' }}>
         {/* Background Elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <motion.div
@@ -149,7 +136,7 @@ export default function Index() {
               <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
                 Build Your
                 <span className="gradient-text"> eSIM Empire </span>
-                in Minutes
+                Today
               </h1>
 
               <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-8">

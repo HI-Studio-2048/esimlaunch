@@ -586,7 +586,7 @@ export default function CoverageChecker() {
                 Ready to start selling eSIMs?
               </h2>
               <p className="text-muted-foreground mb-6">
-                Access all these plans and more through your own branded eSIM store. Launch in minutes with eSIMLaunch.
+                Access all these plans and more through your own branded eSIM store. Launch your store with eSIMLaunch.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 <Button variant="gradient" size="lg" asChild>

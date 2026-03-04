@@ -36,6 +36,7 @@ export async function authenticateSessionCookie(
         id: m.id,
         email: m.email,
         serviceType: m.serviceType,
+        role: (m as any).role ?? 'MERCHANT',
       };
     }
   } catch (_) {

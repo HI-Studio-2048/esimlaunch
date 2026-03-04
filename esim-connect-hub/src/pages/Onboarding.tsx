@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { DNSInstructions } from "@/components/shared/DNSInstructions";
 import { markStepCompleted, getOnboardingProgress } from "@/lib/onboardingProgress";
@@ -74,6 +75,7 @@ const Onboarding = () => {
 
   const [payment, setPayment] = useState<PaymentData>({
     plan: "growth",
+    billingPeriod: "monthly",
     paymentMethodId: undefined,
     billingEmail: "",
   });
@@ -149,14 +151,14 @@ const Onboarding = () => {
         accentColor: "#22c55e",
         selectedPackages: [],
         pricingMarkup: {},
-        templateKey: "default",
+        templateKey: "default" as "bold" | "default" | "minimal" | "travel",
       };
 
       // Create Stripe subscription for the selected plan
       try {
         await apiClient.createSubscription({
           plan: (payment.plan as 'starter' | 'growth' | 'scale') || 'growth',
-          billingPeriod: 'monthly',
+          billingPeriod: payment.billingPeriod || 'monthly',
           paymentMethodId: payment.paymentMethodId,
         });
         markStepCompleted('subscription', new Date().toISOString());
@@ -928,6 +930,7 @@ const ProviderStep = ({
 
 interface PaymentData {
   plan: string;
+  billingPeriod: 'monthly' | 'yearly';
   paymentMethodId?: string;
   billingEmail: string;
 }
@@ -993,7 +996,13 @@ const PaymentStep = ({
   setPayment: React.Dispatch<React.SetStateAction<PaymentData>>;
   isLoading: boolean;
   setIsLoading: (v: boolean) => void;
-}) => (
+}) => {
+  const isYearly = payment.billingPeriod === 'yearly';
+  const samplePlan = PLANS[0];
+  const annualCost = samplePlan.monthlyPrice * 12;
+  const savingsPercent = Math.round(((annualCost - samplePlan.yearlyPrice) / annualCost) * 100);
+
+  return (
   <Elements stripe={getStripe()}>
     <div className="space-y-6">
       <div>
@@ -1001,6 +1010,23 @@ const PaymentStep = ({
         <p className="text-muted-foreground">
           Start your 14-day free trial. No charges until the trial ends.
         </p>
+      </div>
+
+      {/* Billing Toggle */}
+      <div className="flex items-center justify-center gap-4">
+        <span className={cn("text-sm font-medium", !isYearly && "text-foreground", isYearly && "text-muted-foreground")}>
+          Monthly
+        </span>
+        <Switch
+          checked={isYearly}
+          onCheckedChange={(checked) => setPayment({ ...payment, billingPeriod: checked ? 'yearly' : 'monthly' })}
+        />
+        <span className={cn("text-sm font-medium", isYearly && "text-foreground", !isYearly && "text-muted-foreground")}>
+          Yearly
+          <span className="ml-2 px-2 py-0.5 text-xs rounded-full gradient-bg text-primary-foreground">
+            Save {savingsPercent}%
+          </span>
+        </span>
       </div>
 
       {/* Plan Selection */}
@@ -1027,7 +1053,15 @@ const PaymentStep = ({
                   <Label htmlFor={plan.id} className="text-base font-semibold cursor-pointer">
                     {plan.name}
                   </Label>
-                  <p className="text-2xl font-bold gradient-text mt-1">${plan.monthlyPrice}<span className="text-sm text-muted-foreground font-normal">/mo</span></p>
+                  <p className="text-2xl font-bold gradient-text mt-1">
+                    ${isYearly ? Math.round(plan.yearlyPrice / 12) : plan.monthlyPrice}
+                    <span className="text-sm text-muted-foreground font-normal">/mo</span>
+                  </p>
+                  {isYearly && (
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Billed annually (${plan.yearlyPrice}/year)
+                    </p>
+                  )}
                   <ul className="mt-2 space-y-1">
                     {plan.features.map((feature) => (
                       <li key={feature} className="text-sm text-muted-foreground flex items-center gap-1">
@@ -1077,7 +1111,8 @@ const PaymentStep = ({
       </div>
     </div>
   </Elements>
-);
+  );
+};
 
 interface LaunchOptionsData {
   enableAnalytics: boolean;

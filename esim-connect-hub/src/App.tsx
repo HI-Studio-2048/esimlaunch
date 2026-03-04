@@ -72,6 +72,10 @@ import Balance from "./pages/Balance";
 import OrderHistory from "./pages/OrderHistory";
 import PaymentSettings from "./pages/PaymentSettings";
 import Developer from "./pages/Developer";
+import Admin from "./pages/Admin";
+import AdminMerchants from "@/pages/AdminMerchants";
+import AdminMerchantDetail from "@/pages/AdminMerchantDetail";
+import AdminStoreDetail from "@/pages/AdminStoreDetail";
 import BlogPost from "./pages/BlogPost";
 import NotFound from "./pages/NotFound";
 import DemoStoreHome from "./pages/demo-store/DemoStoreHome";
@@ -99,6 +103,8 @@ const isDashboardPath = (pathname: string) =>
   pathname === "/package-selector" ||
   pathname === "/pricing-config" ||
   pathname === "/store-preview" ||
+  pathname === "/admin" ||
+  pathname.startsWith("/admin/") ||
   pathname.startsWith("/stores/");
 
 // Main shell – renders Navbar + optional sidebar + content + optional footer
@@ -141,6 +147,38 @@ const MainShell = () => {
                 <Route path="/api-docs" element={<APIDocs />} />
                 <Route path="/help-center" element={<HelpCenter />} />
                 <Route path="/status" element={<Status />} />
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute>
+                      <Admin />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/merchants"
+                  element={
+                    <ProtectedRoute>
+                      <AdminMerchants />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/merchants/:merchantId"
+                  element={
+                    <ProtectedRoute>
+                      <AdminMerchantDetail />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/stores/:storeId"
+                  element={
+                    <ProtectedRoute>
+                      <AdminStoreDetail />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/roi-calculator" element={<ROICalculator />} />
                 <Route path="/demo" element={<Demo />} />
                 <Route path="/case-studies" element={<CaseStudies />} />

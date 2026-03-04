@@ -5,6 +5,8 @@ import { prisma } from '../lib/prisma';
 import { ServiceType } from '@prisma/client';
 import { domainVerificationService } from '../services/domainVerificationService';
 import { esimAccessService } from '../services/esimAccessService';
+import { emailService } from '../services/emailService';
+import { env } from '../config/env';
 
 const router = express.Router();
 
@@ -330,6 +332,23 @@ router.post('/', async (req, res, next) => {
         templateSettings: data.templateSettings ?? undefined,
       },
     });
+
+    // Notify admin of new store request (non-blocking)
+    emailService.sendAdminNotification({
+      subject: `[eSIMLaunch] New store request: ${data.businessName}`,
+      html: `
+        <p>A new eSIM store has been submitted.</p>
+        <ul>
+          <li><strong>Business name:</strong> ${data.businessName}</li>
+          <li><strong>Store name:</strong> ${data.name}</li>
+          <li><strong>Subdomain:</strong> ${data.subdomain || '—'}</li>
+          <li><strong>Merchant email:</strong> ${req.merchant!.email}</li>
+          <li><strong>Store ID:</strong> ${store.id}</li>
+          <li><strong>Created:</strong> ${store.createdAt.toISOString()}</li>
+        </ul>
+        <p>View all store requests in the <a href="${env.frontendUrl}/admin">Admin dashboard</a>.</p>
+      `,
+    }).catch((err) => console.error('Admin notification email failed:', err));
 
     res.json({
       success: true,

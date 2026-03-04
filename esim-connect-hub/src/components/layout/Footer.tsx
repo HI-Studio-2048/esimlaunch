@@ -51,7 +51,7 @@ export function Footer() {
               <span className="font-display font-bold text-xl">eSIMLaunch</span>
             </Link>
             <p className="text-background/70 text-sm mb-6 max-w-xs">
-              Launch your eSIM business in minutes. No coding required. Global coverage across 190+ countries.
+              Launch your eSIM business quickly. No coding required. Global coverage across 190+ countries.
             </p>
             <div className="flex gap-3">
               {socialLinks.map((social) => (

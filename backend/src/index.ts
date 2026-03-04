@@ -57,6 +57,8 @@ import emailTemplateRoutes from './routes/emailTemplates';
 import affiliateRoutes from './routes/affiliates';
 import balanceRoutes from './routes/balance';
 import preferencesRoutes from './routes/preferences';
+import adminRoutes from './routes/admin';
+import voyageAdapterRoutes from './routes/voyageAdapter';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/merchant/preferences', preferencesRoutes);
@@ -76,6 +78,8 @@ app.use('/api/seo', seoRoutes);
 app.use('/api/email-templates', emailTemplateRoutes);
 app.use('/api/affiliates', affiliateRoutes);
 app.use('/api/balance', balanceRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/voyage', voyageAdapterRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

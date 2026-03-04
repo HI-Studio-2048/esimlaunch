@@ -4,6 +4,8 @@ import { authService } from '../services/authService';
 import { authenticateJWT, authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { sessionService } from '../services/sessionService';
 import { SESSION_COOKIE_NAME } from '../middleware/sessionAuth';
+import { emailService } from '../services/emailService';
+import { env } from '../config/env';
 
 const router = express.Router();
 
@@ -53,6 +55,21 @@ router.post('/register', async (req, res, next) => {
         console.warn('Referral tracking failed:', refErr);
       }
     }
+    // Notify admin of new merchant signup (fire-and-forget)
+    emailService.sendAdminNotification({
+      subject: `[eSIMLaunch] New merchant signed up: ${result.merchant.email}`,
+      html: `
+        <p>A new merchant has registered on eSIMLaunch.</p>
+        <ul>
+          <li><strong>Email:</strong> ${result.merchant.email}</li>
+          <li><strong>Name:</strong> ${result.merchant.name || '—'}</li>
+          <li><strong>Plan type:</strong> ${result.merchant.serviceType}</li>
+          <li><strong>Merchant ID:</strong> ${result.merchant.id}</li>
+          <li><strong>Signed up:</strong> ${new Date().toISOString()}</li>
+        </ul>
+        <p>View in the <a href="${env.frontendUrl}/admin">Admin dashboard</a>.</p>
+      `,
+    }).catch((err) => console.error('Admin notification (new merchant) failed:', err));
     const session = await sessionService.createSession(
       result.merchant.id,
       req.ip,

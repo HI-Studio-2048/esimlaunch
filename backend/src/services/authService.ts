@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { randomBytes } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
-import { ServiceType } from '@prisma/client';
+import { ServiceType, MerchantRole } from '@prisma/client';
 import { emailService } from './emailService';
 
 export interface RegisterData {
@@ -23,6 +23,7 @@ export interface AuthResponse {
     id: string;
     email: string;
     name: string | null;
+    role: MerchantRole;
     serviceType: ServiceType;
   };
   token: string;
@@ -58,18 +59,24 @@ class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(data.password, 10);
 
-    // Create merchant
+    // Create merchant – auto-assign ADMIN role for the configured admin email
+    const role = data.email.toLowerCase() === env.adminEmail.toLowerCase()
+      ? MerchantRole.ADMIN
+      : MerchantRole.MERCHANT;
+
     const merchant = await prisma.merchant.create({
       data: {
         email: data.email,
         password: hashedPassword,
         name: data.name,
+        role,
         serviceType: data.serviceType || ServiceType.ADVANCED,
       },
       select: {
         id: true,
         email: true,
         name: true,
+        role: true,
         serviceType: true,
       },
     });
@@ -118,6 +125,7 @@ class AuthService {
         id: true,
         email: true,
         name: true,
+        role: true,
         serviceType: true,
         password: true,
         isActive: true,
@@ -146,6 +154,7 @@ class AuthService {
         id: merchant.id,
         email: merchant.email,
         name: merchant.name,
+        role: merchant.role,
         serviceType: merchant.serviceType,
       },
       token,
@@ -279,6 +288,7 @@ class AuthService {
         id: true,
         email: true,
         name: true,
+        role: true,
         serviceType: true,
         isActive: true,
         createdAt: true,

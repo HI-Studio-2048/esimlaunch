@@ -1,0 +1,275 @@
+// ============================================================
+// esimlaunch-template Prisma schema
+// Mirrors the Voyage data model as described in the reference.
+// Fill in DATABASE_URL in .env before running prisma migrate.
+// ============================================================
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------
+// Core user record. Created via Clerk webhook or first order.
+// ---------------------------------------------------------------
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  clerkId   String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders         Order[]
+  esimProfiles   EsimProfile[]
+  affiliate      Affiliate?
+  referral       Referral?       @relation("ReferredUser")
+  vcashBalance   VCashBalance?
+  vcashTxns      VCashTransaction[]
+  topUps         TopUp[]
+  supportTickets SupportTicket[]
+}
+
+// ---------------------------------------------------------------
+// Order – the core commerce record.
+// Always created as 'pending', updated after Stripe/VCash payment.
+// ---------------------------------------------------------------
+enum OrderStatus {
+  pending
+  paid
+  provisioning
+  esim_pending
+  esim_created
+  esim_order_failed
+  esim_no_orderno
+  refunded
+  cancelled
+}
+
+enum PaymentMethod {
+  stripe
+  vcash
+}
+
+model Order {
+  id                 String        @id @default(cuid())
+  userId             String
+  user               User          @relation(fields: [userId], references: [id])
+  planId             String        // packageCode or slug from provider
+  planName           String?
+  amountCents        Int           // USD cents
+  currency           String        @default("USD")
+  displayCurrency    String?       // e.g. "EUR"
+  displayAmountCents Int?
+  status             OrderStatus   @default(pending)
+  paymentMethod      PaymentMethod @default(stripe)
+  paymentRef         String?       // Stripe payment_intent id or session id
+  esimOrderNo        String?       // Provider order number
+  duration           Int?          // For day-pass/unlimited plans
+  promoCode          String?
+  referralCode       String?
+  referralDiscountApplied Boolean  @default(false)
+  receiptSent        Boolean       @default(false)
+  refundedAt         DateTime?
+  refundAmountCents  Int?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  esimProfile  EsimProfile?
+  commission   Commission?
+  topUp        TopUp?
+}
+
+// ---------------------------------------------------------------
+// eSIM profile created after the provider order is fulfilled.
+// ---------------------------------------------------------------
+model EsimProfile {
+  id           String    @id @default(cuid())
+  orderId      String    @unique
+  order        Order     @relation(fields: [orderId], references: [id])
+  userId       String?
+  user         User?     @relation(fields: [userId], references: [id])
+  esimTranNo   String?   @unique
+  iccid        String?   @unique
+  qrCodeUrl    String?
+  ac           String?   // Activation code (SM-DP+ address + matching ID)
+  smdpStatus   String?
+  esimStatus   String    @default("PENDING")
+  totalVolume  BigInt?   // bytes
+  orderUsage   BigInt?   // bytes used
+  expiredTime  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  usageHistory EsimUsageHistory[]
+  topUps       TopUp[]
+}
+
+// ---------------------------------------------------------------
+// Usage snapshot for trending / history
+// ---------------------------------------------------------------
+model EsimUsageHistory {
+  id         String      @id @default(cuid())
+  profileId  String
+  profile    EsimProfile @relation(fields: [profileId], references: [id])
+  usedBytes  BigInt
+  recordedAt DateTime    @default(now())
+}
+
+// ---------------------------------------------------------------
+// Affiliate – one per user; created on user.created Clerk webhook
+// ---------------------------------------------------------------
+model Affiliate {
+  id              String       @id @default(cuid())
+  userId          String       @unique
+  user            User         @relation(fields: [userId], references: [id])
+  referralCode    String       @unique
+  totalCommission Int          @default(0) // USD cents
+  isFrozen        Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+
+  referrals    Referral[]
+  commissions  Commission[]
+}
+
+// ---------------------------------------------------------------
+// Referral – links an affiliate to a referred user
+// ---------------------------------------------------------------
+model Referral {
+  id                        String    @id @default(cuid())
+  affiliateId               String
+  affiliate                 Affiliate @relation(fields: [affiliateId], references: [id])
+  referredUserId            String    @unique
+  referredUser              User      @relation("ReferredUser", fields: [referredUserId], references: [id])
+  firstPurchaseDiscountUsed Boolean   @default(false)
+  createdAt                 DateTime  @default(now())
+}
+
+// ---------------------------------------------------------------
+// Commission – earned when a referred user completes an order
+// ---------------------------------------------------------------
+enum CommissionStatus {
+  pending
+  available
+  paid
+  reversed
+}
+
+model Commission {
+  id          String           @id @default(cuid())
+  affiliateId String
+  affiliate   Affiliate        @relation(fields: [affiliateId], references: [id])
+  orderId     String?          @unique
+  order       Order?           @relation(fields: [orderId], references: [id])
+  orderType   String           @default("stripe") // "stripe" | "vcash"
+  amountCents Int              // USD cents
+  status      CommissionStatus @default(pending)
+  availableAt DateTime?
+  createdAt   DateTime         @default(now())
+}
+
+// ---------------------------------------------------------------
+// Top-up
+// ---------------------------------------------------------------
+enum TopUpStatus {
+  pending
+  paid
+  completed
+  failed
+}
+
+model TopUp {
+  id             String      @id @default(cuid())
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  profileId      String
+  profile        EsimProfile @relation(fields: [profileId], references: [id])
+  orderId        String?     @unique
+  order          Order?      @relation(fields: [orderId], references: [id])
+  planCode       String
+  amountCents    Int         // USD cents
+  status         TopUpStatus @default(pending)
+  paymentRef     String?
+  rechargeOrderNo String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+}
+
+// ---------------------------------------------------------------
+// V-Cash (store credit)
+// ---------------------------------------------------------------
+model VCashBalance {
+  userId       String   @id
+  user         User     @relation(fields: [userId], references: [id])
+  balanceCents Int      @default(0)
+  updatedAt    DateTime @updatedAt
+}
+
+enum VCashTxnType {
+  credit
+  debit
+}
+
+model VCashTransaction {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id])
+  type        VCashTxnType
+  amountCents Int
+  reason      String?
+  metadata    Json?
+  createdAt   DateTime     @default(now())
+}
+
+// ---------------------------------------------------------------
+// Admin-configurable settings (managed via esimlaunch dashboard,
+// but stored locally so backend can read them fast)
+// ---------------------------------------------------------------
+model AdminSettings {
+  id               String  @id @default("singleton")
+  mockMode         Boolean @default(false)
+  markupPercent    Float   @default(0)
+  defaultCurrency  String  @default("USD")
+  adminEmails      String  @default("") // comma-separated
+}
+
+// ---------------------------------------------------------------
+// Webhook events (raw, for auditing / replay)
+// ---------------------------------------------------------------
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  source      String   // "stripe" | "clerk" | "esim"
+  eventType   String
+  payload     Json
+  processed   Boolean  @default(false)
+  receivedAt  DateTime @default(now())
+}
+
+// ---------------------------------------------------------------
+// Email log
+// ---------------------------------------------------------------
+model EmailLog {
+  id        String   @id @default(cuid())
+  to        String
+  subject   String
+  template  String
+  status    String   @default("sent")
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------
+// Support tickets (minimal)
+// ---------------------------------------------------------------
+model SupportTicket {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  email     String
+  subject   String
+  body      String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+}

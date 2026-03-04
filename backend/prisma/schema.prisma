@@ -13,6 +13,7 @@ model Merchant {
   email                    String                @unique
   password                 String
   name                     String?
+  role                     MerchantRole          @default(MERCHANT)
   serviceType              ServiceType           @default(ADVANCED)
   isActive                 Boolean               @default(true)
   createdAt                DateTime              @default(now())
@@ -54,6 +55,7 @@ model Merchant {
 
   @@index([email])
   @@index([serviceType])
+  @@index([role])
 }
 
 // Stored in DB only - no localStorage/cache for onboarding, selected store, currency, etc.
@@ -208,6 +210,8 @@ model Store {
   seoConfig                  Json? // SEO configuration (meta tags, etc.)
   templateKey                String?         @default("default") // Storefront template: default | minimal | bold | travel
   templateSettings           Json?           // Safe overrides: heroStyle, showTestimonials, etc.
+  adminStatus                String          @default("pending_review") // pending_review | in_progress | completed | rejected
+  adminNotes                 String?         @db.Text
   isActive                   Boolean         @default(true)
   domainVerified             Boolean         @default(false)
   domainVerificationMethod   String?         // 'dns' | 'cname'
@@ -336,6 +340,11 @@ model Invoice {
 enum ServiceType {
   EASY
   ADVANCED
+}
+
+enum MerchantRole {
+  MERCHANT
+  ADMIN
 }
 
 enum OrderStatus {

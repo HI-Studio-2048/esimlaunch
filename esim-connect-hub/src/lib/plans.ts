@@ -5,7 +5,6 @@ export interface Plan {
   yearlyPrice: number;
   features: string[];
   recommended?: boolean;
-  ordersPerMonth: string;
 }
 
 export const PLANS: Plan[] = [
@@ -13,26 +12,23 @@ export const PLANS: Plan[] = [
     id: 'starter',
     name: 'Starter',
     monthlyPrice: 29,
-    yearlyPrice: 290,
-    features: ['Up to 100 orders/month', 'Basic analytics', 'Email support'],
-    ordersPerMonth: '100',
+    yearlyPrice: 288,
+    features: ['24h Support Response Time', 'Full White-Labeling'],
   },
   {
     id: 'growth',
     name: 'Growth',
     monthlyPrice: 79,
-    yearlyPrice: 790,
-    features: ['Up to 1,000 orders/month', 'Advanced analytics', 'Priority support'],
+    yearlyPrice: 786,
+    features: ['12h Support Response Time', 'Custom Domain', 'Full White-Labeling', 'Priority Email & Chat Support'],
     recommended: true,
-    ordersPerMonth: '1,000',
   },
   {
     id: 'scale',
     name: 'Scale',
-    monthlyPrice: 199,
-    yearlyPrice: 1990,
-    features: ['Unlimited orders', 'Custom domains', 'Dedicated support'],
-    ordersPerMonth: 'Unlimited',
+    monthlyPrice: 299,
+    yearlyPrice: 2990,
+    features: ['4h Support Response Time', 'Custom Domain', 'Full White-Labeling', 'Priority Email & Chat Support', 'Mobile App'],
   },
 ];
 

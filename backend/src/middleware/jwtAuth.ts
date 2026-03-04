@@ -59,6 +59,7 @@ export async function authenticateJWT(
       id: merchant.id,
       email: merchant.email,
       serviceType: merchant.serviceType,
+      role: (merchant as any).role ?? 'MERCHANT',
     };
 
     next();

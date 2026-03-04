@@ -21,6 +21,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
+  Shield,
 } from "lucide-react";
 
 type NavItem = {
@@ -66,9 +67,12 @@ const BOTTOM_NAV: NavItem[] = [
   { label: "Settings", icon: Settings, path: "/settings" },
 ];
 
+const ADMIN_NAV_ITEM: NavItem = { label: "Admin", icon: Shield, path: "/admin" };
+
 function isActive(pathname: string, path: string): boolean {
   if (path === "/dashboard") return pathname === "/dashboard";
   if (path === "/settings")  return pathname === "/settings";
+  if (path === "/admin") return pathname === "/admin" || pathname.startsWith("/admin/");
   // Exact match for settings sub-pages and standalone pages
   if (path.startsWith("/settings/") || path === "/package-selector" || path === "/pricing-config" || path === "/demo-store") {
     return pathname === path;
@@ -162,6 +166,15 @@ export function DashboardSidebar() {
 
       {/* Main nav */}
       <nav className="flex-1 overflow-y-auto py-3 space-y-0.5">
+        {(user?.role === 'ADMIN' || user?.email?.toLowerCase() === 'admin@esimlaunch.com') && (
+          <div className={cn("mb-2", collapsed && !isMobile ? "mb-1" : "")}>
+            <NavItemButton
+              item={ADMIN_NAV_ITEM}
+              collapsed={collapsed && !isMobile}
+              pathname={location.pathname}
+            />
+          </div>
+        )}
         {mainNav.map((item) => (
           <NavItemButton
             key={item.label}

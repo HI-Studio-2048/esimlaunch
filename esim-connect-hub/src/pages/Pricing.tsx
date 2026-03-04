@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Check, Zap, Rocket, Building2, ArrowRight } from "lucide-react";
+import { Check, X, Zap, Rocket, Building2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Switch } from "@/components/ui/switch";
@@ -11,16 +11,15 @@ const pricingPlans = [
   {
     name: "Starter",
     icon: Zap,
-    description: "Perfect for getting started with your eSIM business",
+    description: "Launch fast with essentials for solo founders and small teams.",
     monthlyPrice: 29,
     yearlyPrice: 288,
     features: [
-      "Up to 100 orders/month",
-      "eSIM Access integration",
-      "Basic analytics dashboard",
-      "Email support",
-      "Custom branding",
-      "Standard API access",
+      { text: "24h Support Response Time", included: true },
+      { text: "Custom Domain", included: false },
+      { text: "Full White-Labeling", included: true },
+      { text: "Priority Email & Chat Support", included: false },
+      { text: "Mobile App", included: false },
     ],
     highlighted: false,
     cta: "Start Free Trial",
@@ -28,18 +27,15 @@ const pricingPlans = [
   {
     name: "Growth",
     icon: Rocket,
-    description: "For growing businesses ready to scale",
+    description: "Scale revenue with multi-provider support and advanced analytics.",
     monthlyPrice: 79,
     yearlyPrice: 786,
     features: [
-      "Up to 1,000 orders/month",
-      "eSIM Access + advanced pricing",
-      "Advanced analytics & reports",
-      "Priority email support",
-      "White label domain",
-      "Margin control engine",
-      "SEO tools included",
-      "Webhook integrations",
+      { text: "12h Support Response Time", included: true },
+      { text: "Custom Domain", included: true },
+      { text: "Full White-Labeling", included: true },
+      { text: "Priority Email & Chat Support", included: true },
+      { text: "Mobile App", included: false },
     ],
     highlighted: true,
     cta: "Start Free Trial",
@@ -48,19 +44,15 @@ const pricingPlans = [
   {
     name: "Scale",
     icon: Building2,
-    description: "Enterprise features for high-volume sellers",
-    monthlyPrice: 199,
-    yearlyPrice: 1982,
+    description: "Built for high-volume brands and platforms with SLA-level support.",
+    monthlyPrice: 299,
+    yearlyPrice: 2990,
     features: [
-      "Unlimited orders",
-      "Full eSIM Access catalog",
-      "Real-time analytics",
-      "24/7 priority support",
-      "Multiple admin users",
-      "Custom API integrations",
-      "Dedicated account manager",
-      "SLA guarantee",
-      "Custom development",
+      { text: "4h Support Response Time", included: true },
+      { text: "Custom Domain", included: true },
+      { text: "Full White-Labeling", included: true },
+      { text: "Priority Email & Chat Support", included: true },
+      { text: "Mobile App", included: true },
     ],
     highlighted: false,
     cta: "Contact Sales",
@@ -68,17 +60,17 @@ const pricingPlans = [
 ];
 
 const comparisonFeatures = [
-  { name: "Monthly Orders", starter: "100", growth: "1,000", scale: "Unlimited" },
-  { name: "eSIM Catalog Access", starter: "Full", growth: "Full", scale: "Full" },
-  { name: "Custom Branding", starter: true, growth: true, scale: true },
-  { name: "White Label Domain", starter: false, growth: true, scale: true },
-  { name: "Margin Control", starter: false, growth: true, scale: true },
-  { name: "SEO Tools", starter: false, growth: true, scale: true },
-  { name: "API Access", starter: "Basic", growth: "Full", scale: "Custom" },
-  { name: "Analytics", starter: "Basic", growth: "Advanced", scale: "Real-time" },
-  { name: "Support", starter: "Email", growth: "Priority", scale: "24/7 + Manager" },
-  { name: "Multi-user Access", starter: false, growth: false, scale: true },
-  { name: "SLA Guarantee", starter: false, growth: false, scale: true },
+  { name: "Support Response Time", starter: "24h", growth: "12h", scale: "4h" },
+  { name: "Custom Domain", starter: false, growth: true, scale: true },
+  { name: "Full White-Labeling", starter: true, growth: true, scale: true },
+  { name: "Priority Email & Chat Support", starter: false, growth: true, scale: true },
+  { name: "Mobile App", starter: false, growth: false, scale: true },
+  { name: "Guest Checkout", description: "Enable purchases without creating an account to reduce friction.", starter: true, growth: true, scale: true },
+  { name: "Social & SSO Login (OAuth)", description: "Let customers sign in with Google, Apple, Facebook, or LinkedIn.", starter: true, growth: true, scale: true },
+  { name: "Discount Codes & Promotions", description: "Create percentage or fixed-amount coupons with single-use, multi-use, or unlimited usage options.", starter: true, growth: true, scale: true },
+  { name: "Multilingual Storefront", description: "Translate products and pages to sell in multiple languages.", starter: true, growth: true, scale: true },
+  { name: "Customer Wallet", description: "Holds credits earned from referrals and loyalty. Customers can top up and pay for eSIMs directly from their wallet at checkout.", starter: true, growth: true, scale: true },
+  { name: "Referral Program", description: "Reward customers with wallet credits for every successful referral—credits are stored in the Customer Wallet and can be spent on future eSIM purchases.", starter: true, growth: true, scale: true },
 ];
 
 export default function Pricing() {
@@ -180,9 +172,15 @@ export default function Pricing() {
 
                 <ul className="space-y-3">
                   {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3">
-                      <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                      <span className="text-sm">{feature}</span>
+                    <li key={feature.text} className="flex items-start gap-3">
+                      {feature.included ? (
+                        <Check className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                      ) : (
+                        <X className="w-5 h-5 text-muted-foreground shrink-0 mt-0.5" />
+                      )}
+                      <span className={cn("text-sm", !feature.included && "text-muted-foreground")}>
+                        {feature.text}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -220,7 +218,14 @@ export default function Pricing() {
               <tbody>
                 {comparisonFeatures.map((feature) => (
                   <tr key={feature.name} className="border-b border-border/50">
-                    <td className="py-4 px-4">{feature.name}</td>
+                    <td className="py-4 px-4">
+                      <div>
+                        <span className="font-medium">{feature.name}</span>
+                        {"description" in feature && feature.description && (
+                          <p className="text-sm text-muted-foreground mt-1 max-w-md">{feature.description}</p>
+                        )}
+                      </div>
+                    </td>
                     <td className="text-center py-4 px-4">
                       {typeof feature.starter === "boolean" ? (
                         feature.starter ? (
