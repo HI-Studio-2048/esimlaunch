@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
+import { CheckoutProgress } from '@/components/checkout/CheckoutProgress';
 import type { Order } from '@/lib/types';
 
 /**
@@ -15,12 +16,20 @@ import type { Order } from '@/lib/types';
 export default function SuccessPage() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
+  const orderId = searchParams.get('orderId');
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (orderId) {
+      apiFetch<Order>(`/orders/${orderId}`)
+        .then(setOrder)
+        .catch(() => setError('Could not load your order. Please check My eSIMs.'))
+        .finally(() => setLoading(false));
+      return;
+    }
     if (!sessionId) {
       setError('No session ID found.');
       setLoading(false);
@@ -30,7 +39,7 @@ export default function SuccessPage() {
       .then(setOrder)
       .catch(() => setError('Could not load your order. Please check My eSIMs.'))
       .finally(() => setLoading(false));
-  }, [sessionId]);
+  }, [sessionId, orderId]);
 
   if (loading) {
     return (

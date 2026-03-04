@@ -38,6 +38,7 @@ export interface Order {
 
 export interface EsimProfile {
   id: string;
+  orderId?: string;
   iccid?: string;
   qrCodeUrl?: string;
   ac?: string;
@@ -53,7 +54,7 @@ export interface EsimProfile {
   };
 }
 
-// Provider price → USD display helper
+// Provider price → USD display helper (no conversion; use useCurrency.formatProviderPrice for conversion)
 export function formatPrice(providerPrice: number, currency = 'USD'): string {
   const usd = providerPrice / 10000;
   return new Intl.NumberFormat('en-US', {
@@ -61,6 +62,17 @@ export function formatPrice(providerPrice: number, currency = 'USD'): string {
     currency,
     minimumFractionDigits: 2,
   }).format(usd);
+}
+
+/** Format stored amount (cents for most currencies, whole units for JPY) with currency symbol */
+export function formatDisplayAmount(amountCents: number, currency: string): string {
+  const value = currency === 'JPY' ? amountCents : amountCents / 100;
+  return new Intl.NumberFormat(currency === 'JPY' ? 'ja-JP' : 'en-US', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: currency === 'JPY' ? 0 : 2,
+    maximumFractionDigits: currency === 'JPY' ? 0 : 2,
+  }).format(value);
 }
 
 /**

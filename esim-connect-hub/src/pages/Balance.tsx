@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Elements } from "@stripe/react-stripe-js";
+import { PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
+import { getStripe } from "@/lib/stripe";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,8 +21,89 @@ import {
   History,
   FileText,
   Calendar,
+  Loader2,
+  ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface TopupPaymentFormProps {
+  clientSecret: string;
+  paymentIntentId: string;
+  amountUsd: string;
+  onSuccess: () => void;
+  onBack: () => void;
+  onError: (message: string | null) => void;
+}
+
+function TopupPaymentForm({ clientSecret, paymentIntentId, amountUsd, onSuccess, onBack, onError }: TopupPaymentFormProps) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setIsProcessing(true);
+    onError(null);
+
+    try {
+      const { error: submitError } = await elements.submit();
+      if (submitError) {
+        onError(submitError.message || "Please complete the payment form.");
+        setIsProcessing(false);
+        return;
+      }
+
+      const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        clientSecret,
+        confirmParams: {
+          return_url: `${window.location.origin}/dashboard/balance`,
+        },
+        redirect: "if_required",
+      });
+
+      if (confirmError) {
+        onError(confirmError.message || "Payment failed");
+        setIsProcessing(false);
+        return;
+      }
+
+      if (paymentIntent?.status === "succeeded") {
+        await apiClient.confirmTopup(paymentIntentId);
+        onSuccess();
+      } else {
+        onError("Payment was not completed. Please try again.");
+      }
+    } catch (err: any) {
+      onError(err?.message || "Payment failed. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <div className="rounded-lg border border-border p-4 bg-muted/30">
+        <PaymentElement />
+      </div>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" onClick={onBack} disabled={isProcessing} className="gap-2">
+          <ArrowLeft className="w-4 h-4" />
+          Back
+        </Button>
+        <Button type="submit" variant="gradient" disabled={!stripe || isProcessing} className="flex-1 gap-2">
+          {isProcessing ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</>
+          ) : (
+            <>Pay ${parseFloat(amountUsd || "0").toFixed(2)}</>
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+}
 
 interface BalanceTransaction {
   id: string;
@@ -65,8 +149,10 @@ export default function Balance() {
   // Top-up modal
   const [showTopup, setShowTopup] = useState(false);
   const [topupAmount, setTopupAmount] = useState("");
-  const [topupStep, setTopupStep] = useState<"amount" | "processing" | "done">("amount");
+  const [topupStep, setTopupStep] = useState<"amount" | "payment" | "processing" | "done">("amount");
   const [topupError, setTopupError] = useState<string | null>(null);
+  const [topupClientSecret, setTopupClientSecret] = useState<string | null>(null);
+  const [topupIntentId, setTopupIntentId] = useState<string | null>(null);
 
   const fetchBalance = useCallback(async () => {
     setBalanceLoading(true);
@@ -99,9 +185,9 @@ export default function Balance() {
     fetchTransactions(1);
   }, []);
 
-  const presets = [10, 25, 50, 100, 250, 500];
+  const presets = [50, 100, 250, 500, 750, 1000];
 
-  const handleTopup = async () => {
+  const handleTopupAmountSubmit = async () => {
     const amountUsd = parseFloat(topupAmount);
     if (!topupAmount || isNaN(amountUsd) || amountUsd < 1) {
       setTopupError("Please enter a valid amount (minimum $1.00).");
@@ -112,12 +198,10 @@ export default function Balance() {
     try {
       const amountCents = Math.round(amountUsd * 100);
       const intentRes = await apiClient.topupBalance(amountCents);
-      if (!intentRes?.id) throw new Error("Failed to create payment intent.");
-      await apiClient.confirmTopup(intentRes.id);
-      setTopupStep("done");
-      toast({ title: "Balance topped up!", description: `$${amountUsd.toFixed(2)} has been added to your account.` });
-      fetchBalance();
-      fetchTransactions(1);
+      if (!intentRes?.id || !intentRes?.clientSecret) throw new Error("Failed to create payment intent.");
+      setTopupClientSecret(intentRes.clientSecret);
+      setTopupIntentId(intentRes.id);
+      setTopupStep("payment");
     } catch (err: any) {
       setTopupStep("amount");
       setTopupError(err?.message || "Top-up failed. Please try again.");
@@ -125,11 +209,28 @@ export default function Balance() {
     }
   };
 
+  const handleTopupPaymentSuccess = () => {
+    const amountUsd = parseFloat(topupAmount);
+    setTopupStep("done");
+    toast({ title: "Balance topped up!", description: `$${amountUsd.toFixed(2)} has been added to your account.` });
+    fetchBalance();
+    fetchTransactions(1);
+  };
+
+  const handleTopupPaymentBack = () => {
+    setTopupStep("amount");
+    setTopupClientSecret(null);
+    setTopupIntentId(null);
+    setTopupError(null);
+  };
+
   const closeTopup = () => {
     setShowTopup(false);
     setTopupAmount("");
     setTopupStep("amount");
     setTopupError(null);
+    setTopupClientSecret(null);
+    setTopupIntentId(null);
   };
 
   // Client-side filtering
@@ -505,6 +606,34 @@ export default function Balance() {
                   <p className="text-sm text-muted-foreground mb-6">Your balance has been updated.</p>
                   <Button variant="gradient" onClick={closeTopup} className="w-full">Done</Button>
                 </div>
+              ) : topupStep === "payment" && topupClientSecret && topupIntentId ? (
+                <div className="space-y-5">
+                  <p className="text-sm text-muted-foreground">
+                    Pay ${parseFloat(topupAmount).toFixed(2)} to add to your balance.
+                  </p>
+                  <Elements
+                    stripe={getStripe()}
+                    options={{
+                      clientSecret: topupClientSecret,
+                      appearance: { theme: "stripe" },
+                    }}
+                  >
+                    <TopupPaymentForm
+                      clientSecret={topupClientSecret}
+                      paymentIntentId={topupIntentId}
+                      amountUsd={topupAmount}
+                      onSuccess={handleTopupPaymentSuccess}
+                      onBack={handleTopupPaymentBack}
+                      onError={setTopupError}
+                    />
+                  </Elements>
+                  {topupError && (
+                    <div className="flex items-center gap-2 text-sm text-destructive p-3 rounded-lg bg-destructive/10">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      {topupError}
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="space-y-5">
                   <div>
@@ -548,7 +677,7 @@ export default function Balance() {
 
                   <Button
                     variant="gradient"
-                    onClick={handleTopup}
+                    onClick={handleTopupAmountSubmit}
                     disabled={topupStep === "processing" || !topupAmount}
                     className="w-full gap-2"
                   >

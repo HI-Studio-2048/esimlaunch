@@ -424,9 +424,10 @@ router.post('/confirm-topup', authenticateSessionOrJWT, async (req, res, next) =
       });
     }
 
-    res.json({
-      success: true,
-      data: { id: paymentIntent.id, status: paymentIntent.status },
+    return res.status(400).json({
+      success: false,
+      errorCode: 'PAYMENT_NOT_COMPLETED',
+      errorMessage: 'Payment has not been completed. Please complete the payment before confirming.',
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {

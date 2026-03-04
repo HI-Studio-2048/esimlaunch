@@ -8,14 +8,24 @@ import {
   UseGuards,
   BadRequestException,
   ForbiddenException,
+  Res,
+  Req,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { OrdersService } from './orders.service';
+import { ReceiptService } from '../receipt/receipt.service';
+import { PrismaService } from '../../prisma.service';
 import { CsrfGuard } from '../../common/guards/csrf.guard';
+import { OptionalClerkEmailGuard } from '../../common/guards/optional-clerk-email.guard';
 
 @Controller('orders')
-@UseGuards(CsrfGuard)
+@UseGuards(CsrfGuard, OptionalClerkEmailGuard)
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly receiptService: ReceiptService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /** POST /api/orders — create a pending order */
   @Post()
@@ -45,6 +55,55 @@ export class OrdersController {
   @Get('by-session/:sessionId')
   getBySession(@Param('sessionId') sessionId: string) {
     return this.ordersService.getOrderBySession(sessionId);
+  }
+
+  /** GET /api/orders/:id/receipt — PDF receipt (auth: x-user-email or token+email query) */
+  @Get(':id/receipt')
+  async getReceipt(
+    @Param('id') id: string,
+    @Query('token') token: string,
+    @Query('email') email: string,
+    @Res() res: Response,
+    @Req() req: { userEmail?: string; userId?: string },
+  ) {
+    const order = await this.ordersService.getOrderOrThrow(id);
+    const user = await this.prisma.user.findUnique({ where: { id: order.userId } });
+    if (!user) throw new ForbiddenException('Order has no user');
+
+    let authorized = false;
+    if (req.userEmail && req.userEmail.toLowerCase() === user.email.toLowerCase()) authorized = true;
+    if (token && email && this.ordersService.verifyGuestToken(token, id, email)) {
+      if (email.toLowerCase() === user.email.toLowerCase()) authorized = true;
+    }
+    if (!authorized) throw new ForbiddenException('Not authorized to access this receipt');
+
+    const pdf = await this.receiptService.generatePdf(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="receipt-${id}.pdf"`);
+    res.send(pdf);
+  }
+
+  /** POST /api/orders/:id/resend-receipt — resend receipt email */
+  @Post(':id/resend-receipt')
+  async resendReceipt(
+    @Param('id') id: string,
+    @Query('token') token: string,
+    @Query('email') email: string,
+    @Req() req: { userEmail?: string; userId?: string },
+  ) {
+    const order = await this.ordersService.getOrderOrThrow(id);
+    const user = await this.prisma.user.findUnique({ where: { id: order.userId } });
+    if (!user) throw new ForbiddenException('Order has no user');
+
+    let authorized = false;
+    if (req.userEmail && req.userEmail.toLowerCase() === user.email.toLowerCase()) authorized = true;
+    if (token && email && this.ordersService.verifyGuestToken(token, id, email)) {
+      if (email.toLowerCase() === user.email.toLowerCase()) authorized = true;
+    }
+    if (!authorized) throw new ForbiddenException('Not authorized to resend receipt');
+
+    await this.receiptService.resendReceipt(id);
+    return { success: true, message: 'Receipt email sent' };
   }
 
   /** GET /api/orders/:id */
@@ -94,6 +153,16 @@ export class OrdersController {
   ) {
     if (!referralCode) throw new BadRequestException('referralCode is required');
     return this.ordersService.checkReferralDiscount(orderId, referralCode);
+  }
+
+  /** POST /api/orders/:id/pay-vcash — pay pending order with Store Credit */
+  @Post(':id/pay-vcash')
+  async payWithVcash(
+    @Param('id') orderId: string,
+    @Req() req: { userId?: string; userEmail?: string },
+  ) {
+    if (!req.userId) throw new ForbiddenException('Signed-in user required for Store Credit');
+    return this.ordersService.payOrderWithVcash(orderId, req.userId);
   }
 
   /** POST /api/orders/:orderId/checkout — create Stripe Checkout Session */

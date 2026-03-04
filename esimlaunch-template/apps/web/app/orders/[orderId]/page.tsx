@@ -6,6 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
 import type { Order } from '@/lib/types';
+import { formatDisplayAmount } from '@/lib/types';
 
 /**
  * Guest order view.
@@ -58,7 +59,7 @@ export default function GuestOrderPage() {
   if (!order) return null;
 
   const profile = order.esimProfile;
-  const displayAmount = ((order.displayAmountCents ?? order.amountCents) / 100).toFixed(2);
+  const displayAmount = formatDisplayAmount(order.displayAmountCents ?? order.amountCents, order.displayCurrency ?? 'USD');
 
   return (
     <div className="mx-auto max-w-md px-4 py-12 sm:py-16">
@@ -76,7 +77,7 @@ export default function GuestOrderPage() {
         <p className="mt-2 text-sm">
           <span className="font-medium text-slate-600">Amount:</span>{' '}
           <span className="font-semibold text-slate-900">
-            {displayAmount} {order.displayCurrency ?? 'USD'}
+            {displayAmount}
           </span>
         </p>
         <p className="mt-2 text-sm">

@@ -272,4 +272,15 @@ model SupportTicket {
   body      String
   status    String   @default("open")
   createdAt DateTime @default(now())
+
+  replies SupportTicketReply[]
+}
+
+model SupportTicketReply {
+  id        String   @id @default(cuid())
+  ticketId  String
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  isStaff   Boolean  @default(false)
+  body      String
+  createdAt DateTime @default(now())
 }

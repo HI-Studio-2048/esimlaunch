@@ -23,7 +23,7 @@ export class CurrencyService {
         timeout: 10_000,
       });
       const rates: Record<string, number> = res.data?.rates ?? {};
-      this.rateCache = new Map(Object.entries(rates));
+      this.rateCache = new Map([['USD', 1], ...Object.entries(rates)]);
       this.cacheExpiry = Date.now() + 60 * 60 * 1000; // 1 hour
     } catch (e) {
       this.logger.warn('Failed to fetch exchange rates, using 1:1 fallback');

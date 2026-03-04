@@ -30,7 +30,8 @@
     "stripe": "^16.10.0",
     "svix": "^1.35.0",
     "zod": "^3.23.8",
-    "@clerk/clerk-sdk-node": "^5.0.44"
+    "@clerk/clerk-sdk-node": "^5.0.44",
+    "pdf-lib": "^1.17.1"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",

@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
-import { apiFetch } from '@/lib/apiClient';
+import { apiFetch, apiFetchBlob } from '@/lib/apiClient';
 import type { EsimProfile } from '@/lib/types';
 import { formatVolume } from '@/lib/types';
 
@@ -19,6 +19,9 @@ export default function MyEsimsPage() {
   const { user, isLoaded, isSignedIn } = useUser();
   const [profiles, setProfiles] = useState<EsimProfile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -34,6 +37,36 @@ export default function MyEsimsPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [isLoaded, isSignedIn, user]);
+
+  const filteredProfiles = useMemo(() => {
+    let list = profiles;
+    if (statusFilter !== 'all') {
+      list = list.filter((p) => p.esimStatus === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter(
+        (p) =>
+          (p.order?.planName ?? '').toLowerCase().includes(q) ||
+          (p.iccid ?? '').toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [profiles, statusFilter, search]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredProfiles.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(filteredProfiles.map((p) => p.id)));
+  };
 
   if (!isLoaded || loading) {
     return (
@@ -71,17 +104,82 @@ export default function MyEsimsPage() {
           </Link>
         </div>
       ) : (
-        <div className="flex flex-col gap-6">
-          {profiles.map((profile) => (
-            <EsimCard key={profile.id} profile={profile} />
-          ))}
-        </div>
+        <>
+          {/* Filters */}
+          <div className="mb-6 flex flex-wrap gap-4">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700"
+            >
+              <option value="all">All statuses</option>
+              <option value="IN_USE">In Use</option>
+              <option value="PENDING">Pending</option>
+              <option value="EXPIRED">Expired</option>
+            </select>
+            <input
+              type="text"
+              placeholder="Search by plan or ICCID..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="rounded-lg border border-slate-200 px-3 py-2 text-sm placeholder:text-slate-400"
+            />
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={selectedIds.size === filteredProfiles.length && filteredProfiles.length > 0}
+                onChange={toggleSelectAll}
+                className="rounded border-slate-300"
+              />
+              Select all
+            </label>
+          </div>
+
+          {/* Bulk actions toolbar */}
+          {selectedIds.size > 0 && (
+            <div className="mb-4 flex items-center gap-3 rounded-lg border border-violet-200 bg-violet-50 px-4 py-3">
+              <span className="text-sm font-medium text-violet-800">{selectedIds.size} selected</span>
+              <BulkDownloadQr
+                profiles={profiles.filter((p) => selectedIds.has(p.id))}
+              />
+              <BulkShare profiles={profiles.filter((p) => selectedIds.has(p.id))} />
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-sm text-violet-600 hover:underline"
+              >
+                Clear
+              </button>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-6">
+            {filteredProfiles.map((profile) => (
+              <EsimCard
+                key={profile.id}
+                profile={profile}
+                userEmail={user!.primaryEmailAddress!.emailAddress}
+                selected={selectedIds.has(profile.id)}
+                onToggleSelect={() => toggleSelect(profile.id)}
+              />
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
 }
 
-function EsimCard({ profile }: { profile: EsimProfile }) {
+function EsimCard({
+  profile,
+  userEmail,
+  selected,
+  onToggleSelect,
+}: {
+  profile: EsimProfile;
+  userEmail: string;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+}) {
   const usedBytes = profile.orderUsage ? parseInt(profile.orderUsage, 10) : 0;
   const totalBytes = profile.totalVolume ? parseInt(profile.totalVolume, 10) : 0;
   const usedMb = usedBytes / (1024 * 1024);
@@ -98,9 +196,18 @@ function EsimCard({ profile }: { profile: EsimProfile }) {
   const statusClass = statusColors[profile.esimStatus] ?? 'bg-slate-100 text-slate-600';
 
   return (
-    <div className="rounded-card border border-slate-200 bg-white p-6 shadow-card">
+    <div className={`rounded-card border p-6 shadow-card ${selected ? 'border-violet-300 ring-2 ring-violet-200' : 'border-slate-200 bg-white'}`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex-1 min-w-0">
+        <div className="flex flex-1 min-w-0 items-start gap-3">
+          {onToggleSelect && (
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={onToggleSelect}
+              className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300"
+            />
+          )}
+          <div>
           <p className="font-semibold text-slate-900">{profile.order?.planName ?? 'eSIM Plan'}</p>
           {profile.iccid && (
             <p className="mt-1 text-xs text-slate-500">ICCID: {profile.iccid}</p>
@@ -110,6 +217,7 @@ function EsimCard({ profile }: { profile: EsimProfile }) {
           >
             {profile.esimStatus}
           </span>
+          </div>
         </div>
 
         {/* QR Code */}
@@ -150,15 +258,29 @@ function EsimCard({ profile }: { profile: EsimProfile }) {
         </p>
       )}
 
-      {/* Top-up */}
-      {profile.esimStatus === 'IN_USE' && (
-        <Link
-          href={`/topup/${profile.id}`}
-          className="mt-4 inline-flex items-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 no-underline transition hover:bg-violet-100"
-        >
-          + Top Up
-        </Link>
-      )}
+      {/* Actions */}
+      <div className="mt-4 flex flex-wrap gap-2">
+        {profile.qrCodeUrl && (
+          <>
+            <QrDownloadButton qrCodeUrl={profile.qrCodeUrl} planName={profile.order?.planName ?? 'eSIM'} />
+            <ShareQrButton qrCodeUrl={profile.qrCodeUrl} planName={profile.order?.planName ?? 'eSIM'} />
+          </>
+        )}
+        {profile.esimStatus === 'IN_USE' && (
+          <Link
+            href={`/topup/${profile.id}`}
+            className="inline-flex items-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 no-underline transition hover:bg-sky-100"
+          >
+            + Top Up Plan
+          </Link>
+        )}
+        {profile.orderId && (
+          <>
+            <ReceiptDownloadButton orderId={profile.orderId} userEmail={userEmail} />
+            <ResendReceiptButton orderId={profile.orderId} userEmail={userEmail} />
+          </>
+        )}
+      </div>
 
       {/* Activation code */}
       {profile.ac && (
@@ -172,5 +294,175 @@ function EsimCard({ profile }: { profile: EsimProfile }) {
         </details>
       )}
     </div>
+  );
+}
+
+function ReceiptDownloadButton({ orderId, userEmail }: { orderId: string; userEmail: string }) {
+  const [loading, setLoading] = useState(false);
+  const handleClick = async () => {
+    setLoading(true);
+    try {
+      const blob = await apiFetchBlob(`/orders/${orderId}/receipt`, { userEmail });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `receipt-${orderId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+    >
+      {loading ? '…' : 'Receipt'}
+    </button>
+  );
+}
+
+function QrDownloadButton({ qrCodeUrl, planName }: { qrCodeUrl: string; planName: string }) {
+  const [loading, setLoading] = useState(false);
+  const handleClick = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(qrCodeUrl, { mode: 'cors' });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `esim-qr-${planName.replace(/\s+/g, '-')}.png`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      const a = document.createElement('a');
+      a.href = qrCodeUrl;
+      a.download = `esim-qr-${planName.replace(/\s+/g, '-')}.png`;
+      a.target = '_blank';
+      a.click();
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+    >
+      {loading ? '…' : 'Download QR'}
+    </button>
+  );
+}
+
+function ShareQrButton({ qrCodeUrl, planName }: { qrCodeUrl: string; planName: string }) {
+  const handleClick = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `eSIM: ${planName}`,
+          text: `My eSIM plan: ${planName}. Scan the QR code to install.`,
+          url: qrCodeUrl,
+        });
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') {
+          await navigator.clipboard.writeText(qrCodeUrl);
+        }
+      }
+    } else {
+      await navigator.clipboard.writeText(qrCodeUrl);
+    }
+  };
+  return (
+    <button
+      onClick={handleClick}
+      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+    >
+      Share
+    </button>
+  );
+}
+
+function BulkDownloadQr({ profiles }: { profiles: EsimProfile[] }) {
+  const [loading, setLoading] = useState(false);
+  const handleClick = async () => {
+    setLoading(true);
+    for (const p of profiles) {
+      if (!p.qrCodeUrl) continue;
+      try {
+        const res = await fetch(p.qrCodeUrl, { mode: 'cors' });
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `esim-qr-${(p.order?.planName ?? p.id).replace(/\s+/g, '-')}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch {
+        const a = document.createElement('a');
+        a.href = p.qrCodeUrl!;
+        a.download = `esim-qr-${(p.order?.planName ?? p.id).replace(/\s+/g, '-')}.png`;
+        a.target = '_blank';
+        a.click();
+      }
+    }
+    setLoading(false);
+  };
+  return (
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      className="rounded-lg bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+    >
+      {loading ? '…' : 'Download QR'}
+    </button>
+  );
+}
+
+function BulkShare({ profiles }: { profiles: EsimProfile[] }) {
+  const handleClick = async () => {
+    const text = profiles
+      .map((p) => `${p.order?.planName ?? 'eSIM'}: ${p.qrCodeUrl ?? ''}`)
+      .join('\n');
+    await navigator.clipboard.writeText(text);
+  };
+  return (
+    <button
+      onClick={handleClick}
+      className="rounded-lg border border-violet-300 px-3 py-1.5 text-sm font-medium text-violet-700 hover:bg-violet-100"
+    >
+      Copy links
+    </button>
+  );
+}
+
+function ResendReceiptButton({ orderId, userEmail }: { orderId: string; userEmail: string }) {
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
+  const handleClick = async () => {
+    setLoading(true);
+    setSent(false);
+    try {
+      await apiFetch(`/orders/${orderId}/resend-receipt`, { method: 'POST', userEmail });
+      setSent(true);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+  return (
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+    >
+      {loading ? '…' : sent ? 'Sent!' : 'Resend'}
+    </button>
   );
 }

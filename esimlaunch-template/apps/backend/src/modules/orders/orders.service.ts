@@ -159,6 +159,52 @@ export class OrdersService {
   }
 
   // -----------------------------------------------------------------------
+  // Pay pending order with V-Cash (Store Credit)
+  // -----------------------------------------------------------------------
+
+  async payOrderWithVcash(orderId: string, userId: string) {
+    const order = await this.getOrderOrThrow(orderId);
+    if (order.status !== 'pending') throw new BadRequestException('Order is not pending');
+    if (order.paymentMethod !== 'stripe') throw new BadRequestException('Order is not a Stripe order');
+
+    const amountCents = order.amountCents;
+    const balance = await this.prisma.vCashBalance.findUnique({ where: { userId } });
+    if (!balance || balance.balanceCents < amountCents) {
+      throw new BadRequestException('Insufficient Store Credit balance');
+    }
+    if (order.userId !== userId) throw new BadRequestException('Order does not belong to user');
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new BadRequestException('User not found');
+
+    await this.prisma.$transaction([
+      this.prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'paid', paymentMethod: 'vcash' },
+      }),
+      this.prisma.vCashBalance.update({
+        where: { userId },
+        data: { balanceCents: { decrement: amountCents } },
+      }),
+      this.prisma.vCashTransaction.create({
+        data: {
+          userId,
+          type: 'debit',
+          amountCents,
+          reason: `Order ${orderId}`,
+          metadata: { orderId, planCode: order.planId },
+        },
+      }),
+    ]);
+
+    const freshOrder = await this.prisma.order.findUnique({ where: { id: orderId } });
+    if (freshOrder) {
+      await this.processOrderCompletion(freshOrder, user);
+    }
+    return this.getOrderOrThrow(orderId);
+  }
+
+  // -----------------------------------------------------------------------
   // Update email on a pending order (guest to identified)
   // -----------------------------------------------------------------------
 

@@ -1,0 +1,79 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
+export interface BreadcrumbItem {
+  label: string;
+  href?: string;
+}
+
+interface BreadcrumbsProps {
+  items?: BreadcrumbItem[];
+}
+
+const PATH_LABELS: Record<string, string> = {
+  '': 'Home',
+  countries: 'Destinations',
+  checkout: 'Checkout',
+  'my-esims': 'My eSIMs',
+  account: 'Account',
+  orders: 'Orders',
+  settings: 'Settings',
+  affiliate: 'Affiliate',
+  support: 'Support',
+  tickets: 'Tickets',
+  new: 'New',
+  'help-center': 'Help Center',
+  'esim-setup-guide': 'eSIM Setup Guide',
+  about: 'About',
+  terms: 'Terms',
+  privacy: 'Privacy',
+  refund: 'Refund',
+  cookies: 'Cookies',
+  contact: 'Contact',
+  faq: 'FAQ',
+};
+
+export function Breadcrumbs({ items: customItems }: BreadcrumbsProps) {
+  const pathname = usePathname();
+
+  const items: BreadcrumbItem[] =
+    customItems ??
+    (() => {
+      const segments = pathname.split('/').filter(Boolean);
+      const result: BreadcrumbItem[] = [{ label: 'Home', href: '/' }];
+      let href = '';
+      for (let i = 0; i < segments.length; i++) {
+        href += `/${segments[i]}`;
+        const label = PATH_LABELS[segments[i]] ?? segments[i].replace(/-/g, ' ');
+        result.push(
+          i === segments.length - 1
+            ? { label }
+            : { label, href },
+        );
+      }
+      return result;
+    })();
+
+  if (items.length <= 1) return null; // Home only - no breadcrumbs
+
+  return (
+    <nav aria-label="Breadcrumb" className="mx-auto max-w-6xl px-4 pb-4 pt-2 lg:px-8">
+      <ol className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
+        {items.map((item, i) => (
+          <li key={i} className="flex items-center gap-2">
+            {i > 0 && <span className="text-slate-400">/</span>}
+            {item.href ? (
+              <Link href={item.href} className="hover:text-violet-600">
+                {item.label}
+              </Link>
+            ) : (
+              <span className="text-slate-900">{item.label}</span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}

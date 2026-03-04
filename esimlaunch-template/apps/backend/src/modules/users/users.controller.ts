@@ -21,6 +21,31 @@ export class UsersController {
   ) {}
 
   /**
+   * GET /api/user/orders
+   * Returns orders for the authenticated user (for order history).
+   */
+  @Get('orders')
+  @UseGuards(ClerkEmailGuard)
+  async getMyOrders(@CurrentUserId() userId: string) {
+    const orders = await this.prisma.order.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      include: { esimProfile: { select: { id: true } } },
+    });
+    return orders.map((o) => ({
+      id: o.id,
+      planId: o.planId,
+      planName: o.planName,
+      amountCents: o.amountCents,
+      displayCurrency: o.displayCurrency,
+      displayAmountCents: o.displayAmountCents,
+      status: o.status,
+      createdAt: o.createdAt,
+      hasEsim: !!o.esimProfile,
+    }));
+  }
+
+  /**
    * GET /api/user/esims
    * Returns all eSIM profiles belonging to the authenticated user.
    */
@@ -30,7 +55,7 @@ export class UsersController {
     const profiles = await this.prisma.esimProfile.findMany({
       where: { userId },
       include: {
-        order: { select: { planId: true, planName: true, amountCents: true, displayCurrency: true } },
+        order: { select: { id: true, planId: true, planName: true, amountCents: true, displayCurrency: true } },
         usageHistory: { orderBy: { recordedAt: 'desc' }, take: 1 },
       },
       orderBy: { createdAt: 'desc' },

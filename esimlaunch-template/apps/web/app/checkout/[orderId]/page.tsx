@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import { apiFetch } from '@/lib/apiClient';
+import { CheckoutProgress } from '@/components/checkout/CheckoutProgress';
 import type { Order } from '@/lib/types';
+import { formatDisplayAmount } from '@/lib/types';
 
 /**
  * Checkout page.
@@ -32,6 +35,7 @@ export default function CheckoutPage() {
   const [referralCode, setReferralCode] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  const [balanceCents, setBalanceCents] = useState<number | null>(null);
 
   useEffect(() => {
     const userEmail = user?.primaryEmailAddress?.emailAddress ?? '';
@@ -44,7 +48,7 @@ export default function CheckoutPage() {
 
   const displayCurrency = order?.displayCurrency ?? 'USD';
   const displayAmountCents = order?.displayAmountCents ?? order?.amountCents ?? 0;
-  const displayAmount = (displayAmountCents / 100).toFixed(2);
+  const displayAmount = formatDisplayAmount(displayAmountCents, displayCurrency);
 
   const handleUpdateEmail = async () => {
     if (!email) return;
@@ -110,6 +114,22 @@ export default function CheckoutPage() {
     }
   };
 
+  const handlePayWithStoreCredit = async () => {
+    if (!user?.primaryEmailAddress?.emailAddress) return;
+    setPaying(true);
+    setMessage(null);
+    try {
+      await apiFetch(`/orders/${orderId}/pay-vcash`, {
+        method: 'POST',
+        userEmail: user.primaryEmailAddress.emailAddress,
+      });
+      window.location.href = `/checkout/success?orderId=${orderId}`;
+    } catch (e: any) {
+      setMessage(e.message ?? 'Payment failed. Please try again.');
+      setPaying(false);
+    }
+  };
+
   const handlePay = async () => {
     setPaying(true);
     setMessage(null);
@@ -157,6 +177,11 @@ export default function CheckoutPage() {
       </div>
     );
   }
+
+  const canPayStoreCredit =
+    user?.primaryEmailAddress?.emailAddress &&
+    balanceCents != null &&
+    balanceCents >= displayAmountCents;
 
   return (
     <div className="mx-auto max-w-md px-4 py-12 sm:py-16">
@@ -248,6 +273,17 @@ export default function CheckoutPage() {
         </p>
       )}
 
+      {/* Store Credit */}
+      {canPayStoreCredit && (
+        <button
+          onClick={handlePayWithStoreCredit}
+          disabled={paying}
+          className="mb-4 w-full rounded-xl border-2 border-violet-200 bg-violet-50 py-3.5 font-semibold text-violet-700 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {paying ? 'Processing…' : `Pay with Store Credit (${formatDisplayAmount(balanceCents!, 'USD')} available)`}
+        </button>
+      )}
+
       {/* Pay button */}
       <button
         onClick={handlePay}
@@ -260,7 +296,7 @@ export default function CheckoutPage() {
             Redirecting to payment…
           </span>
         ) : (
-          `Pay ${displayAmount} ${displayCurrency}`
+          `Pay ${displayAmount}`
         )}
       </button>
 

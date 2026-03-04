@@ -56,6 +56,16 @@ export default function DemoStoreCountry() {
             popular: false,
           }))
           .sort((a, b) => a.price - b.price);
+        // Prepend $1 Stripe test option
+        sortedPlans.unshift({
+          id: 0,
+          packageCode: 'stripe-test',
+          slug: 'stripe-test',
+          data: 'Stripe Test',
+          validity: '$1 test',
+          price: 1.00,
+          popular: false,
+        });
         // Mark the middle plan as popular
         if (sortedPlans.length >= 3) {
           sortedPlans[Math.floor(sortedPlans.length / 2)].popular = true;
@@ -75,6 +85,7 @@ export default function DemoStoreCountry() {
       countryFlag: "🌍",
       countryImage: countryImages[slug] || DEFAULT_IMAGE,
       plans: [
+        { id: 0, packageCode: 'stripe-test', slug: 'stripe-test', data: "Stripe Test", validity: "$1 test", price: 1.00, popular: false },
         { id: 1, packageCode: '', slug: '', data: "1GB", validity: "7 days", price: 4.50, popular: false },
         { id: 2, packageCode: '', slug: '', data: "3GB", validity: "30 days", price: 9.00, popular: false },
         { id: 3, packageCode: '', slug: '', data: "5GB", validity: "30 days", price: 14.00, popular: true },

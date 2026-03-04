@@ -134,6 +134,56 @@ export class EsimService {
     return all.find((l) => this.makeSlug(l.name) === slug);
   }
 
+  /** Find location by code (case-insensitive). */
+  async getLocationByCodeOrSlug(codeOrSlug: string): Promise<LocationItem | undefined> {
+    const all = await this.getLocations();
+    const upper = codeOrSlug.toUpperCase();
+    return all.find(
+      (l) => l.code.toUpperCase() === upper || this.makeSlug(l.name) === codeOrSlug.toLowerCase(),
+    );
+  }
+
+  /** Common code aliases (e.g. UK -> GB). */
+  private static CODE_ALIASES: Record<string, string> = {
+    UK: 'GB',
+    USA: 'US',
+  };
+
+  /**
+   * Get min price per country for summary display.
+   * Returns { code, name, slug, minPriceUsd }[].
+   */
+  async getCountrySummaries(codes: string[]): Promise<{ code: string; name: string; slug: string; minPriceUsd: number }[]> {
+    const result: { code: string; name: string; slug: string; minPriceUsd: number }[] = [];
+    const allLocs = await this.getLocations();
+
+    for (let code of codes) {
+      code = code.trim().toUpperCase();
+      const resolved = EsimService.CODE_ALIASES[code] ?? code;
+      const loc = allLocs.find(
+        (l) =>
+          l.type === 1 &&
+          (l.code.toUpperCase() === resolved ||
+            l.code.toUpperCase() === code ||
+            l.name.toLowerCase().includes(code.toLowerCase()) ||
+            l.name.toLowerCase().includes(resolved.toLowerCase())),
+      );
+      if (!loc) continue;
+
+      const packages = await this.getPackagesByLocation(loc.code);
+      const prices = packages.map((p) => p.price / 10000);
+      const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+
+      result.push({
+        code: loc.code,
+        name: loc.name,
+        slug: this.makeSlug(loc.name),
+        minPriceUsd: Math.round(minPrice * 100) / 100,
+      });
+    }
+    return result;
+  }
+
   // -----------------------------------------------------------------------
   // Packages / Plans
   // -----------------------------------------------------------------------

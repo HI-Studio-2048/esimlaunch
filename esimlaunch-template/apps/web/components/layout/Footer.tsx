@@ -33,9 +33,15 @@ export function Footer() {
             </p>
           </div>
           <div className="flex flex-wrap gap-6 text-sm">
-            <Link href="#" className="text-slate-600 hover:text-slate-900">Terms of Service</Link>
-            <Link href="#" className="text-slate-600 hover:text-slate-900">Privacy Policy</Link>
-            <Link href="#" className="text-slate-600 hover:text-slate-900">Contact Us</Link>
+            <Link href="/contact" className="text-slate-600 hover:text-slate-900">Contact</Link>
+            <Link href="/faq" className="text-slate-600 hover:text-slate-900">FAQ</Link>
+            <Link href="/support" className="text-slate-600 hover:text-slate-900">Support</Link>
+            <Link href="/help-center" className="text-slate-600 hover:text-slate-900">Help Center</Link>
+            <Link href="/terms" className="text-slate-600 hover:text-slate-900">Terms of Service</Link>
+            <Link href="/privacy" className="text-slate-600 hover:text-slate-900">Privacy Policy</Link>
+            <Link href="/refund" className="text-slate-600 hover:text-slate-900">Refund Policy</Link>
+            <Link href="/cookies" className="text-slate-600 hover:text-slate-900">Cookie Policy</Link>
+            <Link href="/about" className="text-slate-600 hover:text-slate-900">About</Link>
             <span className="flex items-center gap-1.5 text-slate-600">
               <span className="text-slate-400">🌐</span> English
             </span>
@@ -63,13 +69,44 @@ export function Footer() {
             <div className="mt-4 flex flex-col gap-2 text-sm text-slate-600">
               <Link href="/" className="hover:text-slate-900">Destinations</Link>
               <Link href="/my-esims" className="hover:text-slate-900">My eSIMs</Link>
-              <Link href="#" className="hover:text-slate-900">About eSIM</Link>
+              <Link href="/faq" className="hover:text-slate-900">FAQ</Link>
+              <Link href="/support" className="hover:text-slate-900">Support</Link>
+              <Link href="/contact" className="hover:text-slate-900">Contact</Link>
             </div>
           </div>
         </div>
 
+        {/* Security badges */}
+        <div className="flex flex-wrap justify-center gap-6 py-8 text-sm text-slate-500">
+          <span className="flex items-center gap-2">
+            <span className="text-emerald-500">🔒</span> PCI DSS Compliant
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-emerald-500">🛡️</span> Data Protection
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="text-emerald-500">💳</span> Secure Payments
+          </span>
+        </div>
+
+        {/* Social links (env-configurable placeholders) */}
+        <div className="flex justify-center gap-4 pb-6">
+          <a href={process.env.NEXT_PUBLIC_SOCIAL_TWITTER || '#'} className="text-slate-400 hover:text-slate-600" aria-label="Twitter">
+            𝕏
+          </a>
+          <a href={process.env.NEXT_PUBLIC_SOCIAL_FACEBOOK || '#'} className="text-slate-400 hover:text-slate-600" aria-label="Facebook">
+            f
+          </a>
+          <a href={process.env.NEXT_PUBLIC_SOCIAL_INSTAGRAM || '#'} className="text-slate-400 hover:text-slate-600" aria-label="Instagram">
+            📷
+          </a>
+          <a href={process.env.NEXT_PUBLIC_SOCIAL_LINKEDIN || '#'} className="text-slate-400 hover:text-slate-600" aria-label="LinkedIn">
+            in
+          </a>
+        </div>
+
         {/* Bottom: copyright + payment icons */}
-        <div className="flex flex-col items-center justify-between gap-4 pt-8 sm:flex-row">
+        <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-200 pt-8 sm:flex-row">
           <p className="text-sm text-slate-500">
             © {new Date().getFullYear()} eSIM Store. All rights reserved. Powered by esimlaunch
           </p>

@@ -54,4 +54,15 @@ export class EsimController {
       flagUrl: this.esimService.getFlagUrl(loc.code, loc.type),
     };
   }
+
+  /**
+   * GET /api/esim/summary?codes=US,UK,FR,JP,AU
+   * Returns min price per country for Popular Plans section.
+   */
+  @Get('summary')
+  async getCountrySummaries(@Query('codes') codes: string) {
+    const codeList = codes ? codes.split(',').map((c) => c.trim()).filter(Boolean) : [];
+    if (codeList.length === 0) return [];
+    return this.esimService.getCountrySummaries(codeList);
+  }
 }

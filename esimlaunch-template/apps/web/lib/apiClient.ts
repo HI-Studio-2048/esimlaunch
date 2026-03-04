@@ -75,3 +75,20 @@ export async function apiFetch<T = unknown>(
 
   return res.json() as Promise<T>;
 }
+
+/** Fetch binary (e.g. PDF) with auth. Returns blob. */
+export async function apiFetchBlob(
+  path: string,
+  options: RequestInit & { userEmail?: string } = {},
+): Promise<Blob> {
+  const { userEmail, ...fetchOptions } = options;
+  const headers: Record<string, string> = {
+    ...(fetchOptions.headers as Record<string, string> | undefined),
+  };
+  if (userEmail) headers['x-user-email'] = userEmail;
+
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
+  const res = await fetch(`${API_BASE}${path}`, { ...fetchOptions, headers });
+  if (!res.ok) throw new ApiError(res.status, `Request failed: ${res.status}`);
+  return res.blob();
+}

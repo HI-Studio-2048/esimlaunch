@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { apiFetch } from '@/lib/apiClient';
 import type { Plan, EsimProfile } from '@/lib/types';
-import { formatPrice, formatVolume } from '@/lib/types';
+import { formatVolume } from '@/lib/types';
 import { useCurrency } from '@/hooks/useCurrency';
 
 /**
@@ -18,7 +18,7 @@ import { useCurrency } from '@/hooks/useCurrency';
 export default function TopUpPage() {
   const { profileId } = useParams<{ profileId: string }>();
   const { user } = useUser();
-  const { currency } = useCurrency();
+  const { currency, formatProviderPrice } = useCurrency();
   const router = useRouter();
 
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -104,7 +104,7 @@ export default function TopUpPage() {
                 {plan.duration > 1 ? 's' : ''}
               </p>
               <p className="mt-4 text-2xl font-bold text-sky-600">
-                {formatPrice(plan.price, currency)}
+                {formatProviderPrice(plan.price)}
               </p>
               <button
                 onClick={() => handleSelect(plan)}

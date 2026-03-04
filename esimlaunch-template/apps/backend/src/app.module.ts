@@ -13,6 +13,8 @@ import { StripeModule } from './modules/stripe/stripe.module';
 import { CurrencyModule } from './modules/currency/currency.module';
 import { EmailModule } from './modules/email/email.module';
 import { CronModule } from './modules/cron/cron.module';
+import { SupportModule } from './modules/support/support.module';
+import { DeviceModule } from './modules/device/device.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { CronModule } from './modules/cron/cron.module';
     CurrencyModule,
     EmailModule,
     CronModule,
+    SupportModule,
+    DeviceModule,
   ],
 })
 export class AppModule {}

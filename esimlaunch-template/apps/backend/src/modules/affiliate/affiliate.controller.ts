@@ -15,6 +15,7 @@ export class AffiliateController {
   @Get('me')
   @UseGuards(ClerkEmailGuard)
   async getMe(@CurrentUserId() userId: string) {
+    await this.affiliateService.ensureAffiliate(userId);
     const affiliate = await this.affiliateService.getAffiliateByUserId(userId);
     if (!affiliate) throw new NotFoundException('Affiliate not found');
     return affiliate;

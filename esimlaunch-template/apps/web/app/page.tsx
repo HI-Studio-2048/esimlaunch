@@ -4,16 +4,27 @@ import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { apiFetch } from '@/lib/apiClient';
+import { useCurrency } from '@/hooks/useCurrency';
 import type { Location } from '@/lib/types';
+
+interface CountrySummary {
+  code: string;
+  name: string;
+  slug: string;
+  minPriceUsd: number;
+}
 
 /**
  * Homepage — Browse locations.
  * Inspired by clean eSIM platform layouts: central hero search, uniform country cards, education section.
  */
 export default function HomePage() {
+  const { formatUsdCents } = useCurrency();
   const [locations, setLocations] = useState<Location[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [summaries, setSummaries] = useState<CountrySummary[]>([]);
+  const [allSummaries, setAllSummaries] = useState<Record<string, number>>({});
 
   useEffect(() => {
     apiFetch<Location[]>('/esim/locations')
@@ -22,10 +33,23 @@ export default function HomePage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    apiFetch<CountrySummary[]>('/esim/summary?codes=US,UK,FR,JP,AU')
+      .then((data) => {
+        setSummaries(data);
+        const map: Record<string, number> = {};
+        data.forEach((s) => { map[s.slug] = s.minPriceUsd; });
+        setAllSummaries(map);
+      })
+      .catch(() => {});
+  }, []);
+
   const countries = useMemo(
     () => locations.filter((l) => l.type === 1),
     [locations],
   );
+
+  const regions = useMemo(() => locations.filter((l) => l.type === 2), [locations]);
 
   const filtered = useMemo(() => {
     let list = countries;
@@ -80,9 +104,9 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Value badges */}
+          {/* Trust / value badges */}
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-            {['190+ Countries', 'Instant Activation', '24/7 Support'].map((badge) => (
+            {['SSL Secured', 'Money-back guarantee', '24/7 Support', '190+ Countries', 'Instant Activation'].map((badge) => (
               <span
                 key={badge}
                 className="flex items-center gap-2 rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-medium text-white backdrop-blur"
@@ -92,6 +116,9 @@ export default function HomePage() {
               </span>
             ))}
           </div>
+          <p className="mt-6 text-center text-sm text-purple-200">
+            Instant delivery • Satisfaction guaranteed • No hidden fees
+          </p>
         </div>
       </section>
 
@@ -105,6 +132,54 @@ export default function HomePage() {
 
       {!loading && (
         <>
+          {/* Popular Plans */}
+          {summaries.length > 0 && (
+            <section className="border-b border-slate-200 bg-white py-12">
+              <div className="mx-auto max-w-6xl px-4 lg:px-8">
+                <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Popular Plans</h2>
+                <p className="mt-2 text-slate-600">Great rates for top destinations</p>
+                <div className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+                  {summaries.map((s) => (
+                    <Link
+                      key={s.code}
+                      href={`/countries/${s.slug}`}
+                      className="group flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-violet-200 hover:shadow-md"
+                    >
+                      <span className="text-3xl">
+                        {s.slug.startsWith('united-states') ? '🇺🇸' : s.slug.startsWith('united-kingdom') ? '🇬🇧' : s.slug.startsWith('france') ? '🇫🇷' : s.slug.startsWith('japan') ? '🇯🇵' : s.slug.startsWith('australia') ? '🇦🇺' : '🌍'}
+                      </span>
+                      <p className="mt-2 font-semibold text-slate-900 group-hover:text-violet-700">{s.name}</p>
+                      <p className="mt-1 text-lg font-bold text-violet-600">
+                        From {formatUsdCents(Math.round(s.minPriceUsd * 100))}
+                      </p>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Browse by Region */}
+          {regions.length > 0 && (
+            <section className="border-b border-slate-200 bg-slate-50/50 py-12">
+              <div className="mx-auto max-w-6xl px-4 lg:px-8">
+                <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Browse by Region</h2>
+                <p className="mt-2 text-slate-600">Multi-country plans for broader coverage</p>
+                <div className="mt-8 flex flex-wrap gap-4">
+                  {regions.map((loc) => (
+                      <Link
+                        key={loc.code}
+                        href={`/countries/${loc.slug}`}
+                        className="rounded-xl border border-slate-200 bg-white px-6 py-4 font-medium text-slate-800 shadow-sm transition hover:border-violet-200 hover:text-violet-700"
+                      >
+                        {loc.name}
+                      </Link>
+                    ))}
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* Countries — uniform card grid */}
           <section id="destinations" className="mx-auto max-w-6xl px-4 py-16 lg:px-8">
             <div className="mb-8">
@@ -123,7 +198,12 @@ export default function HomePage() {
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 {filtered.map((loc) => (
-                  <CountryCard key={loc.code} loc={loc} />
+                  <CountryCard
+                    key={loc.code}
+                    loc={loc}
+                    minPriceUsd={allSummaries[loc.slug]}
+                    formatUsdCents={formatUsdCents}
+                  />
                 ))}
               </div>
             )}
@@ -209,7 +289,15 @@ export default function HomePage() {
   );
 }
 
-function CountryCard({ loc }: { loc: Location }) {
+function CountryCard({
+  loc,
+  minPriceUsd,
+  formatUsdCents,
+}: {
+  loc: Location;
+  minPriceUsd?: number;
+  formatUsdCents: (usdCents: number) => string;
+}) {
   return (
     <Link
       href={`/countries/${loc.slug}`}
@@ -247,7 +335,9 @@ function CountryCard({ loc }: { loc: Location }) {
       </div>
       <div className="p-4">
         <p className="font-semibold text-slate-900 group-hover:text-violet-700">{loc.name}</p>
-        <p className="mt-1 text-sm text-slate-500">View eSIM plans</p>
+        <p className="mt-1 text-sm text-slate-500">
+          {minPriceUsd != null ? `From ${formatUsdCents(Math.round(minPriceUsd * 100))}` : 'View eSIM plans'}
+        </p>
       </div>
     </Link>
   );

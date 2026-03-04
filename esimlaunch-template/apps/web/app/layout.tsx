@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import { ClerkProvider } from '@clerk/nextjs';
 import { Plus_Jakarta_Sans } from 'next/font/google';
 import './globals.css';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
+import { Breadcrumbs } from '@/components/Breadcrumbs';
 
 const fontJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -21,9 +23,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <ClerkProvider>
       <html lang="en" className={fontJakarta.variable}>
         <body className="font-sans">
-          <Navbar />
-          <main className="min-h-screen">{children}</main>
-          <Footer />
+          <CurrencyProvider>
+            <Navbar />
+            <main className="min-h-screen">
+              <Breadcrumbs />
+              {children}
+            </main>
+            <Footer />
+          </CurrencyProvider>
         </body>
       </html>
     </ClerkProvider>

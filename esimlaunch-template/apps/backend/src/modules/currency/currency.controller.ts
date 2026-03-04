@@ -17,8 +17,22 @@ export class CurrencyController {
   }
 
   /**
-   * GET /api/currency/convert?amount=100&from=USD&to=EUR
-   * Utility endpoint for frontend previews.
+   * GET /api/currency/rates
+   * Returns exchange rates from USD. e.g. { USD: 1, EUR: 0.92, GBP: 0.79 }
+   */
+  @Get('rates')
+  async rates() {
+    const codes = ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'JPY'];
+    const result: Record<string, number> = {};
+    for (const code of codes) {
+      result[code] = await this.currencyService.getRate(code);
+    }
+    return result;
+  }
+
+  /**
+   * GET /api/currency/convert?amount=100&to=EUR
+   * Converts USD cents to target currency. Returns converted amount (in cents of target).
    */
   @Get('convert')
   async convert(
