@@ -33,6 +33,7 @@ import APIDocs from "./pages/APIDocs";
 import HelpCenter from "./pages/HelpCenter";
 import Status from "./pages/Status";
 import ROICalculator from "./pages/ROICalculator";
+import CurrentPrices from "./pages/CurrentPrices";
 import Demo from "./pages/Demo";
 import CaseStudies from "./pages/CaseStudies";
 import Changelog from "./pages/Changelog";
@@ -180,6 +181,7 @@ const MainShell = () => {
                   }
                 />
                 <Route path="/roi-calculator" element={<ROICalculator />} />
+                <Route path="/current-prices" element={<CurrentPrices />} />
                 <Route path="/demo" element={<Demo />} />
                 <Route path="/case-studies" element={<CaseStudies />} />
                 <Route path="/changelog" element={<Changelog />} />

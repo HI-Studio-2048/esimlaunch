@@ -2,6 +2,8 @@ import { motion } from "framer-motion";
 import { ROICalculator as ROICalculatorComponent } from "@/components/shared/ROICalculator";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { Calculator, TrendingUp, PiggyBank, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 const benefits = [
   {
@@ -25,7 +27,7 @@ export default function ROICalculatorPage() {
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section className="relative py-20 lg:py-28 overflow-hidden">
+      <section id="roi-calculator" className="relative py-20 lg:py-28 overflow-hidden scroll-mt-24">
         {/* Background Elements */}
         <div className="absolute inset-0 -z-10">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
@@ -51,6 +53,12 @@ export default function ROICalculatorPage() {
               Enter your wholesale cost and markup to instantly see your profit per sale,
               monthly earnings, and annual revenue potential.
             </p>
+            <Button variant="outline" size="lg" className="mt-6" asChild>
+              <Link to="/current-prices">
+                View Wholesale Price List
+                <span className="ml-2">→</span>
+              </Link>
+            </Button>
           </motion.div>
 
           {/* Calculator Component */}

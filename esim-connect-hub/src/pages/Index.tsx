@@ -4,7 +4,7 @@ import {
   Zap, Globe, Shield, Code2, Palette, Users, 
   Building2, Plane, UserCircle, Rocket, TrendingUp,
   ArrowRight, CheckCircle2, Star, ChevronRight,
-  BarChart3, CreditCard, Settings, Package
+  BarChart3, CreditCard, Settings, Package, Calculator
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/shared/SectionHeader";
@@ -17,6 +17,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { ROICalculator } from "@/components/shared/ROICalculator";
 
 const valueProps = [
   { icon: Zap, title: "Launch Fast", description: "Get your eSIM store up and running faster than ever" },
@@ -143,7 +144,7 @@ export default function Index() {
                 The all-in-one platform to create, manage, and scale your eSIM reselling business. No coding required. Global coverage.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+              <div className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center lg:justify-start items-center">
                 <Button variant="hero" size="xl" asChild>
                   <Link to="/pricing">
                     Create Your Store
@@ -152,6 +153,17 @@ export default function Index() {
                 </Button>
                 <Button variant="hero-outline" size="xl" asChild>
                   <Link to="/demo-store">View Demo</Link>
+                </Button>
+                <Button
+                  variant="link"
+                  size="lg"
+                  className="text-muted-foreground hover:text-primary flex items-center gap-2 shrink-0 whitespace-nowrap"
+                  asChild
+                >
+                  <a href="#roi-calculator">
+                    <Calculator className="w-4 h-4" />
+                    Calculate Your ROI
+                  </a>
                 </Button>
               </div>
 
@@ -382,6 +394,36 @@ export default function Index() {
               <Link to="/dashboard">
                 Explore Dashboard Demo
                 <ChevronRight className="w-5 h-5" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      {/* ROI Calculator Section */}
+      <section id="roi-calculator" className="section-padding bg-muted/30 scroll-mt-24">
+        <div className="container-custom">
+          <SectionHeader
+            badge="ROI Calculator"
+            title="See your eSIM business potential"
+            description="Estimate your revenue, margins, and annual profit based on your wholesale cost, markup, and expected sales volume."
+          />
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="mt-12"
+          >
+            <ROICalculator />
+          </motion.div>
+
+          <div className="text-center mt-8">
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/roi-calculator">
+                Open Full Calculator
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Link>
             </Button>
           </div>
