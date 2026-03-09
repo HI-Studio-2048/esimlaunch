@@ -98,7 +98,8 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
   const formatProviderPrice = useCallback(
     (providerPrice: number): string => {
-      const usdCents = Math.round((providerPrice / 10000) * 100);
+      const safe = typeof providerPrice === 'number' && !Number.isNaN(providerPrice) ? providerPrice : 0;
+      const usdCents = Math.round((safe / 10000) * 100);
       return formatUsdCents(usdCents);
     },
     [formatUsdCents],

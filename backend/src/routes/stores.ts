@@ -66,12 +66,18 @@ async function buildStorePublicResponse(store: any) {
       const pricingMarkup = store.pricingMarkup as any;
 
       for (const pkg of allPackages) {
-        // eSIM Access may return price in provider units (1/10000 USD) or in USD; detect by magnitude
-        const rawPrice = typeof pkg.price === 'number' ? pkg.price : 0;
+        // eSIM Access: try price, amount, unitPrice (never use null/undefined)
+        const rawPrice =
+          typeof pkg.price === 'number'
+            ? pkg.price
+            : typeof (pkg as any).amount === 'number'
+              ? (pkg as any).amount
+              : typeof (pkg as any).unitPrice === 'number'
+                ? (pkg as any).unitPrice
+                : 0;
+        // Values < 100 likely USD (e.g. 7.13); else provider units (1/10000 USD)
         const basePrice =
-          rawPrice > 0 && rawPrice < 100
-            ? rawPrice
-            : rawPrice / 10000; // Values < 100 likely USD (e.g. 7.13); else provider units
+          rawPrice > 0 && rawPrice < 100 ? rawPrice : rawPrice / 10000;
         const finalPriceUsd = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode);
         const priceProviderUnits = Math.round(finalPriceUsd * 10000);
 
@@ -81,7 +87,7 @@ async function buildStorePublicResponse(store: any) {
           name: pkg.name,
           data: formatDataSize(pkg.volume),
           validity: `${pkg.duration} ${pkg.durationUnit}`,
-          price: finalPriceUsd,
+          price: finalPriceUsd ?? 0,
           currency: 'USD',
           location: pkg.location,
           locationCode: pkg.locationCode,
@@ -98,7 +104,7 @@ async function buildStorePublicResponse(store: any) {
           volume: pkg.volume >= 1048576 ? Math.round(pkg.volume / 1048576) : pkg.volume,
           duration: pkg.duration ?? 0,
           durationUnit: (pkg.durationUnit ?? 'day').toString().toLowerCase().replace(/s$/, '') === 'month' ? 'month' : 'day',
-          price: priceProviderUnits,
+          price: priceProviderUnits ?? 0, // Never null - template expects number
           currencyCode: pkg.currencyCode ?? 'USD',
           supportTopUpType: typeof pkg.supportTopUpType === 'string' ? parseInt(pkg.supportTopUpType, 10) : (pkg.supportTopUpType ?? 0),
         });

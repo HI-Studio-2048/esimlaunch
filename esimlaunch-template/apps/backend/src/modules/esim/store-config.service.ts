@@ -127,10 +127,15 @@ export class StoreConfigService {
     const config = await this.getConfig();
     if (!config) return [];
 
-    return config.packagesTemplate.filter(
-      (p) =>
-        (p.locationCode || p.location || '').toUpperCase() === locationCode.toUpperCase()
-    );
+    return config.packagesTemplate
+      .filter(
+        (p) =>
+          (p.locationCode || p.location || '').toUpperCase() === locationCode.toUpperCase(),
+      )
+      .map((p) => ({
+        ...p,
+        price: typeof p.price === 'number' && !Number.isNaN(p.price) ? p.price : 0,
+      }));
   }
 
   /** Get a single package by packageCode. */
