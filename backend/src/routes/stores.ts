@@ -10,19 +10,20 @@ import { env } from '../config/env';
 
 const router = express.Router();
 
-// Helper: apply merchant markup to a base price (USD)
+// Helper: apply merchant markup to a base price (USD). Never returns NaN.
 function applyMarkup(basePrice: number, pricingMarkup: any, locationCode: string, packageCode: string): number {
-  if (!pricingMarkup) return Math.round(basePrice * 100) / 100;
+  const round = (n: number) => (typeof n === 'number' && !Number.isNaN(n) ? Math.round(n * 100) / 100 : 0);
+  if (!pricingMarkup) return round(basePrice);
   if (pricingMarkup.packages && pricingMarkup.packages[packageCode] !== undefined) {
     const rate = Number(pricingMarkup.packages[packageCode]);
-    return Math.round(basePrice * (1 + rate / 100) * 100) / 100;
+    return round(basePrice * (1 + (Number.isNaN(rate) ? 0 : rate) / 100));
   }
   if (pricingMarkup.countries && pricingMarkup.countries[locationCode] !== undefined) {
     const rate = Number(pricingMarkup.countries[locationCode]);
-    return Math.round(basePrice * (1 + rate / 100) * 100) / 100;
+    return round(basePrice * (1 + (Number.isNaN(rate) ? 0 : rate) / 100));
   }
   const globalRate = Number(pricingMarkup.global ?? pricingMarkup.globalMarkup ?? 0);
-  return Math.round(basePrice * (1 + globalRate / 100) * 100) / 100;
+  return round(basePrice * (1 + (Number.isNaN(globalRate) ? 0 : globalRate) / 100));
 }
 
 // Helper: convert bytes to human-readable data size
@@ -76,10 +77,14 @@ async function buildStorePublicResponse(store: any) {
                 ? (pkg as any).unitPrice
                 : 0;
         // Values < 100 likely USD (e.g. 7.13); else provider units (1/10000 USD)
-        const basePrice =
-          rawPrice > 0 && rawPrice < 100 ? rawPrice : rawPrice / 10000;
+        const basePrice = (typeof rawPrice === 'number' && !Number.isNaN(rawPrice) && rawPrice > 0 && rawPrice < 100)
+          ? rawPrice
+          : (typeof rawPrice === 'number' && !Number.isNaN(rawPrice) ? rawPrice / 10000 : 0);
         const finalPriceUsd = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode);
         const priceProviderUnits = Math.round(finalPriceUsd * 10000);
+        // JSON.stringify(NaN) => null — ensure we never output NaN
+        const safePriceUsd = typeof finalPriceUsd === 'number' && !Number.isNaN(finalPriceUsd) ? finalPriceUsd : 0;
+        const safeProviderUnits = typeof priceProviderUnits === 'number' && !Number.isNaN(priceProviderUnits) ? priceProviderUnits : 0;
 
         packages.push({
           packageCode: pkg.packageCode,
@@ -87,7 +92,7 @@ async function buildStorePublicResponse(store: any) {
           name: pkg.name,
           data: formatDataSize(pkg.volume),
           validity: `${pkg.duration} ${pkg.durationUnit}`,
-          price: finalPriceUsd ?? 0,
+          price: safePriceUsd,
           currency: 'USD',
           location: pkg.location,
           locationCode: pkg.locationCode,
@@ -104,7 +109,7 @@ async function buildStorePublicResponse(store: any) {
           volume: pkg.volume >= 1048576 ? Math.round(pkg.volume / 1048576) : pkg.volume,
           duration: pkg.duration ?? 0,
           durationUnit: (pkg.durationUnit ?? 'day').toString().toLowerCase().replace(/s$/, '') === 'month' ? 'month' : 'day',
-          price: priceProviderUnits ?? 0, // Never null - template expects number
+          price: safeProviderUnits,
           currencyCode: pkg.currencyCode ?? 'USD',
           supportTopUpType: typeof pkg.supportTopUpType === 'string' ? parseInt(pkg.supportTopUpType, 10) : (pkg.supportTopUpType ?? 0),
         });
