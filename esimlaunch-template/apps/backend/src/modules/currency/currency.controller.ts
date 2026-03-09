@@ -1,18 +1,25 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { CurrencyService } from './currency.service';
+import { StoreConfigService } from '../esim/store-config.service';
 
 @Controller('currency')
 export class CurrencyController {
-  constructor(private readonly currencyService: CurrencyService) {}
+  constructor(
+    private readonly currencyService: CurrencyService,
+    private readonly storeConfig: StoreConfigService,
+  ) {}
 
   /**
    * GET /api/currency/detect
-   * Returns a suggested display currency based on the Accept-Language header
-   * or a default from AdminSettings.
+   * Returns a suggested display currency. When linked to a store, uses store's defaultCurrency.
    */
   @Get('detect')
   async detect() {
-    // Simplified: return USD; in production, use IP geolocation
+    if (this.storeConfig.isLinked()) {
+      const config = await this.storeConfig.getConfig();
+      const currency = config?.currency ?? 'USD';
+      return { success: true, currency };
+    }
     return { success: true, currency: 'USD' };
   }
 

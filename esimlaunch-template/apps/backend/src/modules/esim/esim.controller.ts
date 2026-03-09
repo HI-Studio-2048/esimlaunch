@@ -10,6 +10,30 @@ export class EsimController {
   ) {}
 
   /**
+   * GET /api/esim/store-config
+   * Public endpoint for frontend: returns branding, currency, supportedCurrencies, templateSettings.
+   * When not linked, returns minimal defaults.
+   */
+  @Get('store-config')
+  async getStoreConfig() {
+    const config = await this.storeConfig.getConfig();
+    if (!config) {
+      return {
+        branding: { businessName: 'eSIM Store' },
+        currency: 'USD',
+        supportedCurrencies: ['USD', 'EUR', 'GBP', 'AUD', 'CAD', 'CHF', 'JPY'],
+        templateSettings: undefined,
+      };
+    }
+    return {
+      branding: config.branding,
+      currency: config.currency,
+      supportedCurrencies: config.supportedCurrencies,
+      templateSettings: config.templateSettings,
+    };
+  }
+
+  /**
    * GET /api/esim/store-config-status
    * Debug endpoint: shows whether store config is linked and fetch status.
    */

@@ -1,4 +1,7 @@
+'use client';
+
 import Link from 'next/link';
+import { useStoreConfig } from '@/contexts/StoreConfigContext';
 
 const POPULAR_SLUGS: { name: string; slug: string }[] = [
   { name: 'Japan', slug: 'japan-esim' },
@@ -15,7 +18,16 @@ const POPULAR_SLUGS: { name: string; slug: string }[] = [
   { name: 'Mexico', slug: 'mexico-esim' },
 ];
 
+const DEFAULT_PRIMARY = '#6366f1';
+const DEFAULT_SECONDARY = '#8b5cf6';
+
 export function Footer() {
+  const { branding } = useStoreConfig();
+  const businessName = branding.businessName ?? 'eSIM Store';
+  const primaryColor = branding.primaryColor ?? DEFAULT_PRIMARY;
+  const secondaryColor = branding.secondaryColor ?? DEFAULT_SECONDARY;
+  const logoUrl = branding.logoUrl;
+
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto max-w-6xl px-4 py-12 lg:px-8">
@@ -23,10 +35,21 @@ export function Footer() {
         <div className="flex flex-col gap-8 border-b border-slate-200 pb-10 md:flex-row md:items-start md:justify-between">
           <div className="max-w-sm">
             <div className="flex items-center gap-2">
-              <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-600 text-white">
-                📶
-              </span>
-              <span className="text-xl font-bold text-slate-900">eSIM Store</span>
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt={businessName}
+                  className="h-10 w-auto max-w-[160px] object-contain"
+                />
+              ) : (
+                <span
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-white"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  📶
+                </span>
+              )}
+              <span className="text-xl font-bold text-slate-900">{businessName}</span>
             </div>
             <p className="mt-4 text-sm text-slate-600">
               Stay connected on your adventures without hefty roaming fees. eSIMs for 190+ countries worldwide.
@@ -108,7 +131,7 @@ export function Footer() {
         {/* Bottom: copyright + payment icons */}
         <div className="flex flex-col items-center justify-between gap-4 border-t border-slate-200 pt-8 sm:flex-row">
           <p className="text-sm text-slate-500">
-            © {new Date().getFullYear()} eSIM Store. All rights reserved. Powered by esimlaunch
+            © {new Date().getFullYear()} {businessName}. All rights reserved. Powered by esimlaunch
           </p>
           <div className="flex items-center gap-3 text-slate-400">
             <span className="text-xs font-medium">We accept</span>

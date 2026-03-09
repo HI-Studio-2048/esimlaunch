@@ -10,20 +10,59 @@ import { env } from '../config/env';
 
 const router = express.Router();
 
+// Helper: extract numeric value from dashboard markup entry (supports { type, value } or plain number)
+function getMarkupValue(entry: any): { type: 'percentage' | 'fixed'; value: number } {
+  if (entry == null) return { type: 'percentage', value: 0 };
+  if (typeof entry === 'number') return { type: 'percentage', value: Number.isNaN(entry) ? 0 : entry };
+  const type = (entry.type === 'fixed' ? 'fixed' : 'percentage') as 'percentage' | 'fixed';
+  const value = parseFloat(entry.value);
+  return { type, value: typeof value === 'number' && !Number.isNaN(value) ? value : 0 };
+}
+
+// Helper: apply a single markup entry (percentage or fixed) to base price
+function applyMarkupEntry(basePrice: number, entry: any): number {
+  const { type, value } = getMarkupValue(entry);
+  if (type === 'fixed') return basePrice + value;
+  return basePrice * (1 + value / 100);
+}
+
 // Helper: apply merchant markup to a base price (USD). Never returns NaN.
-function applyMarkup(basePrice: number, pricingMarkup: any, locationCode: string, packageCode: string): number {
+// Dashboard saves { global: { type, value }, countries: {}, packages: {}, dataSizes: {} }
+// Precedence: package > dataSize > country > global
+function applyMarkup(
+  basePrice: number,
+  pricingMarkup: any,
+  locationCode: string,
+  packageCode: string,
+  volumeBytes?: number
+): number {
   const round = (n: number) => (typeof n === 'number' && !Number.isNaN(n) ? Math.round(n * 100) / 100 : 0);
   if (!pricingMarkup) return round(basePrice);
+  let price = basePrice;
+  // Package-specific (highest precedence)
   if (pricingMarkup.packages && pricingMarkup.packages[packageCode] !== undefined) {
-    const rate = Number(pricingMarkup.packages[packageCode]);
-    return round(basePrice * (1 + (Number.isNaN(rate) ? 0 : rate) / 100));
+    price = applyMarkupEntry(price, pricingMarkup.packages[packageCode]);
+    return round(price);
   }
+  // Data size-specific
+  if (volumeBytes != null && volumeBytes > 0 && pricingMarkup.dataSizes) {
+    const dataSizeGB = (volumeBytes / (1024 * 1024 * 1024)).toFixed(1);
+    if (pricingMarkup.dataSizes[dataSizeGB] !== undefined) {
+      price = applyMarkupEntry(price, pricingMarkup.dataSizes[dataSizeGB]);
+      return round(price);
+    }
+  }
+  // Country-specific
   if (pricingMarkup.countries && pricingMarkup.countries[locationCode] !== undefined) {
-    const rate = Number(pricingMarkup.countries[locationCode]);
-    return round(basePrice * (1 + (Number.isNaN(rate) ? 0 : rate) / 100));
+    price = applyMarkupEntry(price, pricingMarkup.countries[locationCode]);
+    return round(price);
   }
-  const globalRate = Number(pricingMarkup.global ?? pricingMarkup.globalMarkup ?? 0);
-  return round(basePrice * (1 + (Number.isNaN(globalRate) ? 0 : globalRate) / 100));
+  // Global (lowest precedence)
+  const globalEntry = pricingMarkup.global ?? pricingMarkup.globalMarkup;
+  if (globalEntry !== undefined && globalEntry !== null) {
+    price = applyMarkupEntry(price, globalEntry);
+  }
+  return round(price);
 }
 
 // Helper: convert bytes to human-readable data size
@@ -80,7 +119,7 @@ async function buildStorePublicResponse(store: any) {
         const basePrice = (typeof rawPrice === 'number' && !Number.isNaN(rawPrice) && rawPrice > 0 && rawPrice < 100)
           ? rawPrice
           : (typeof rawPrice === 'number' && !Number.isNaN(rawPrice) ? rawPrice / 10000 : 0);
-        const finalPriceUsd = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode);
+        const finalPriceUsd = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode, pkg.volume);
         const priceProviderUnits = Math.round(finalPriceUsd * 10000);
         // JSON.stringify(NaN) => null — ensure we never output NaN
         const safePriceUsd = typeof finalPriceUsd === 'number' && !Number.isNaN(finalPriceUsd) ? finalPriceUsd : 0;
@@ -130,7 +169,13 @@ async function buildStorePublicResponse(store: any) {
     slug: makeLocationSlug(name),
   }));
 
+  const supportedCurrencies = store.supportedCurrencies as string[] | null;
+  const supportedCurrenciesList = Array.isArray(supportedCurrencies) && supportedCurrencies.length > 0
+    ? supportedCurrencies.filter((c): c is string => typeof c === 'string')
+    : ['USD'];
+
   return {
+    storeId: store.id,
     branding: {
       businessName: store.businessName,
       primaryColor: store.primaryColor,
@@ -142,6 +187,7 @@ async function buildStorePublicResponse(store: any) {
     packagesTemplate,
     locations,
     currency: store.defaultCurrency || 'USD',
+    supportedCurrencies: supportedCurrenciesList,
     templateKey: store.templateKey || 'default',
     templateSettings: (store.templateSettings as object) || undefined,
   };
@@ -168,6 +214,7 @@ router.get('/:storeId/public', async (req, res) => {
         selectedPackages: true,
         pricingMarkup: true,
         defaultCurrency: true,
+        supportedCurrencies: true,
         isActive: true,
         adminStatus: true,
         templateKey: true,
@@ -215,6 +262,7 @@ router.get('/by-subdomain/:subdomain', async (req, res) => {
         selectedPackages: true,
         pricingMarkup: true,
         defaultCurrency: true,
+        supportedCurrencies: true,
         isActive: true,
         adminStatus: true,
         templateKey: true,
@@ -231,7 +279,7 @@ router.get('/by-subdomain/:subdomain', async (req, res) => {
     }
 
     const data = await buildStorePublicResponse(store);
-    res.json({ success: true, data: { storeId: store.id, ...data } });
+    res.json({ success: true, data });
   } catch (error: any) {
     res.status(500).json({
       success: false,

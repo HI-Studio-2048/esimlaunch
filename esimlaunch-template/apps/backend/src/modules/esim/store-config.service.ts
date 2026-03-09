@@ -12,6 +12,7 @@ export interface StoreConfig {
     accentColor?: string;
     logoUrl?: string | null;
   };
+  supportedCurrencies: string[];
   packages: Array<{
     packageCode: string;
     slug?: string;
@@ -87,9 +88,13 @@ export class StoreConfigService {
       }
 
       const data = json.data as Record<string, unknown>;
+      const supportedCurrencies = data.supportedCurrencies as string[] | undefined;
       const config: StoreConfig = {
         storeId: String(data.storeId ?? ''),
         branding: (data.branding as StoreConfig['branding']) ?? {},
+        supportedCurrencies: Array.isArray(supportedCurrencies) && supportedCurrencies.length > 0
+          ? supportedCurrencies.filter((c): c is string => typeof c === 'string')
+          : ['USD'],
         packages: (data.packages as StoreConfig['packages']) ?? [],
         packagesTemplate: (data.packagesTemplate as PackageItem[]) ?? [],
         locations: (data.locations as StoreConfig['locations']) ?? [],

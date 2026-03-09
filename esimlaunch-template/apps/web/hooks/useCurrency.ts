@@ -1,3 +1,3 @@
 'use client';
 
-export { CURRENCIES, useCurrency } from '@/contexts/CurrencyContext';
+export { CURRENCIES, ALL_CURRENCIES, useCurrency } from '@/contexts/CurrencyContext';

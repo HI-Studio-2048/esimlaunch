@@ -1,12 +1,22 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
-import { CURRENCIES, useCurrency } from '@/contexts/CurrencyContext';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { ALL_CURRENCIES, useCurrency } from '@/contexts/CurrencyContext';
+import { useStoreConfig } from '@/contexts/StoreConfigContext';
 
 export function CurrencySelector() {
   const { currency, setCurrency } = useCurrency();
+  const { supportedCurrencies, branding } = useStoreConfig();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  const currencies = useMemo(
+    () =>
+      supportedCurrencies.length > 0
+        ? ALL_CURRENCIES.filter((c) => supportedCurrencies.includes(c.code))
+        : ALL_CURRENCIES,
+    [supportedCurrencies],
+  );
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -16,7 +26,7 @@ export function CurrencySelector() {
     return () => document.removeEventListener('click', handler);
   }, []);
 
-  const current = CURRENCIES.find((c) => c.code === currency) ?? CURRENCIES[0];
+  const current = currencies.find((c) => c.code === currency) ?? currencies[0];
 
   return (
     <div className="relative" ref={ref}>
@@ -31,7 +41,10 @@ export function CurrencySelector() {
       </button>
       {open && (
         <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-xl border border-slate-200 bg-white py-2 shadow-lg">
-          {CURRENCIES.map((c) => (
+          {currencies.map((c) => {
+            const isSelected = c.code === currency;
+            const primaryColor = branding.primaryColor ?? '#6366f1';
+            return (
             <button
               key={c.code}
               type="button"
@@ -40,14 +53,13 @@ export function CurrencySelector() {
                 setOpen(false);
               }}
               className={`block w-full px-4 py-2 text-left text-sm transition ${
-                c.code === currency
-                  ? 'bg-violet-50 font-medium text-violet-700'
-                  : 'text-slate-700 hover:bg-slate-50'
+                isSelected ? 'font-medium' : 'text-slate-700 hover:bg-slate-50'
               }`}
+              style={isSelected ? { backgroundColor: `${primaryColor}15`, color: primaryColor } : undefined}
             >
               {c.symbol} {c.label}
             </button>
-          ))}
+          );})}
         </div>
       )}
     </div>

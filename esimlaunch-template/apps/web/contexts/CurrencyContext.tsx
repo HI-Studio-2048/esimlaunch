@@ -11,7 +11,7 @@ import { apiFetch } from '@/lib/apiClient';
 
 const STORAGE_KEY = 'esim_currency';
 
-export const CURRENCIES = [
+export const ALL_CURRENCIES = [
   { code: 'USD', symbol: '$', label: 'USD' },
   { code: 'EUR', symbol: '€', label: 'EUR' },
   { code: 'GBP', symbol: '£', label: 'GBP' },
@@ -20,6 +20,9 @@ export const CURRENCIES = [
   { code: 'CHF', symbol: 'CHF', label: 'CHF' },
   { code: 'JPY', symbol: '¥', label: 'JPY' },
 ];
+
+/** @deprecated Use ALL_CURRENCIES; kept for backward compat. */
+export const CURRENCIES = ALL_CURRENCIES;
 
 interface CurrencyContextValue {
   currency: string;
@@ -38,12 +41,12 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
-    if (saved && CURRENCIES.some((c) => c.code === saved)) {
+    if (saved && ALL_CURRENCIES.some((c) => c.code === saved)) {
       setCurrencyState(saved);
     } else {
       apiFetch<{ currency: string }>('/currency/detect')
         .then((d) => {
-          if (d.currency && CURRENCIES.some((c) => c.code === d.currency)) {
+          if (d.currency && ALL_CURRENCIES.some((c) => c.code === d.currency)) {
             setCurrencyState(d.currency);
           }
         })
@@ -75,7 +78,7 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setCurrency = useCallback((c: string) => {
-    if (CURRENCIES.some((x) => x.code === c)) {
+    if (ALL_CURRENCIES.some((x) => x.code === c)) {
       setCurrencyState(c);
       if (typeof window !== 'undefined') localStorage.setItem(STORAGE_KEY, c);
     }
