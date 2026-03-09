@@ -43,6 +43,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { parseEsimPricesCsv, inferSize, type EsimPriceRow } from "@/lib/parseEsimPrices";
+import { getPriceHistory, recordPriceSnapshot } from "@/lib/priceHistory";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -136,6 +137,70 @@ function PlanIcon({ plan }: { plan: string }) {
   );
 }
 
+function PriceSparkline({
+  history,
+  planId,
+  currentPrice,
+}: {
+  history: number[] | null;
+  planId: string;
+  currentPrice: number;
+}) {
+  const storedHistory = getPriceHistory(planId);
+  const points = history && history.length >= 2
+    ? history
+    : storedHistory && storedHistory.length >= 2
+      ? storedHistory
+      : null;
+
+  if (!points || points.length < 2) {
+    return null;
+  }
+
+  const min = Math.min(...points);
+  const max = Math.max(...points);
+  const range = max - min || 0.01;
+  const w = 48;
+  const h = 14;
+  const polyPoints = points
+    .map((v, i) => {
+      const x = (i / (points.length - 1)) * w;
+      const y = h - ((v - min) / range) * h;
+      return `${x},${y}`;
+    })
+    .join(" ");
+  const trend = points[points.length - 1] - points[0];
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <svg
+          width={w}
+          height={h}
+          className="inline-block ml-1 shrink-0 cursor-help"
+          viewBox={`0 0 ${w} ${h}`}
+        >
+          <polyline
+            points={polyPoints}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            className={cn(
+              trend < 0 ? "text-emerald-500" : trend > 0 ? "text-red-500" : "text-gray-400"
+            )}
+          />
+        </svg>
+      </TooltipTrigger>
+      <TooltipContent className="bg-gray-800 text-white border-0">
+        <p>Price history over time ({points.length} data points)</p>
+        <p className="text-gray-300 text-xs mt-0.5">
+          {trend < 0 ? "↓ Decreasing" : trend > 0 ? "↑ Increasing" : "— Stable"}
+        </p>
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function DaysPill({ days }: { days: number }) {
   const color =
     days === 1
@@ -200,6 +265,7 @@ export default function CurrentPrices() {
       const res = await fetch("/esim-prices-2026-03-04.csv");
       const text = await res.text();
       const rows = parseEsimPricesCsv(text);
+      recordPriceSnapshot(rows.map((r) => ({ planId: r.planId, price: r.price })));
       setData(rows);
       setLastUpdated(new Date());
     } catch (err) {
@@ -335,7 +401,7 @@ export default function CurrentPrices() {
   const share = async () => {
     try {
       await navigator.share?.({
-        title: "eSIMAccess Current Prices",
+        title: "eSIMLaunch Current Prices",
         text: `View ${totalPlans} eSIM plans with wholesale pricing`,
         url: window.location.href,
       });
@@ -359,7 +425,7 @@ export default function CurrentPrices() {
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">Current Prices</h1>
                   <p className="text-sm text-gray-600">
-                    View all eSIMAccess data plans with current pricing.
+                    View all eSIMLaunch data plans with current pricing.
                   </p>
                 </div>
               </div>
@@ -508,7 +574,7 @@ export default function CurrentPrices() {
                   Location {sortBy === "location" && (sortAsc ? "↑" : "↓")}
                 </TableHead>
                 <TableHead className="px-1.5 py-1.5" style={{ width: "14%" }}>Plan Name</TableHead>
-                <TableHead className="w-20 px-1.5 py-1.5">USD</TableHead>
+                <TableHead className="w-24 px-1.5 py-1.5">USD History</TableHead>
                 <TableHead className="w-14 px-1.5 py-1.5">GBs</TableHead>
                 <TableHead className="w-10 px-1.5 py-1.5">Days</TableHead>
                 <TableHead className="w-8 px-1.5 py-1.5">
@@ -608,6 +674,11 @@ export default function CurrentPrices() {
                         {currencySymbol}
                         {row.price.toFixed(2)}
                       </span>
+                      <PriceSparkline
+                        history={row.history}
+                        planId={row.planId}
+                        currentPrice={row.price}
+                      />
                     </TableCell>
                     <TableCell className="px-1.5 py-1.5">{row.gbs}</TableCell>
                     <TableCell className="px-1.5 py-1.5">

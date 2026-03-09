@@ -1,90 +1,195 @@
-import Link from 'next/link';
+'use client';
 
-export const metadata = {
-  title: 'Support',
-  description: 'Get help with your eSIM. 24/7 support available.',
-};
+import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import {
+  FileText,
+  Wrench,
+  Smartphone,
+  DollarSign,
+  Scale,
+  Mail,
+  Users,
+} from 'lucide-react';
+import { InstallGuides } from './sections/install-guides';
+import { Troubleshooting } from './sections/troubleshooting';
+import { RefundPolicy } from './sections/refund-policy';
+import { TermsOfService } from './sections/terms';
+
+function SupportContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabParam || 'install');
+
+  useEffect(() => {
+    if (tabParam) setActiveTab(tabParam);
+  }, [tabParam]);
+
+  return (
+    <div className="min-h-screen bg-white py-10">
+      <div className="mx-auto max-w-4xl px-4 md:px-6">
+        <div className="mb-6 md:mb-8">
+          <h1 className="mb-2 text-3xl font-bold text-slate-900 md:text-4xl">
+            Help Center
+          </h1>
+          <p className="text-slate-600">
+            Find answers, installation guides, and get support
+          </p>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <div className="mb-6 overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+            <TabsList className="inline-flex w-auto min-w-full md:grid md:w-full md:grid-cols-4 lg:grid-cols-7 gap-1 md:gap-2 bg-slate-100 p-1 rounded-lg">
+              <TabsTrigger
+                value="install"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-3 sm:px-4 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md"
+              >
+                <FileText className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Install</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="troubleshooting"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-3 sm:px-4 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md"
+              >
+                <Wrench className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Help</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="device"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-3 sm:px-4 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md"
+              >
+                <Smartphone className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Device</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="refund"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-3 sm:px-4 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md"
+              >
+                <DollarSign className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Refund</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="terms"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-3 sm:px-4 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md"
+              >
+                <Scale className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Terms</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="affiliate"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-3 sm:px-4 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md"
+              >
+                <Users className="h-4 w-4 shrink-0" />
+                <span className="hidden lg:inline">Affiliate</span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="contact"
+                className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm whitespace-nowrap px-3 sm:px-4 py-2 data-[state=active]:bg-white data-[state=active]:shadow-sm rounded-md"
+              >
+                <Mail className="h-4 w-4 shrink-0" />
+                <span className="hidden sm:inline">Contact</span>
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="install">
+            <InstallGuides />
+          </TabsContent>
+
+          <TabsContent value="troubleshooting">
+            <Troubleshooting />
+          </TabsContent>
+
+          <TabsContent value="device">
+            <Card className="border-slate-200 bg-white">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-slate-900">
+                  <Smartphone className="h-5 w-5" />
+                  Device Compatibility Checker
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-4 text-slate-600">
+                  Check if your device supports eSIM before purchasing a plan.
+                </p>
+                <Link href="/support/device-check">
+                  <Button className="bg-violet-600 text-white hover:bg-violet-700">
+                    Check Device Compatibility
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="refund">
+            <RefundPolicy />
+          </TabsContent>
+
+          <TabsContent value="terms">
+            <TermsOfService />
+          </TabsContent>
+
+          <TabsContent value="affiliate">
+            <Card className="border-slate-200 bg-white">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-slate-900">
+                  <Users className="h-5 w-5" />
+                  Affiliate Terms
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-4 text-slate-600">
+                  Rules and payout conditions for affiliates.
+                </p>
+                <Link href="/account/affiliate">
+                  <Button className="bg-violet-600 text-white hover:bg-violet-700">
+                    View Affiliate Dashboard
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="contact">
+            <Card className="border-slate-200 bg-white">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-slate-900">
+                  <Mail className="h-5 w-5" />
+                  Contact Support
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="mb-4 text-slate-600">
+                  Need help? Send us a message and we&apos;ll get back to you as soon as possible.
+                </p>
+                <Link href="/contact">
+                  <Button className="bg-violet-600 text-white hover:bg-violet-700">
+                    Open Contact Form
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
 
 export default function SupportPage() {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16 sm:py-24">
-      <h1 className="text-3xl font-bold text-slate-900">Support</h1>
-      <p className="mt-4 text-slate-600">
-        We&apos;re here to help you stay connected. Choose an option below.
-      </p>
-
-      <div className="mt-12 grid gap-6 sm:grid-cols-2">
-        <Link
-          href="/faq"
-          className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 no-underline shadow-sm transition hover:border-violet-200 hover:shadow-md"
-        >
-          <span className="text-3xl">❓</span>
-          <h2 className="mt-4 font-semibold text-slate-900">FAQ</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Find quick answers to common questions.
-          </p>
-          <span className="mt-4 text-sm font-medium text-violet-600">View FAQ →</span>
-        </Link>
-
-        <Link
-          href="/support/tickets/new"
-          className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 no-underline shadow-sm transition hover:border-violet-200 hover:shadow-md"
-        >
-          <span className="text-3xl">🎫</span>
-          <h2 className="mt-4 font-semibold text-slate-900">Create a Ticket</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Open a support ticket for personalized help.
-          </p>
-          <span className="mt-4 text-sm font-medium text-violet-600">Create ticket →</span>
-        </Link>
-
-        <Link
-          href="/support/tickets"
-          className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 no-underline shadow-sm transition hover:border-violet-200 hover:shadow-md"
-        >
-          <span className="text-3xl">📋</span>
-          <h2 className="mt-4 font-semibold text-slate-900">My Tickets</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            View and manage your support tickets.
-          </p>
-          <span className="mt-4 text-sm font-medium text-violet-600">View tickets →</span>
-        </Link>
-
-        <Link
-          href="/contact"
-          className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 no-underline shadow-sm transition hover:border-violet-200 hover:shadow-md"
-        >
-          <span className="text-3xl">✉️</span>
-          <h2 className="mt-4 font-semibold text-slate-900">Contact Us</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            Email us or use live chat for assistance.
-          </p>
-          <span className="mt-4 text-sm font-medium text-violet-600">Contact →</span>
-        </Link>
-
-        <Link
-          href="/my-esims"
-          className="flex flex-col rounded-2xl border border-slate-200 bg-white p-6 no-underline shadow-sm transition hover:border-violet-200 hover:shadow-md"
-        >
-          <span className="text-3xl">📶</span>
-          <h2 className="mt-4 font-semibold text-slate-900">My eSIMs</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            View your active eSIMs, QR codes, data usage, and top-up options.
-          </p>
-          <span className="mt-4 text-sm font-medium text-violet-600">Go to My eSIMs →</span>
-        </Link>
-      </div>
-
-      <div className="mt-12 rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="font-semibold text-slate-900">24/7 Support</h2>
-        <p className="mt-2 text-slate-600">
-          Our support team is available around the clock. Reach us via email at{' '}
-          <a href="mailto:support@esimstore.com" className="font-medium text-violet-600 hover:text-violet-700">
-            support@esimstore.com
-          </a>
-          . We typically respond within 24 hours.
-        </p>
-      </div>
-    </div>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[50vh] items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-violet-500" />
+        </div>
+      }
+    >
+      <SupportContent />
+    </Suspense>
   );
 }

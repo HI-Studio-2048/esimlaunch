@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { DNSInstructions } from "@/components/shared/DNSInstructions";
-import { markStepCompleted, getOnboardingProgress } from "@/lib/onboardingProgress";
+import { markStepCompleted, getOnboardingProgress, updateOnboardingProgress } from "@/lib/onboardingProgress";
 import { cn } from "@/lib/utils";
 import { apiClient } from "@/lib/api";
 import { Elements, CardElement, useStripe, useElements } from "@stripe/react-stripe-js";
@@ -56,11 +56,15 @@ const Onboarding = () => {
   const { setConfig } = useDemoStore();
   const { user, setUser } = useAuth();
 
-  // Check if onboarding is already completed
+  // Check if onboarding is already completed; allow resuming from last step if skipped
   useEffect(() => {
     const progress = getOnboardingProgress();
     if (progress.store) {
       navigate("/dashboard", { replace: true });
+      return;
+    }
+    if (progress.lastStepReached != null && progress.lastStepReached > 0) {
+      setCurrentStep(progress.lastStepReached);
     }
   }, [navigate]);
 
@@ -134,6 +138,15 @@ const Onboarding = () => {
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
+  };
+
+  const handleSkip = () => {
+    updateOnboardingProgress({ lastStepReached: currentStep });
+    toast({
+      title: "Onboarding paused",
+      description: "You can complete setup anytime by visiting the onboarding page again.",
+    });
+    navigate("/dashboard", { replace: true });
   };
 
   const handleLaunch = async () => {
@@ -321,7 +334,7 @@ const Onboarding = () => {
         </div>
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <Button
             variant="outline"
             onClick={handleBack}
@@ -331,6 +344,17 @@ const Onboarding = () => {
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
+
+          {/* Skip button - only on Easy Way steps 1 and 2 */}
+          {serviceType === "EASY" && currentStep >= 1 && currentStep <= 2 && (
+            <Button
+              variant="ghost"
+              onClick={handleSkip}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              Skip for now
+            </Button>
+          )}
 
           {currentStep < 2 ? (
             <Button

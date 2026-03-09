@@ -33,6 +33,104 @@ function formatDataSize(bytes: number): string {
   return `${bytes}B`;
 }
 
+// Helper: create slug from location name (matches esimlaunch-template format)
+function makeLocationSlug(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-esim';
+}
+
+// Helper: store is accessible via public API (isActive or admin workflow in_progress/completed)
+function isStorePubliclyAccessible(store: { isActive: boolean; adminStatus?: string | null }): boolean {
+  if (store.isActive) return true;
+  const status = store.adminStatus ?? '';
+  return status === 'in_progress' || status === 'completed';
+}
+
+// Helper: build store public response (packages, packagesTemplate, locations)
+async function buildStorePublicResponse(store: any) {
+  let packages: any[] = [];
+  let packagesTemplate: any[] = [];
+  const locationsMap = new Map<string, { code: string; name: string }>();
+
+  try {
+    const result = await esimAccessService.getPackages();
+    if (result.success && result.obj?.packageList) {
+      let allPackages = result.obj.packageList;
+      const selectedPackages = store.selectedPackages as string[] | null;
+      if (selectedPackages && selectedPackages.length > 0) {
+        const filtered = allPackages.filter((pkg: any) =>
+          selectedPackages.includes(pkg.packageCode) || selectedPackages.includes(pkg.slug)
+        );
+        // Fallback: if filter matches nothing (e.g. format mismatch), use all packages
+        allPackages = filtered.length > 0 ? filtered : allPackages;
+      }
+      const pricingMarkup = store.pricingMarkup as any;
+
+      for (const pkg of allPackages) {
+        const basePrice = pkg.price / 10000;
+        const finalPriceUsd = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode);
+        const priceProviderUnits = Math.round(finalPriceUsd * 10000);
+
+        packages.push({
+          packageCode: pkg.packageCode,
+          slug: pkg.slug,
+          name: pkg.name,
+          data: formatDataSize(pkg.volume),
+          validity: `${pkg.duration} ${pkg.durationUnit}`,
+          price: finalPriceUsd,
+          currency: 'USD',
+          location: pkg.location,
+          locationCode: pkg.locationCode,
+          activeType: pkg.activeType,
+          dataType: pkg.dataType,
+        });
+
+        packagesTemplate.push({
+          packageCode: pkg.packageCode,
+          slug: pkg.slug,
+          name: pkg.name,
+          location: pkg.location,
+          locationCode: pkg.locationCode,
+          volume: pkg.volume >= 1048576 ? Math.round(pkg.volume / 1048576) : pkg.volume,
+          duration: pkg.duration ?? 0,
+          durationUnit: (pkg.durationUnit ?? 'day').toString().toLowerCase().replace(/s$/, '') === 'month' ? 'month' : 'day',
+          price: priceProviderUnits,
+          currencyCode: pkg.currencyCode ?? 'USD',
+          supportTopUpType: typeof pkg.supportTopUpType === 'string' ? parseInt(pkg.supportTopUpType, 10) : (pkg.supportTopUpType ?? 0),
+        });
+
+        if (pkg.locationCode && pkg.location) {
+          locationsMap.set(pkg.locationCode, { code: pkg.locationCode, name: pkg.location });
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Failed to fetch eSIM Access packages:', err);
+  }
+
+  const locations = Array.from(locationsMap.values()).map(({ code, name }) => ({
+    code,
+    name,
+    type: 1 as const,
+    slug: makeLocationSlug(name),
+  }));
+
+  return {
+    branding: {
+      businessName: store.businessName,
+      primaryColor: store.primaryColor,
+      secondaryColor: store.secondaryColor,
+      accentColor: store.accentColor,
+      logoUrl: store.logoUrl || null,
+    },
+    packages,
+    packagesTemplate,
+    locations,
+    currency: store.defaultCurrency || 'USD',
+    templateKey: store.templateKey || 'default',
+    templateSettings: (store.templateSettings as object) || undefined,
+  };
+}
+
 /**
  * GET /api/stores/:storeId/public
  * Public endpoint — no authentication required.
@@ -55,12 +153,13 @@ router.get('/:storeId/public', async (req, res) => {
         pricingMarkup: true,
         defaultCurrency: true,
         isActive: true,
+        adminStatus: true,
         templateKey: true,
         templateSettings: true,
       },
     });
 
-    if (!store || !store.isActive) {
+    if (!store || !isStorePubliclyAccessible(store)) {
       return res.status(404).json({
         success: false,
         errorCode: 'STORE_NOT_FOUND',
@@ -68,57 +167,8 @@ router.get('/:storeId/public', async (req, res) => {
       });
     }
 
-    let packages: any[] = [];
-    try {
-      const result = await esimAccessService.getPackages();
-      if (result.success && result.obj?.packageList) {
-        let allPackages = result.obj.packageList;
-        const selectedPackages = store.selectedPackages as string[] | null;
-        if (selectedPackages && selectedPackages.length > 0) {
-          allPackages = allPackages.filter(pkg =>
-            selectedPackages.includes(pkg.packageCode) ||
-            selectedPackages.includes(pkg.slug)
-          );
-        }
-        const pricingMarkup = store.pricingMarkup as any;
-        packages = allPackages.map(pkg => {
-          const basePrice = pkg.price / 10000;
-          const finalPrice = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode);
-          return {
-            packageCode: pkg.packageCode,
-            slug: pkg.slug,
-            name: pkg.name,
-            data: formatDataSize(pkg.volume),
-            validity: `${pkg.duration} ${pkg.durationUnit}`,
-            price: finalPrice,
-            currency: 'USD',
-            location: pkg.location,
-            locationCode: pkg.locationCode,
-            activeType: pkg.activeType,
-            dataType: pkg.dataType,
-          };
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch eSIM Access packages:', err);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        branding: {
-          businessName: store.businessName,
-          primaryColor: store.primaryColor,
-          secondaryColor: store.secondaryColor,
-          accentColor: store.accentColor,
-          logoUrl: store.logoUrl || null,
-        },
-        packages,
-        currency: store.defaultCurrency || 'USD',
-        templateKey: store.templateKey || 'default',
-        templateSettings: (store.templateSettings as object) || undefined,
-      },
-    });
+    const data = await buildStorePublicResponse(store);
+    res.json({ success: true, data });
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -150,12 +200,13 @@ router.get('/by-subdomain/:subdomain', async (req, res) => {
         pricingMarkup: true,
         defaultCurrency: true,
         isActive: true,
+        adminStatus: true,
         templateKey: true,
         templateSettings: true,
       },
     });
 
-    if (!store || !store.isActive) {
+    if (!store || !isStorePubliclyAccessible(store)) {
       return res.status(404).json({
         success: false,
         errorCode: 'STORE_NOT_FOUND',
@@ -163,58 +214,8 @@ router.get('/by-subdomain/:subdomain', async (req, res) => {
       });
     }
 
-    let packages: any[] = [];
-    try {
-      const result = await esimAccessService.getPackages();
-      if (result.success && result.obj?.packageList) {
-        let allPackages = result.obj.packageList;
-        const selectedPackages = store.selectedPackages as string[] | null;
-        if (selectedPackages && selectedPackages.length > 0) {
-          allPackages = allPackages.filter(pkg =>
-            selectedPackages.includes(pkg.packageCode) ||
-            selectedPackages.includes(pkg.slug)
-          );
-        }
-        const pricingMarkup = store.pricingMarkup as any;
-        packages = allPackages.map(pkg => {
-          const basePrice = pkg.price / 10000;
-          const finalPrice = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode);
-          return {
-            packageCode: pkg.packageCode,
-            slug: pkg.slug,
-            name: pkg.name,
-            data: formatDataSize(pkg.volume),
-            validity: `${pkg.duration} ${pkg.durationUnit}`,
-            price: finalPrice,
-            currency: 'USD',
-            location: pkg.location,
-            locationCode: pkg.locationCode,
-            activeType: pkg.activeType,
-            dataType: pkg.dataType,
-          };
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch eSIM Access packages:', err);
-    }
-
-    res.json({
-      success: true,
-      data: {
-        storeId: store.id,
-        branding: {
-          businessName: store.businessName,
-          primaryColor: store.primaryColor,
-          secondaryColor: store.secondaryColor,
-          accentColor: store.accentColor,
-          logoUrl: store.logoUrl || null,
-        },
-        packages,
-        currency: store.defaultCurrency || 'USD',
-        templateKey: store.templateKey || 'default',
-        templateSettings: (store.templateSettings as object) || undefined,
-      },
-    });
+    const data = await buildStorePublicResponse(store);
+    res.json({ success: true, data: { storeId: store.id, ...data } });
   } catch (error: any) {
     res.status(500).json({
       success: false,

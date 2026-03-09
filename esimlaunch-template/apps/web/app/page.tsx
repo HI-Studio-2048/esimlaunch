@@ -2,29 +2,40 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { apiFetch } from '@/lib/apiClient';
-import { useCurrency } from '@/hooks/useCurrency';
 import type { Location } from '@/lib/types';
+import { getRegionForCountry } from '@/lib/regions';
+import { REGION_NAMES, type Region } from '@/lib/regions';
+import { SearchBar } from '@/components/SearchBar';
+import { CountryCard } from '@/components/CountryCard';
+import { CountrySkeleton } from '@/components/skeletons/CountrySkeleton';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Search } from 'lucide-react';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
-interface CountrySummary {
-  code: string;
-  name: string;
-  slug: string;
-  minPriceUsd: number;
-}
+const REGION_ORDER: Region[] = [
+  'asia',
+  'europe',
+  'north-america',
+  'south-america',
+  'africa',
+  'oceania',
+  'global',
+];
 
 /**
  * Homepage — Browse locations.
  * Inspired by clean eSIM platform layouts: central hero search, uniform country cards, education section.
  */
 export default function HomePage() {
-  const { formatUsdCents } = useCurrency();
   const [locations, setLocations] = useState<Location[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [summaries, setSummaries] = useState<CountrySummary[]>([]);
-  const [allSummaries, setAllSummaries] = useState<Record<string, number>>({});
 
   useEffect(() => {
     apiFetch<Location[]>('/esim/locations')
@@ -33,37 +44,45 @@ export default function HomePage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => {
-    apiFetch<CountrySummary[]>('/esim/summary?codes=US,UK,FR,JP,AU')
-      .then((data) => {
-        setSummaries(data);
-        const map: Record<string, number> = {};
-        data.forEach((s) => { map[s.slug] = s.minPriceUsd; });
-        setAllSummaries(map);
-      })
-      .catch(() => {});
-  }, []);
-
   const countries = useMemo(
     () => locations.filter((l) => l.type === 1),
     [locations],
   );
-
-  const regions = useMemo(() => locations.filter((l) => l.type === 2), [locations]);
 
   const filtered = useMemo(() => {
     let list = countries;
     if (search.trim()) {
       const q = search.toLowerCase();
       list = countries.filter(
-        (l) => l.name.toLowerCase().includes(q) || l.code.toLowerCase().includes(q),
+        (l) =>
+          l.name.toLowerCase().includes(q) || l.code.toLowerCase().includes(q),
       );
     }
-    // Put Israel near the bottom (last)
     const isIsrael = (l: Location) =>
       l.name.toLowerCase() === 'israel' || l.code.toUpperCase() === 'IL';
     return [...list.filter((l) => !isIsrael(l)), ...list.filter(isIsrael)];
   }, [countries, search]);
+
+  const countriesByRegion = useMemo(() => {
+    const map: Record<Region, Location[]> = {
+      asia: [],
+      europe: [],
+      'north-america': [],
+      'south-america': [],
+      africa: [],
+      oceania: [],
+      global: [],
+    };
+    for (const loc of filtered) {
+      const region = getRegionForCountry(loc.code) ?? 'global';
+      if (map[region]) {
+        map[region].push(loc);
+      } else {
+        map.global.push(loc);
+      }
+    }
+    return map;
+  }, [filtered]);
 
   return (
     <div className="min-h-screen bg-white">
@@ -81,27 +100,25 @@ export default function HomePage() {
           </div>
 
           {/* Central search */}
-          <div className="mt-10">
-            <div className="relative flex items-center rounded-2xl bg-white shadow-xl">
-              <span className="absolute left-5 text-slate-400">🔍</span>
-              <input
-                type="text"
-                placeholder="Select your destination, connect instantly"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-2xl py-4 pl-12 pr-24 text-slate-900 placeholder:text-slate-400 focus:outline-none"
-              />
-              <Link
-                href={
-                  filtered.length > 0
-                    ? `/countries/${filtered[0].slug}`
-                    : '#destinations'
-                }
-                className="absolute right-2 flex h-10 w-10 items-center justify-center rounded-full bg-violet-600 text-white transition hover:bg-violet-500"
-              >
-                →
-              </Link>
-            </div>
+          <div className="mt-10 flex w-full justify-center">
+            <SearchBar
+              value={search}
+              onChange={setSearch}
+              placeholder="Select your destination, connect instantly"
+              className="bg-white"
+              trailing={
+                <Link
+                  href={
+                    filtered.length > 0
+                      ? `/countries/${filtered[0].slug}`
+                      : '#destinations'
+                  }
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-600 text-white transition hover:bg-violet-500"
+                >
+                  →
+                </Link>
+              }
+            />
           </div>
 
           {/* Trust / value badges */}
@@ -132,53 +149,24 @@ export default function HomePage() {
 
       {!loading && (
         <>
-          {/* Popular Plans */}
-          {summaries.length > 0 && (
-            <section className="border-b border-slate-200 bg-white py-12">
-              <div className="mx-auto max-w-6xl px-4 lg:px-8">
-                <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Popular Plans</h2>
-                <p className="mt-2 text-slate-600">Great rates for top destinations</p>
-                <div className="mt-8 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-                  {summaries.map((s) => (
-                    <Link
-                      key={s.code}
-                      href={`/countries/${s.slug}`}
-                      className="group flex flex-col items-center rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:border-violet-200 hover:shadow-md"
-                    >
-                      <span className="text-3xl">
-                        {s.slug.startsWith('united-states') ? '🇺🇸' : s.slug.startsWith('united-kingdom') ? '🇬🇧' : s.slug.startsWith('france') ? '🇫🇷' : s.slug.startsWith('japan') ? '🇯🇵' : s.slug.startsWith('australia') ? '🇦🇺' : '🌍'}
-                      </span>
-                      <p className="mt-2 font-semibold text-slate-900 group-hover:text-violet-700">{s.name}</p>
-                      <p className="mt-1 text-lg font-bold text-violet-600">
-                        From {formatUsdCents(Math.round(s.minPriceUsd * 100))}
-                      </p>
-                    </Link>
-                  ))}
-                </div>
+          {/* Browse by Region (continent-based) */}
+          <section className="border-b border-slate-200 bg-slate-50/50 py-12">
+            <div className="mx-auto max-w-6xl px-4 lg:px-8">
+              <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Browse by Region</h2>
+              <p className="mt-2 text-slate-600">Explore eSIM plans by continent</p>
+              <div className="mt-8 flex flex-wrap gap-4">
+                {REGION_ORDER.map((region) => (
+                  <Link
+                    key={region}
+                    href={`/regions/${region}`}
+                    className="rounded-xl border border-slate-200 bg-white px-6 py-4 font-medium text-slate-800 shadow-sm transition hover:border-violet-200 hover:text-violet-700"
+                  >
+                    {REGION_NAMES[region]}
+                  </Link>
+                ))}
               </div>
-            </section>
-          )}
-
-          {/* Browse by Region */}
-          {regions.length > 0 && (
-            <section className="border-b border-slate-200 bg-slate-50/50 py-12">
-              <div className="mx-auto max-w-6xl px-4 lg:px-8">
-                <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Browse by Region</h2>
-                <p className="mt-2 text-slate-600">Multi-country plans for broader coverage</p>
-                <div className="mt-8 flex flex-wrap gap-4">
-                  {regions.map((loc) => (
-                      <Link
-                        key={loc.code}
-                        href={`/countries/${loc.slug}`}
-                        className="rounded-xl border border-slate-200 bg-white px-6 py-4 font-medium text-slate-800 shadow-sm transition hover:border-violet-200 hover:text-violet-700"
-                      >
-                        {loc.name}
-                      </Link>
-                    ))}
-                </div>
-              </div>
-            </section>
-          )}
+            </div>
+          </section>
 
           {/* Countries — uniform card grid */}
           <section id="destinations" className="mx-auto max-w-6xl px-4 py-16 lg:px-8">
@@ -192,21 +180,114 @@ export default function HomePage() {
             </div>
 
             {filtered.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 py-20 text-center">
-                <p className="text-slate-500">No countries found for &quot;{search}&quot;.</p>
-              </div>
+              <EmptyState
+                title="No countries found"
+                description={search ? `No destinations match "${search}". Try a different search.` : undefined}
+                icon={Search}
+                action={
+                  search
+                    ? { label: 'Clear search', onClick: () => setSearch('') }
+                    : undefined
+                }
+              />
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                {filtered.map((loc) => (
-                  <CountryCard
-                    key={loc.code}
-                    loc={loc}
-                    minPriceUsd={allSummaries[loc.slug]}
-                    formatUsdCents={formatUsdCents}
-                  />
-                ))}
+              <div className="space-y-10">
+                {REGION_ORDER.map((region) => {
+                  const locs = countriesByRegion[region];
+                  if (!locs || locs.length === 0) return null;
+                  return (
+                    <div key={region}>
+                      <h3 className="mb-4 text-lg font-semibold text-slate-900">
+                        {REGION_NAMES[region]}
+                      </h3>
+                      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                        {locs.map((loc) => (
+                          <CountryCard
+                            key={loc.code}
+                            country={{
+                              code: loc.code,
+                              name: loc.name,
+                              slug: loc.slug,
+                              flagUrl: loc.flagUrl,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
+          </section>
+
+          {/* FAQ */}
+          <section className="border-b border-slate-200 bg-white py-16">
+            <div className="mx-auto max-w-3xl px-4 lg:px-8">
+              <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+                Frequently Asked Questions
+              </h2>
+              <p className="mt-2 text-slate-600">
+                Quick answers about eSIMs and our service.
+              </p>
+              <Accordion type="single" collapsible className="mt-8">
+                <AccordionItem value="what-is-esim">
+                  <AccordionTrigger className="text-left">
+                    What is an eSIM?
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    An eSIM is a digital SIM that lets you connect to a cellular network without a physical SIM card. You install it by scanning a QR code or entering an activation code.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="device-support">
+                  <AccordionTrigger className="text-left">
+                    Is my phone compatible with eSIM?
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    Most newer iPhones (iPhone XS and later) and many Android phones (Google Pixel, Samsung Galaxy S20+) support eSIM.{' '}
+                    <Link href="/support/device-check" className="text-violet-600 hover:underline">
+                      Check your device compatibility
+                    </Link>
+                    .
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="delivery">
+                  <AccordionTrigger className="text-left">
+                    When do I get my eSIM?
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    You receive your QR code and activation instructions by email immediately after payment. You can also find it in My eSIMs once signed in.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="dual-sim">
+                  <AccordionTrigger className="text-left">
+                    Can I keep my regular SIM?
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    Yes. eSIM works alongside your physical SIM. Your WhatsApp number stays the same. Use apps like WhatsApp or FaceTime for calls and messages.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="unused-data">
+                  <AccordionTrigger className="text-left">
+                    What if I don&apos;t use all my data?
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    Unused data does not roll over. Use your data before the plan expires. Some plans support top-ups if you need more.
+                  </AccordionContent>
+                </AccordionItem>
+                <AccordionItem value="refunds">
+                  <AccordionTrigger className="text-left">
+                    What&apos;s your refund policy?
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    Full refunds are available within 14 days if you haven&apos;t activated. After activation, refunds are generally not available. See our{' '}
+                    <Link href="/refund" className="text-violet-600 hover:underline">
+                      Refund Policy
+                    </Link>
+                    .
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </div>
           </section>
 
           {/* Things to know about eSIM */}
@@ -286,59 +367,5 @@ export default function HomePage() {
         </>
       )}
     </div>
-  );
-}
-
-function CountryCard({
-  loc,
-  minPriceUsd,
-  formatUsdCents,
-}: {
-  loc: Location;
-  minPriceUsd?: number;
-  formatUsdCents: (usdCents: number) => string;
-}) {
-  return (
-    <Link
-      href={`/countries/${loc.slug}`}
-      className="group relative block overflow-hidden rounded-2xl bg-white shadow-md ring-1 ring-slate-200/60 transition hover:shadow-lg hover:shadow-violet-500/20 hover:ring-violet-300"
-    >
-      <div className="relative aspect-[4/3] overflow-hidden bg-gradient-to-br from-slate-100 to-slate-200">
-        {loc.flagUrl && loc.type === 1 ? (
-          <Image
-            src={loc.flagUrl}
-            alt={loc.name}
-            fill
-            className="object-cover transition duration-300 group-hover:scale-105"
-            unoptimized
-            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-4xl font-bold text-slate-400">
-            {loc.code.slice(0, 2)}
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-        {/* Flag overlay top-left */}
-        {loc.flagUrl && loc.type === 1 && (
-          <div className="absolute left-3 top-3 overflow-hidden rounded-full border-2 border-white shadow">
-            <Image
-              src={loc.flagUrl}
-              alt=""
-              width={32}
-              height={24}
-              className="object-cover"
-              unoptimized
-            />
-          </div>
-        )}
-      </div>
-      <div className="p-4">
-        <p className="font-semibold text-slate-900 group-hover:text-violet-700">{loc.name}</p>
-        <p className="mt-1 text-sm text-slate-500">
-          {minPriceUsd != null ? `From ${formatUsdCents(Math.round(minPriceUsd * 100))}` : 'View eSIM plans'}
-        </p>
-      </div>
-    </Link>
   );
 }

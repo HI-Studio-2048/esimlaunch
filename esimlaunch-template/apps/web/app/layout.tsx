@@ -6,6 +6,9 @@ import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { Breadcrumbs } from '@/components/Breadcrumbs';
+import { Toaster } from '@/components/ui/toaster';
+import { ErrorBoundary } from '@/components/ui/error-boundary';
+import { ErrorToastProvider } from '@/components/ui/error-toast-provider';
 
 const fontJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -30,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               {children}
             </main>
             <Footer />
+            <Toaster />
           </CurrencyProvider>
         </body>
       </html>

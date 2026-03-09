@@ -1,9 +1,37 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { EsimService } from './esim.service';
+import { StoreConfigService } from './store-config.service';
 
 @Controller('esim')
 export class EsimController {
-  constructor(private readonly esimService: EsimService) {}
+  constructor(
+    private readonly esimService: EsimService,
+    private readonly storeConfig: StoreConfigService,
+  ) {}
+
+  /**
+   * GET /api/esim/store-config-status
+   * Debug endpoint: shows whether store config is linked and fetch status.
+   */
+  @Get('store-config-status')
+  async getStoreConfigStatus() {
+    const isLinked = this.storeConfig.isLinked();
+    if (!isLinked) {
+      return {
+        isLinked: false,
+        message: 'STORE_ID or STORE_SUBDOMAIN not set; using esimlaunch API directly',
+      };
+    }
+    const config = await this.storeConfig.getConfig();
+    return {
+      isLinked: true,
+      fetchSuccess: !!config,
+      storeId: config?.storeId,
+      locationsCount: config?.locations?.length ?? 0,
+      packagesCount: config?.packagesTemplate?.length ?? 0,
+      currency: config?.currency,
+    };
+  }
 
   /**
    * GET /api/esim/locations

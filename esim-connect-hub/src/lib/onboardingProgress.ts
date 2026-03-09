@@ -8,6 +8,8 @@ export interface OnboardingProgress {
   store: boolean;
   domain: boolean;
   firstSale: boolean;
+  /** Last step reached when user skipped; allows resuming */
+  lastStepReached?: number;
 }
 
 // Get user-specific storage key
@@ -49,6 +51,7 @@ export function getOnboardingProgress(): OnboardingProgress {
     store: false,
     domain: false,
     firstSale: false,
+    lastStepReached: undefined,
   };
 }
 

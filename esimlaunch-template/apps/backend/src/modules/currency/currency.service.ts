@@ -17,13 +17,24 @@ export class CurrencyService {
 
   private async fetchRates(): Promise<void> {
     if (Date.now() < this.cacheExpiry) return;
+    const apiKey = this.config.get<string>('EXCHANGE_RATE_API_KEY');
     try {
-      // Using exchangerate.host (free, no key required)
-      const res = await axios.get('https://api.exchangerate.host/latest?base=USD', {
-        timeout: 10_000,
-      });
-      const rates: Record<string, number> = res.data?.rates ?? {};
-      this.rateCache = new Map([['USD', 1], ...Object.entries(rates)]);
+      if (apiKey) {
+        // exchangerate-api.com (uses API key for higher limits)
+        const res = await axios.get(
+          `https://v6.exchangerate-api.com/v6/${apiKey}/latest/USD`,
+          { timeout: 10_000 },
+        );
+        const rates: Record<string, number> = res.data?.conversion_rates ?? {};
+        this.rateCache = new Map([['USD', 1], ...Object.entries(rates)]);
+      } else {
+        // Fallback: exchangerate.host (free, no key)
+        const res = await axios.get('https://api.exchangerate.host/latest?base=USD', {
+          timeout: 10_000,
+        });
+        const rates: Record<string, number> = res.data?.rates ?? {};
+        this.rateCache = new Map([['USD', 1], ...Object.entries(rates)]);
+      }
       this.cacheExpiry = Date.now() + 60 * 60 * 1000; // 1 hour
     } catch (e) {
       this.logger.warn('Failed to fetch exchange rates, using 1:1 fallback');

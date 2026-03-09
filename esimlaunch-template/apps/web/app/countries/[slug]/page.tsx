@@ -63,8 +63,31 @@ export default function CountryPage() {
 
   const filteredPlans = useMemo(() => {
     if (activeTab === 'all') return plans;
-    if (activeTab === '7d') return plans.filter((p) => p.duration === 7 && p.durationUnit === 'day');
-    if (activeTab === '30d') return plans.filter((p) => p.duration === 30 && p.durationUnit === 'day');
+    type PlanExt = Plan & { periodNum?: number; day?: number; periodUnit?: string };
+    const getDays = (p: PlanExt) =>
+      p.duration ?? p.periodNum ?? (p as PlanExt).day ?? 0;
+    const isDayPlan = (p: PlanExt) => {
+      const u = String(p.durationUnit ?? p.periodUnit ?? 'day').toLowerCase();
+      return u.startsWith('day') || u === 'd';
+    };
+    const matchesDuration = (p: PlanExt, days: number) => {
+      const d = Number(getDays(p));
+      const u = (p.durationUnit ?? p.periodUnit ?? 'day').toLowerCase();
+      const isMonth = u === 'month' || u === 'months';
+      if (days === 7) {
+        if (d === 7 && isDayPlan(p)) return true;
+      } else if (days === 30) {
+        if (d === 30 && isDayPlan(p)) return true;
+        if (d === 1 && isMonth) return true; // 1 month ≈ 30 days
+      }
+      // Fallback: plan name contains "X day(s)" or "1 month"
+      const name = (p.name ?? '').toLowerCase();
+      if (days === 7) return /\b7\s*day/.test(name);
+      if (days === 30) return /\b30\s*day/.test(name) || /\b1\s*month/.test(name);
+      return false;
+    };
+    if (activeTab === '7d') return plans.filter((p) => matchesDuration(p as PlanExt, 7));
+    if (activeTab === '30d') return plans.filter((p) => matchesDuration(p as PlanExt, 30));
     return plans;
   }, [plans, activeTab]);
 

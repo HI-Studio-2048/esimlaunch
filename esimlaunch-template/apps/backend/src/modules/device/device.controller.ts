@@ -6,9 +6,23 @@ import { DeviceService } from './device.service';
 export class DeviceController {
   constructor(private readonly deviceService: DeviceService) {}
 
-  /** GET /device/check — returns compatibility info. Uses query param or request User-Agent. */
+  /** GET /device/models?q= — search device models for autocomplete */
+  @Get('models')
+  models(@Query('q') q: string) {
+    return { models: this.deviceService.searchModels(q ?? '') };
+  }
+
+  /** GET /device/check — compatibility by User-Agent, or by model (+ optional country) */
   @Get('check')
-  check(@Query('user-agent') userAgent: string, @Req() req: Request) {
+  check(
+    @Query('user-agent') userAgent: string,
+    @Query('model') model: string,
+    @Query('country') country: string,
+    @Req() req: Request,
+  ) {
+    if (model) {
+      return this.deviceService.checkByModel(model, country);
+    }
     const ua = userAgent ?? req.headers['user-agent'];
     return this.deviceService.checkCompatibility(ua);
   }

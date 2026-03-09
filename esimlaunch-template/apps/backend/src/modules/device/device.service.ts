@@ -30,6 +30,50 @@ const STATIC_DEVICE_LIST = [
   'Other eSIM-capable devices',
 ];
 
+/** Device models for autocomplete - common eSIM-capable devices */
+const DEVICE_MODELS = [
+  'iPhone 15 Pro Max',
+  'iPhone 15 Pro',
+  'iPhone 15',
+  'iPhone 14 Pro Max',
+  'iPhone 14 Pro',
+  'iPhone 14',
+  'iPhone 13 Pro Max',
+  'iPhone 13 Pro',
+  'iPhone 13',
+  'iPhone 12 Pro Max',
+  'iPhone 12 Pro',
+  'iPhone 12',
+  'iPhone XS',
+  'iPhone XR',
+  'iPhone 11',
+  'Samsung Galaxy S24 Ultra',
+  'Samsung Galaxy S24',
+  'Samsung Galaxy S23 Ultra',
+  'Samsung Galaxy S23',
+  'Samsung Galaxy S22',
+  'Samsung Galaxy S21',
+  'Samsung Galaxy S20',
+  'Samsung Galaxy Z Fold 5',
+  'Samsung Galaxy Z Flip 5',
+  'Google Pixel 8 Pro',
+  'Google Pixel 8',
+  'Google Pixel 7',
+  'Google Pixel 6',
+  'Google Pixel Fold',
+  'iPad Pro',
+  'iPad Air',
+  'iPad mini',
+];
+
+export interface DeviceCheckResult {
+  model: string;
+  brand: string;
+  supported: boolean;
+  notes: string[];
+  regionalNotes: Record<string, string>;
+}
+
 @Injectable()
 export class DeviceService {
   checkCompatibility(userAgent?: string): { compatible: boolean; devices?: string[] } {
@@ -44,6 +88,43 @@ export class DeviceService {
     return {
       compatible,
       devices: STATIC_DEVICE_LIST,
+    };
+  }
+
+  /** Search device models by query string */
+  searchModels(q: string): string[] {
+    if (!q || q.length < 2) return [];
+    const lower = q.toLowerCase();
+    return DEVICE_MODELS.filter((m) => m.toLowerCase().includes(lower)).slice(0, 15);
+  }
+
+  /** Check compatibility by model name (and optional country) */
+  checkByModel(model: string, _country?: string): DeviceCheckResult {
+    const modelLower = model.toLowerCase().trim();
+    let supported = false;
+    const notes: string[] = [];
+    const regionalNotes: Record<string, string> = {};
+
+    for (const { pattern } of COMPATIBLE_PATTERNS) {
+      if (pattern.test(modelLower)) {
+        supported = true;
+        break;
+      }
+    }
+
+    if (!supported) {
+      notes.push('This device may not support eSIM. Please verify with your carrier or manufacturer.');
+    } else {
+      notes.push('Your device supports eSIM. You can purchase and install an eSIM plan.');
+    }
+
+    const brand = model.split(' ')[0] ?? 'Unknown';
+    return {
+      model,
+      brand,
+      supported,
+      notes,
+      regionalNotes,
     };
   }
 }

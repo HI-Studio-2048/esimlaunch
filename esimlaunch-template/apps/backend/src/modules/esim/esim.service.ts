@@ -2,13 +2,15 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma.service';
 import { EsimlaunchClient, LocationItem, PackageItem } from '@esimlaunch-template/sdk';
+import { StoreConfigService } from './store-config.service';
 
 /**
  * EsimService wraps the esimlaunch SDK.
+ * When STORE_ID or STORE_SUBDOMAIN is set, uses StoreConfigService (main backend) instead.
  * Responsibilities:
  *  - Normalize location data (type 1 = country, type 2 = region)
  *  - Normalize package data (volume MB→GB display, price provider units→USD)
- *  - Apply admin markup to prices
+ *  - Apply admin markup to prices (only when not using store config)
  *  - Check and honour mock mode
  *  - Generate flag image URLs
  */
@@ -20,6 +22,7 @@ export class EsimService {
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
+    private storeConfig: StoreConfigService,
   ) {
     this.client = new EsimlaunchClient({
       apiBase: this.config.getOrThrow<string>('ESIMLAUNCH_API_BASE'),
@@ -45,11 +48,16 @@ export class EsimService {
   }
 
   async getMarkupPercent(): Promise<number> {
+    if (this.storeConfig.isLinked()) return 0; // Store config packages already have markup applied
     const s = await this.getSettings();
     return s?.markupPercent ?? 0;
   }
 
   async getDefaultCurrency(): Promise<string> {
+    if (this.storeConfig.isLinked()) {
+      const config = await this.storeConfig.getConfig();
+      return config?.currency ?? 'USD';
+    }
     const s = await this.getSettings();
     return s?.defaultCurrency ?? 'USD';
   }
@@ -74,6 +82,9 @@ export class EsimService {
 
   /** Return normalised location list. type 1 = country, type 2 = region. */
   async getLocations(): Promise<LocationItem[]> {
+    if (this.storeConfig.isLinked()) {
+      return this.storeConfig.getLocations();
+    }
     const res = await this.client.getLocations();
 
     // esimlaunch /api/v1/regions returns { success, obj: RegionInfo[] }.
@@ -192,6 +203,9 @@ export class EsimService {
     if (await this.isMockMode()) {
       return this.mockPackages(locationCode);
     }
+    if (this.storeConfig.isLinked()) {
+      return this.storeConfig.getPackagesByLocation(locationCode);
+    }
 
     const res = await this.client.getPackagesByLocation(locationCode);
     if (!res.success || !res.obj?.packageList) {
@@ -201,16 +215,30 @@ export class EsimService {
 
     const markup = await this.getMarkupPercent();
 
-    return res.obj.packageList.map((pkg) => ({
-      ...pkg,
-      // Apply markup to displayed price (keep provider units)
-      price: markup > 0 ? Math.round(pkg.price * (1 + markup / 100)) : pkg.price,
-    }));
+    return res.obj.packageList.map((pkg: any) => {
+      // Normalize duration fields (API may return periodNum/day/periodUnit, possibly as strings)
+      const rawDuration = pkg.duration ?? pkg.periodNum ?? pkg.day;
+      const duration = typeof rawDuration === 'number' ? rawDuration : parseInt(String(rawDuration), 10) || 0;
+      const durationUnit = (pkg.durationUnit ?? pkg.periodUnit ?? 'day')
+        .toString()
+        .toLowerCase()
+        .replace(/s$/, '') as 'day' | 'month';
+      return {
+        ...pkg,
+        duration,
+        durationUnit: durationUnit === 'month' ? 'month' : 'day',
+        // Apply markup to displayed price (keep provider units)
+        price: markup > 0 ? Math.round(pkg.price * (1 + markup / 100)) : pkg.price,
+      };
+    });
   }
 
   async getPlanByCode(packageCode: string): Promise<PackageItem | null> {
     if (await this.isMockMode()) {
       return this.mockPackages('MOCK')[0] ?? null;
+    }
+    if (this.storeConfig.isLinked()) {
+      return this.storeConfig.getPackageByCode(packageCode);
     }
 
     const res = await this.client.getPackagesByCode(packageCode);

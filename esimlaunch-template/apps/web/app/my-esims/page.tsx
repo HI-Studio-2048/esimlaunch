@@ -8,6 +8,9 @@ import { redirect } from 'next/navigation';
 import { apiFetch, apiFetchBlob } from '@/lib/apiClient';
 import type { EsimProfile } from '@/lib/types';
 import { formatVolume } from '@/lib/types';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ExpiryCountdown } from '@/components/esim/expiry-countdown';
+import { Wifi } from 'lucide-react';
 
 /**
  * My eSIMs — authenticated users only.
@@ -90,19 +93,15 @@ export default function MyEsimsPage() {
       </div>
 
       {profiles.length === 0 ? (
-        <div className="rounded-card border border-dashed border-slate-200 bg-slate-50/50 py-16 text-center">
-          <div className="mb-4 text-4xl">📶</div>
-          <p className="mb-2 text-slate-600">No eSIMs yet.</p>
-          <p className="mb-6 text-sm text-slate-500">
-            Browse plans and get your first eSIM in minutes.
-          </p>
-          <Link
-            href="/"
-            className="inline-flex rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 px-6 py-3 font-semibold text-white no-underline transition hover:from-violet-600 hover:to-purple-600"
-          >
-            Browse Plans
-          </Link>
-        </div>
+        <EmptyState
+          title="No eSIMs yet"
+          description="Browse plans and get your first eSIM in minutes."
+          icon={Wifi}
+          action={{
+            label: 'Browse Plans',
+            onClick: () => (window.location.href = '/'),
+          }}
+        />
       ) : (
         <>
           {/* Filters */}
@@ -208,7 +207,12 @@ function EsimCard({
             />
           )}
           <div>
-          <p className="font-semibold text-slate-900">{profile.order?.planName ?? 'eSIM Plan'}</p>
+          <Link
+            href={profile.iccid ? `/my-esims/${profile.iccid}` : '#'}
+            className="font-semibold text-slate-900 hover:text-violet-700 hover:underline"
+          >
+            {profile.order?.planName ?? 'eSIM Plan'}
+          </Link>
           {profile.iccid && (
             <p className="mt-1 text-xs text-slate-500">ICCID: {profile.iccid}</p>
           )}
@@ -253,9 +257,15 @@ function EsimCard({
 
       {/* Expiry */}
       {profile.expiredTime && (
-        <p className="mt-3 text-xs text-slate-500">
-          Expires: {new Date(profile.expiredTime).toLocaleDateString()}
-        </p>
+        <div className="mt-3 text-xs">
+          <span className="text-slate-500">Expires: </span>
+          <ExpiryCountdown
+            expiry={profile.expiredTime}
+            iccid={profile.iccid}
+            userEmail={userEmail}
+            className="font-medium"
+          />
+        </div>
       )}
 
       {/* Actions */}
@@ -266,9 +276,9 @@ function EsimCard({
             <ShareQrButton qrCodeUrl={profile.qrCodeUrl} planName={profile.order?.planName ?? 'eSIM'} />
           </>
         )}
-        {profile.esimStatus === 'IN_USE' && (
+        {profile.esimStatus === 'IN_USE' && profile.iccid && (
           <Link
-            href={`/topup/${profile.id}`}
+            href={`/my-esims/${profile.iccid}/topup`}
             className="inline-flex items-center gap-2 rounded-xl border border-sky-300 bg-sky-50 px-4 py-2.5 text-sm font-medium text-sky-700 no-underline transition hover:bg-sky-100"
           >
             + Top Up Plan
