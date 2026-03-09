@@ -66,7 +66,12 @@ async function buildStorePublicResponse(store: any) {
       const pricingMarkup = store.pricingMarkup as any;
 
       for (const pkg of allPackages) {
-        const basePrice = pkg.price / 10000;
+        // eSIM Access may return price in provider units (1/10000 USD) or in USD; detect by magnitude
+        const rawPrice = typeof pkg.price === 'number' ? pkg.price : 0;
+        const basePrice =
+          rawPrice > 0 && rawPrice < 100
+            ? rawPrice
+            : rawPrice / 10000; // Values < 100 likely USD (e.g. 7.13); else provider units
         const finalPriceUsd = applyMarkup(basePrice, pricingMarkup, pkg.locationCode, pkg.packageCode);
         const priceProviderUnits = Math.round(finalPriceUsd * 10000);
 
