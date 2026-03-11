@@ -71,6 +71,11 @@ export default function PackageSelector() {
     loadStorePackages();
   }, []);
 
+  // Get unique locations and full list for default-select (must be before effect that uses them)
+  const { packages: allPackages, isLoading } = usePackages({
+    type: typeFilter || undefined,
+  });
+
   // Default: when no saved selection exists, select all packages
   useEffect(() => {
     if (!isLoadingStore && !isLoading && allPackages.length > 0) {
@@ -83,11 +88,6 @@ export default function PackageSelector() {
       });
     }
   }, [isLoadingStore, isLoading, allPackages]);
-
-  // Get unique locations for filter
-  const { packages: allPackages, isLoading } = usePackages({
-    type: typeFilter || undefined,
-  });
 
   const locations = useMemo(() => {
     const locationSet = new Set(allPackages.map(pkg => pkg.locationCode));

@@ -116,7 +116,7 @@ export default function TicketDetailPage() {
             >
               <p className="text-slate-700">{reply.body}</p>
               <p className="mt-2 text-xs text-slate-500">
-                {(reply.isStaff === true || reply.senderType === 'merchant' || reply.senderType === 'admin') ? 'Support' : 'You'} • {new Date(reply.createdAt).toLocaleString()}
+                {(reply.isStaff === true || (reply.senderType || '').toLowerCase() === 'merchant' || (reply.senderType || '').toLowerCase() === 'admin') ? 'Support' : 'You'} • {new Date(reply.createdAt).toLocaleString()}
               </p>
             </div>
           ))}

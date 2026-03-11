@@ -189,9 +189,15 @@ router.get('/tickets/:ticketId', async (req, res, next) => {
       });
     }
 
+    // Explicitly add isStaff to each message so frontends can reliably show "Support" vs customer
+    const messages = (ticket.messages || []).map((m: any) => ({
+      ...m,
+      isStaff: (m.senderType || '').toLowerCase() === 'merchant' || (m.senderType || '').toLowerCase() === 'admin',
+    }));
+
     res.json({
       success: true,
-      data: ticket,
+      data: { ...ticket, messages },
     });
   } catch (error: any) {
     res.status(500).json({

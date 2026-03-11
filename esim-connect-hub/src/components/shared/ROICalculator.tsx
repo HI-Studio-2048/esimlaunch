@@ -111,13 +111,13 @@ export function ROICalculator({ showCTA = true }: ROICalculatorProps) {
                 value={markupPercent}
                 onValueChange={setMarkupPercent}
                 min={5}
-                max={200}
+                max={500}
                 step={5}
                 className="w-full"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>5%</span>
-                <span>200%</span>
+                <span>500%</span>
               </div>
             </div>
 
@@ -136,13 +136,13 @@ export function ROICalculator({ showCTA = true }: ROICalculatorProps) {
                 value={monthlySales}
                 onValueChange={setMonthlySales}
                 min={10}
-                max={10000}
+                max={90000}
                 step={10}
                 className="w-full"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>10</span>
-                <span>10,000</span>
+                <span>90,000</span>
               </div>
             </div>
           </CardContent>

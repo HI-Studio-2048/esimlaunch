@@ -7,12 +7,13 @@ import {
   ChevronDown, Filter, Download,
   MessageSquare, Handshake, DollarSign, Calculator,
   ShoppingCart, Cpu, Wallet, Store, XCircle, CheckCircle2, RefreshCw,
-  Code2, History, CreditCard as PayCard, Megaphone,
+  Code2, History, CreditCard as PayCard, Megaphone, ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeader } from "@/components/shared/SectionHeader";
 import { AnimatedCounter } from "@/components/shared/AnimatedCounter";
 import { SetupChecklist, SetupStep } from "@/components/shared/SetupChecklist";
+import { LiveGlobeView } from "@/components/shared/LiveGlobeView";
 import { cn } from "@/lib/utils";
 import { apiClient, ApiError } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -368,6 +369,53 @@ export default function Dashboard() {
       </div>
 
       <div className="container-custom py-8 relative z-10">
+        {/* Balance top-up indicator (visible for Easy + Advanced) */}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 rounded-2xl border border-border bg-card/80 backdrop-blur-sm px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+              <Wallet className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Account balance</p>
+              {loading ? (
+                <p className="text-xs text-muted-foreground">Loading...</p>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold gradient-text tabular-nums">
+                    ${(stats.balance ?? 0).toFixed(2)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Available for orders and top‑ups
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="gradient"
+              className="gap-1.5"
+              onClick={() => navigate("/dashboard/balance")}
+            >
+              Top up balance
+              <ArrowRight className="w-3 h-3" />
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="hidden sm:inline-flex"
+              onClick={() => navigate("/settings/billing")}
+            >
+              Billing settings
+            </Button>
+          </div>
+        </motion.div>
+
         {/* Announcements (Advanced Way only) */}
         {isAdvancedUser && (
           <motion.div
@@ -400,6 +448,16 @@ export default function Dashboard() {
             </div>
           </motion.div>
         )}
+
+        {/* Live Globe View - real-time eSIM activity visualization */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="mb-8"
+        >
+          <LiveGlobeView />
+        </motion.div>
 
         {/* Setup Checklist */}
         {setupSteps.length > 0 && (

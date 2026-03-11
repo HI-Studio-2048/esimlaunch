@@ -403,6 +403,15 @@ export default function Index() {
       {/* ROI Calculator Section */}
       <section id="roi-calculator" className="section-padding bg-muted/30 scroll-mt-24">
         <div className="container-custom">
+          <div className="flex justify-center mb-6">
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/roi-calculator">
+                View wholesale price list
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+          </div>
+
           <SectionHeader
             badge="ROI Calculator"
             title="See your eSIM business potential"
@@ -418,15 +427,6 @@ export default function Index() {
           >
             <ROICalculator />
           </motion.div>
-
-          <div className="text-center mt-8">
-            <Button variant="outline" size="lg" asChild>
-              <Link to="/roi-calculator">
-                Open Full Calculator
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Link>
-            </Button>
-          </div>
         </div>
       </section>
 

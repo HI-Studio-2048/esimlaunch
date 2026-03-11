@@ -1030,9 +1030,12 @@ const PaymentStep = ({
   <Elements stripe={getStripe()}>
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold mb-2">Set up payment</h2>
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-3">
+          14-day free trial · No charges until it ends
+        </div>
+        <h2 className="text-2xl font-bold mb-2">Set up payment to start your free trial</h2>
         <p className="text-muted-foreground">
-          Start your 14-day free trial. No charges until the trial ends.
+          Choose your plan and add a card now so your store can stay live after the trial. You won&apos;t be billed today.
         </p>
       </div>
 

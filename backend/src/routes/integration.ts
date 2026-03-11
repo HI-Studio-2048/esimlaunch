@@ -296,7 +296,7 @@ router.get('/support/tickets/:ticketId', async (req, res) => {
       .map((m: any) => ({
         id: m.id,
         body: m.message,
-        isStaff: m.senderType === 'merchant' || m.senderType === 'admin',
+        isStaff: (m.senderType || '').toLowerCase() === 'merchant' || (m.senderType || '').toLowerCase() === 'admin',
         senderType: m.senderType,
         createdAt: m.createdAt,
       }));

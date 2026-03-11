@@ -219,7 +219,7 @@ export default function SupportTicket() {
                       <div className="flex items-center gap-2 mb-2">
                         <User className="h-4 w-4" />
                         <span className="text-sm font-medium">
-                          {message.senderType === 'merchant' || message.senderType === 'admin'
+                          {(message.isStaff === true || (message.senderType || '').toLowerCase() === 'merchant' || (message.senderType || '').toLowerCase() === 'admin')
                             ? 'Support'
                             : (message.senderName || message.senderEmail)}
                         </span>
