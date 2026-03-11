@@ -22,8 +22,9 @@ const DEFAULT_PRIMARY = '#6366f1';
 const DEFAULT_SECONDARY = '#8b5cf6';
 
 export function Footer() {
-  const { branding } = useStoreConfig();
+  const { branding, templateSettings } = useStoreConfig();
   const businessName = branding.businessName ?? 'eSIM Store';
+  const contactEmail = (templateSettings as { contactEmail?: string } | undefined)?.contactEmail;
   const primaryColor = branding.primaryColor ?? DEFAULT_PRIMARY;
   const secondaryColor = branding.secondaryColor ?? DEFAULT_SECONDARY;
   const logoUrl = branding.logoUrl;
@@ -54,6 +55,11 @@ export function Footer() {
             <p className="mt-4 text-sm text-slate-600">
               Stay connected on your adventures without hefty roaming fees. eSIMs for 190+ countries worldwide.
             </p>
+            {contactEmail && (
+              <p className="mt-2 text-sm text-slate-600">
+                <a href={`mailto:${contactEmail}`} className="text-violet-600 hover:text-violet-700">{contactEmail}</a>
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-6 text-sm">
             <Link href="/contact" className="text-slate-600 hover:text-slate-900">Contact</Link>

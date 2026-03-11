@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useStoreConfig } from '@/contexts/StoreConfigContext';
 
-const FAQ_ITEMS = [
+const DEFAULT_FAQ_ITEMS = [
   {
     q: 'What is an eSIM?',
     a: 'An eSIM is a digital SIM that lets you connect to a cellular network without a physical SIM card. You can install it on your phone by scanning a QR code or entering an activation code.',
@@ -40,6 +41,11 @@ const FAQ_ITEMS = [
 
 export default function FAQPage() {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const { templateSettings } = useStoreConfig();
+  const ts = templateSettings as { faqs?: { question: string; answer: string }[] } | undefined;
+  const items = (ts?.faqs?.length ? ts.faqs : DEFAULT_FAQ_ITEMS).map((f) =>
+    'question' in f ? f : { question: (f as { q: string }).q, answer: (f as { a: string }).a }
+  );
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 sm:py-24">
@@ -49,7 +55,7 @@ export default function FAQPage() {
       </p>
 
       <div className="mt-12 space-y-3">
-        {FAQ_ITEMS.map((item, i) => (
+        {items.map((item, i) => (
           <div
             key={i}
             className="rounded-xl border border-slate-200 bg-white shadow-sm"
@@ -58,14 +64,14 @@ export default function FAQPage() {
               onClick={() => setOpenIndex(openIndex === i ? null : i)}
               className="flex w-full items-center justify-between px-5 py-4 text-left font-medium text-slate-900 hover:bg-slate-50"
             >
-              {item.q}
+              {item.question}
               <span className={`ml-4 shrink-0 text-xs transition-transform ${openIndex === i ? 'rotate-180' : ''}`}>
                 ▼
               </span>
             </button>
             {openIndex === i && (
               <div className="border-t border-slate-100 px-5 py-4 text-slate-600">
-                {item.a}
+                {item.answer}
               </div>
             )}
           </div>

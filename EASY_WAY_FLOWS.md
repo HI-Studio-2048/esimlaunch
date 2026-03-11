@@ -34,28 +34,15 @@ This document explains how Easy Way merchants' customers submit support tickets 
 
 4. **Merchant sees it:** The merchant logs into the esimlaunch dashboard and goes to **Support** (`/dashboard/support`). The dashboard calls `GET /api/support/tickets` (authenticated), which returns only tickets for that merchant.
 
-### Template integration
+### Template integration (bidirectional)
 
-The esimlaunch-template (or any store) must POST to the esimlaunch API when a customer submits a ticket. Example:
+When the template is **linked** (STORE_ID, ESIMLAUNCH_HUB_API_URL, TEMPLATE_ORDER_SYNC_SECRET set):
 
-```javascript
-// On the store's contact/support form submit:
-const res = await fetch(`${ESIMLAUNCH_API_URL}/api/support/tickets`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    storeId: storeId,        // from your store config
-    customerEmail: form.email,
-    customerName: form.name,
-    subject: form.subject,
-    description: form.message,
-    category: 'general',
-    priority: 'medium',
-  }),
-});
-```
+- **Create ticket**: Template creates the ticket directly in esimlaunch via `POST /api/support/tickets` (public).
+- **List / Get / Reply**: Template fetches from esimlaunch via integration API (`GET/POST /api/integration/support/tickets/...`) with `x-template-sync-secret`.
+- **Result**: esimlaunch is the single source of truth. **Merchant replies in the dashboard appear on the template site** immediately when the customer views the ticket.
 
-No auth is required for creating tickets (public endpoint). The ticket is associated with the merchant via `storeId` or `merchantId`.
+When **not linked**: Template uses its own database for tickets (no dashboard sync).
 
 ---
 

@@ -1,25 +1,24 @@
-import type { Metadata } from 'next';
+'use client';
 
-export const metadata: Metadata = {
-  title: 'About Us',
-  description: 'Learn about our eSIM platform and mission to keep travelers connected.',
-};
+import { useStoreConfig } from '@/contexts/StoreConfigContext';
+
+const DEFAULT_TAGLINE = "We're on a mission to make staying connected abroad simple and affordable.";
+const DEFAULT_MISSION = `Traveling should mean freedom—not hunting for local SIM cards or paying steep roaming fees. We built this platform so you can activate data in 190+ countries with a few taps, before you even leave home.`;
 
 export default function AboutPage() {
+  const { templateSettings } = useStoreConfig();
+  const ts = templateSettings as { aboutTagline?: string; aboutMission?: string } | undefined;
+  const tagline = ts?.aboutTagline || DEFAULT_TAGLINE;
+  const mission = ts?.aboutMission || DEFAULT_MISSION;
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 sm:py-24">
       <h1 className="text-3xl font-bold text-slate-900">About Us</h1>
-      <p className="mt-4 text-slate-600">
-        We&apos;re on a mission to make staying connected abroad simple and affordable.
-      </p>
+      <p className="mt-4 text-slate-600">{tagline}</p>
 
       <section className="mt-12 space-y-6 text-slate-700">
         <h2 className="text-xl font-semibold text-slate-900">Our Story</h2>
-        <p>
-          Traveling should mean freedom—not hunting for local SIM cards or paying steep roaming
-          fees. We built this platform so you can activate data in 190+ countries with a few taps,
-          before you even leave home.
-        </p>
+        <p>{mission}</p>
 
         <h2 className="text-xl font-semibold text-slate-900">How It Works</h2>
         <p>
