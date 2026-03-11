@@ -264,7 +264,11 @@ router.get('/support/tickets/:ticketId', async (req, res) => {
       });
     }
 
-    const ticket = await supportService.getTicketById(ticketId, true);
+    // Support both UUID (id) and ticketNumber (e.g. TKT-000001, t1_xxx) for template compatibility
+    let ticket = await supportService.getTicketById(ticketId, true);
+    if (!ticket && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId)) {
+      ticket = await supportService.getTicketByNumber(ticketId);
+    }
     if (!ticket) {
       return res.status(404).json({
         success: false,
@@ -293,6 +297,7 @@ router.get('/support/tickets/:ticketId', async (req, res) => {
         id: m.id,
         body: m.message,
         isStaff: m.senderType === 'merchant' || m.senderType === 'admin',
+        senderType: m.senderType,
         createdAt: m.createdAt,
       }));
 
@@ -356,7 +361,11 @@ router.post('/support/tickets/:ticketId/messages', async (req, res) => {
       });
     }
 
-    const ticket = await supportService.getTicketById(ticketId, false);
+    // Support both UUID (id) and ticketNumber for template compatibility
+    let ticket = await supportService.getTicketById(ticketId, false);
+    if (!ticket && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ticketId)) {
+      ticket = await supportService.getTicketByNumber(ticketId);
+    }
     if (!ticket) {
       return res.status(404).json({
         success: false,
@@ -380,7 +389,7 @@ router.post('/support/tickets/:ticketId/messages', async (req, res) => {
     }
 
     const msg = await supportService.addMessage({
-      ticketId,
+      ticketId: ticket.id,
       senderType: 'customer',
       senderEmail: customerEmail,
       senderName: customerName || undefined,

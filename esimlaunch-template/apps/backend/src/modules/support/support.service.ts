@@ -178,6 +178,8 @@ export class SupportService {
     if (!res.ok) {
       if (res.status === 404) throw new NotFoundException('Ticket not found');
       if (res.status === 403) throw new ForbiddenException('Not authorized to view this ticket');
+      const body = await res.text();
+      this.logger.warn(`Hub getTicket failed ${res.status} for ${ticketId}: ${body?.slice(0, 200)}`);
       throw new BadRequestException('Failed to fetch ticket');
     }
 
@@ -194,7 +196,8 @@ export class SupportService {
       replies: (t.replies ?? []).map((r: any) => ({
         id: r.id,
         body: r.body,
-        isStaff: r.isStaff,
+        isStaff: r.isStaff ?? (r.senderType === 'merchant' || r.senderType === 'admin'),
+        senderType: r.senderType,
         createdAt: r.createdAt,
       })),
     };

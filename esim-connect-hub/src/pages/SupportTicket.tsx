@@ -219,7 +219,9 @@ export default function SupportTicket() {
                       <div className="flex items-center gap-2 mb-2">
                         <User className="h-4 w-4" />
                         <span className="text-sm font-medium">
-                          {message.senderName || message.senderEmail}
+                          {message.senderType === 'merchant' || message.senderType === 'admin'
+                            ? 'Support'
+                            : (message.senderName || message.senderEmail)}
                         </span>
                         <span className="text-xs opacity-70">
                           {new Date(message.createdAt).toLocaleString()}
