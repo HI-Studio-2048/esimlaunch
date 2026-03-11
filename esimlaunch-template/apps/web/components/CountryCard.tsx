@@ -3,8 +3,16 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ChevronRight } from 'lucide-react';
-import { getSlugFromCode } from '@/lib/country-slugs';
+import { getSlugFromCode, getCountryName } from '@/lib/country-slugs';
 import { cn } from '@/lib/utils';
+
+/** Use full country name instead of 2-letter code when API returns code as name */
+function resolveDisplayName(name: string, code: string): string {
+  if (!name || name.length <= 3 || name.toUpperCase() === code.toUpperCase()) {
+    return getCountryName(code);
+  }
+  return name;
+}
 
 interface CountryCardProps {
   country: {
@@ -30,6 +38,7 @@ export function CountryCard({
   const slug =
     country.slug ?? getSlugFromCode(country.code) ?? country.code.toLowerCase();
   const flagUrl = country.flagUrl ?? country.locationLogo;
+  const displayName = resolveDisplayName(country.name, country.code);
 
   return (
     <Link
@@ -45,7 +54,7 @@ export function CountryCard({
             <div className="relative h-10 w-11 flex-shrink-0 overflow-hidden rounded-md border-2 border-slate-200">
               <Image
                 src={flagUrl}
-                alt={country.name}
+                alt={displayName}
                 fill
                 className="object-cover"
                 unoptimized
@@ -59,9 +68,9 @@ export function CountryCard({
           )}
           <span
             className="truncate font-medium text-lg text-slate-900 group-hover:text-violet-700"
-            title={country.name}
+            title={displayName}
           >
-            {country.name}
+            {displayName}
           </span>
         </div>
         <div className="ml-2 flex-shrink-0 rounded-full bg-slate-100 p-2 transition group-hover:bg-violet-600">

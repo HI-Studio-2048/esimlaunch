@@ -22,6 +22,16 @@ export const REGION_NAMES: Record<Region, string> = {
   global: 'Global',
 };
 
+export const REGION_ORDER: Region[] = [
+  'asia',
+  'europe',
+  'north-america',
+  'south-america',
+  'africa',
+  'oceania',
+  'global',
+];
+
 const COUNTRY_TO_REGION: Record<string, Region> = {
   AF: 'asia', AM: 'asia', AZ: 'asia', BH: 'asia', BD: 'asia', BT: 'asia',
   BN: 'asia', KH: 'asia', CN: 'asia', GE: 'asia', HK: 'asia', IN: 'asia',

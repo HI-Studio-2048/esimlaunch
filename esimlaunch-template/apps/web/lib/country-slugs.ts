@@ -96,3 +96,17 @@ export function getCountryName(codeOrSlug: string): string {
     return codeOrSlug;
   }
 }
+
+/** Resolve country slug (e.g. kg-esim) to display name (e.g. Kyrgyzstan eSIM) for breadcrumbs and SEO */
+export function getDisplayNameFromCountrySlug(slug: string): string {
+  if (!slug || !slug.endsWith('-esim')) return slug.replace(/-/g, ' ');
+  const part = slug.slice(0, -5);
+  if (part.length <= 3) {
+    return getCountryName(part) + ' eSIM';
+  }
+  const name = part
+    .split('-')
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+  return name + ' eSIM';
+}

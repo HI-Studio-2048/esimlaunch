@@ -42,6 +42,10 @@ export function ClerkAuthSync() {
         setUser(null);
         apiClient.setJwtToken(null);
         hasSynced.current = null;
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('current_store_id');
+          localStorage.removeItem('esimlaunch_store_config');
+        }
 
         // If Clerk's session is somehow still alive (e.g. signOut in Navbar
         // resolved before Clerk's server actually invalidated it), kill it now.
@@ -57,6 +61,10 @@ export function ClerkAuthSync() {
         if (hasSynced.current !== null && hasSynced.current !== clerkUser.id) {
           hasSynced.current = null;
           clearAllOnboardingProgress();
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('current_store_id');
+            localStorage.removeItem('esimlaunch_store_config');
+          }
         }
 
         // Already synced this user — nothing to do
@@ -92,6 +100,10 @@ export function ClerkAuthSync() {
           setUser(null);
           apiClient.setJwtToken(null);
           hasSynced.current = null;
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('current_store_id');
+            localStorage.removeItem('esimlaunch_store_config');
+          }
         }
       }
     };

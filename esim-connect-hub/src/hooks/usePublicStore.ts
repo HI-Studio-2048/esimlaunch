@@ -54,6 +54,8 @@ export interface TemplateSettings {
 }
 
 export interface PublicStoreData {
+  storeId?: string;
+  subdomain?: string | null;
   branding: PublicStoreBranding;
   packages: PublicStorePackage[];
   currency: string;

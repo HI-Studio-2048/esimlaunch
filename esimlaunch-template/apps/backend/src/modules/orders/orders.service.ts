@@ -7,6 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma.service';
 import { EsimService } from '../esim/esim.service';
+import { StoreConfigService } from '../esim/store-config.service';
 import { StripeService } from '../stripe/stripe.service';
 import { CurrencyService } from '../currency/currency.service';
 import { EmailService } from '../email/email.service';
@@ -27,6 +28,7 @@ export class OrdersService {
   constructor(
     private prisma: PrismaService,
     private esimService: EsimService,
+    private storeConfig: StoreConfigService,
     private stripeService: StripeService,
     private currencyService: CurrencyService,
     private emailService: EmailService,
@@ -428,6 +430,11 @@ export class OrdersService {
 
   async processOrderCompletion(order: Order, user: { email: string; name?: string | null }) {
     const webUrl = this.config.get<string>('WEB_APP_URL', 'http://localhost:3000');
+
+    // Sync to main backend dashboard when linked (so orders appear in merchant dashboard)
+    this.syncOrderToMainBackend(order, user).catch((err) =>
+      this.logger.warn('Template order sync to main backend failed', err?.message || err),
+    );
     const plan = await this.esimService.getPlanByCode(order.planId);
     const planName = plan?.name ?? order.planName ?? order.planId;
 
@@ -454,6 +461,42 @@ export class OrdersService {
 
     // Provision eSIM
     await this.performEsimOrder(order, planName);
+  }
+
+  /**
+   * Sync completed order to main backend so it appears in merchant dashboard.
+   * Runs in background; failures are logged only.
+   */
+  private async syncOrderToMainBackend(
+    order: Order,
+    user: { email: string; name?: string | null },
+  ): Promise<void> {
+    if (!this.storeConfig.isLinked()) return;
+    const baseUrl = this.config.get<string>('ESIMLAUNCH_HUB_API_URL');
+    const syncSecret = this.config.get<string>('TEMPLATE_ORDER_SYNC_SECRET');
+    if (!baseUrl || !syncSecret) return;
+
+    const config = await this.storeConfig.getConfig();
+    if (!config?.storeId) return;
+
+    const amountCents = order.displayAmountCents ?? order.amountCents;
+    await fetch(`${baseUrl.replace(/\/$/, '')}/api/integration/template-order`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-template-sync-secret': syncSecret,
+      },
+      body: JSON.stringify({
+        storeId: config.storeId,
+        templateOrderId: order.id,
+        customerEmail: user.email,
+        customerName: user.name ?? undefined,
+        totalAmountCents: amountCents,
+        packageCount: 1,
+        status: 'COMPLETED',
+        paymentRef: order.paymentRef,
+      }),
+    });
   }
 
   // -----------------------------------------------------------------------

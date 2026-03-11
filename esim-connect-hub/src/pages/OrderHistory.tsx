@@ -16,16 +16,25 @@ import {
   QrCode,
   Copy,
   Check,
+  RotateCcw,
+  Mail,
+  DollarSign,
+  Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Order {
   id?: string;
+  orderId?: string | null;
+  paymentIntentId?: string | null;
   orderNo?: string;
   transactionId?: string;
   totalAmount?: number;
   currency?: string;
   status?: string;
+  source?: "store" | "advanced";
+  customerEmail?: string | null;
+  customerName?: string | null;
   createdAt?: string;
   esimCount?: number;
   profiles?: Array<{
@@ -56,6 +65,7 @@ export default function OrderHistory() {
   // Detail modal
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchOrders = useCallback(
     async (pageNum: number = 1) => {
@@ -63,7 +73,7 @@ export default function OrderHistory() {
       try {
         const res = await apiClient.getOrders(pageNum, PAGE_SIZE);
         const list = res?.orders || (Array.isArray(res) ? res : []);
-        const tot = res?.total || list.length;
+        const tot = res?.pagination?.total ?? res?.total ?? list.length;
         setOrders(list);
         setTotal(tot);
         setPage(pageNum);
@@ -98,6 +108,57 @@ export default function OrderHistory() {
       setCopiedField(field);
       setTimeout(() => setCopiedField(null), 2000);
     });
+  };
+
+  const runAction = async (
+    action: string,
+    fn: () => Promise<void>
+  ) => {
+    setActionLoading(action);
+    try {
+      await fn();
+      toast({ title: "Success", description: "Action completed." });
+      setSelectedOrder(null);
+      fetchOrders(page);
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err?.message || "Action failed.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleRetry = () => {
+    const o = selectedOrder!;
+    const orderId = o.source === "store" ? o.orderId : o.id;
+    if (!orderId) return;
+    runAction("retry", () => apiClient.retryOrder(orderId));
+  };
+  const handleSync = () => {
+    const o = selectedOrder!;
+    const orderId = o.source === "store" ? o.orderId : o.id;
+    if (!orderId) return;
+    runAction("sync", () => apiClient.syncOrder(orderId));
+  };
+  const handleRefund = () => {
+    const o = selectedOrder!;
+    if (o.source !== "store" || !o.id) return;
+    runAction("refund", () => apiClient.refundCustomerOrder(o.id!));
+  };
+  const handleResend = () => {
+    const o = selectedOrder!;
+    if (o.source !== "store" || !o.id) return;
+    runAction("resend", () => apiClient.resendCustomerOrderEmail(o.id!));
+  };
+  const handleDelete = () => {
+    const o = selectedOrder!;
+    const orderId = o.source === "store" ? o.orderId : o.id;
+    if (!orderId) return;
+    if (!["PENDING", "FAILED"].includes((o.status || "").toUpperCase())) return;
+    runAction("delete", () => apiClient.deleteOrder(orderId));
   };
 
   const getStatusBadge = (status?: string) => {
@@ -227,6 +288,9 @@ export default function OrderHistory() {
                       Order No (Batch Id)
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Customer
+                    </th>
+                    <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       No. of eSIMs
                     </th>
                     <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -263,6 +327,9 @@ export default function OrderHistory() {
                             {order.orderNo || order.transactionId || "—"}
                           </button>
                         </td>
+                        <td className="py-3 px-4 text-sm text-muted-foreground max-w-[140px] truncate" title={order.customerEmail || ""}>
+                          {order.customerEmail || "—"}
+                        </td>
                         <td className="py-3 px-4 text-sm">{esimCount}</td>
                         <td className="py-3 px-4 text-sm text-muted-foreground whitespace-nowrap">
                           {order.createdAt
@@ -274,7 +341,7 @@ export default function OrderHistory() {
                         </td>
                         <td className="py-3 px-4 text-sm font-medium">
                           {order.totalAmount != null
-                            ? `$${(order.totalAmount / 10000).toFixed(2)}`
+                            ? `$${Number(order.totalAmount).toFixed(2)}`
                             : "—"}
                         </td>
                         <td className="py-3 px-4">
@@ -374,7 +441,7 @@ export default function OrderHistory() {
                   <div className="bg-muted/30 rounded-xl p-3">
                     <p className="text-xs text-muted-foreground mb-1">Amount</p>
                     <p className="text-sm font-bold">
-                      {selectedOrder.totalAmount != null ? `$${(selectedOrder.totalAmount / 10000).toFixed(2)}` : "—"}
+                      {selectedOrder.totalAmount != null ? `$${Number(selectedOrder.totalAmount).toFixed(2)}` : "—"}
                     </p>
                   </div>
                   <div className="bg-muted/30 rounded-xl p-3">
@@ -391,6 +458,95 @@ export default function OrderHistory() {
                         : "—"}
                     </p>
                   </div>
+                  {selectedOrder.customerEmail && (
+                    <div className="bg-muted/30 rounded-xl p-3 col-span-2">
+                      <p className="text-xs text-muted-foreground mb-1">Customer</p>
+                      <p className="text-sm font-medium">{selectedOrder.customerEmail}</p>
+                      {selectedOrder.customerName && <p className="text-xs text-muted-foreground">{selectedOrder.customerName}</p>}
+                    </div>
+                  )}
+                </div>
+
+                {/* Order actions */}
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {selectedOrder.source === "store" && selectedOrder.orderId && (
+                    <>
+                      {!["COMPLETED", "CANCELLED", "FAILED"].includes((selectedOrder.status || "").toUpperCase()) && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleRetry}
+                            disabled={!!actionLoading}
+                            className="gap-2"
+                          >
+                            {actionLoading === "retry" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                            Retry
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleSync}
+                            disabled={!!actionLoading}
+                            className="gap-2"
+                          >
+                            {actionLoading === "sync" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                            Sync
+                          </Button>
+                        </>
+                      )}
+                      {["COMPLETED"].includes((selectedOrder.status || "").toUpperCase()) && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleResend}
+                          disabled={!!actionLoading}
+                          className="gap-2"
+                        >
+                          {actionLoading === "resend" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                          Resend email
+                        </Button>
+                      )}
+                      {!["CANCELLED", "FAILED"].includes((selectedOrder.status || "").toUpperCase()) &&
+                        selectedOrder.paymentIntentId &&
+                        !String(selectedOrder.paymentIntentId).startsWith("template_") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRefund}
+                          disabled={!!actionLoading}
+                          className="gap-2 text-destructive hover:text-destructive"
+                        >
+                          {actionLoading === "refund" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                          Refund
+                        </Button>
+                      )}
+                    </>
+                  )}
+                  {selectedOrder.source === "advanced" && selectedOrder.id && !["COMPLETED"].includes((selectedOrder.status || "").toUpperCase()) && (
+                    <>
+                      <Button variant="outline" size="sm" onClick={handleRetry} disabled={!!actionLoading} className="gap-2">
+                        {actionLoading === "retry" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                        Retry
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleSync} disabled={!!actionLoading} className="gap-2">
+                        {actionLoading === "sync" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                        Sync
+                      </Button>
+                    </>
+                  )}
+                  {["PENDING", "FAILED"].includes((selectedOrder.status || "").toUpperCase()) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDelete}
+                      disabled={!!actionLoading}
+                      className="gap-2 text-destructive hover:text-destructive"
+                    >
+                      {actionLoading === "delete" ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                      Delete
+                    </Button>
+                  )}
                 </div>
 
                 {/* eSIM Profiles in this order */}

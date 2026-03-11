@@ -603,6 +603,53 @@ class ApiClient {
     return this.request<any>(`/api/dashboard/analytics${query ? `?${query}` : ''}`);
   }
 
+  // Easy Way: Customers
+  async getCustomers(params?: { page?: number; limit?: number; search?: string }) {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    if (params?.search) qs.set('search', params.search);
+    const query = qs.toString() ? `?${qs}` : '';
+    return this.request<{ data: { customers: any[]; pagination: any } }>(`/api/dashboard/customers${query}`);
+  }
+
+  async getCustomerDetail(email: string) {
+    return this.request<{ data: any }>(`/api/dashboard/customers/${encodeURIComponent(email)}`);
+  }
+
+  // Easy Way: Order operations
+  async retryOrder(orderId: string) {
+    return this.request<{ message: string }>(`/api/dashboard/orders/${orderId}/retry`, { method: 'POST' });
+  }
+
+  async syncOrder(orderId: string) {
+    return this.request<{ message: string }>(`/api/dashboard/orders/${orderId}/sync`, { method: 'POST' });
+  }
+
+  async refundCustomerOrder(customerOrderId: string, amountCents?: number) {
+    return this.request<{ message: string; refundAmountCents: number }>(`/api/dashboard/customer-orders/${customerOrderId}/refund`, {
+      method: 'POST',
+      body: JSON.stringify({ amountCents }),
+    });
+  }
+
+  async resendCustomerOrderEmail(customerOrderId: string) {
+    return this.request<{ message: string }>(`/api/dashboard/customer-orders/${customerOrderId}/resend-receipt`, { method: 'POST' });
+  }
+
+  async deleteOrder(orderId: string) {
+    return this.request<{ message: string }>(`/api/dashboard/orders/${orderId}`, { method: 'DELETE' });
+  }
+
+  // Easy Way: Top-ups
+  async getTopups(params?: { page?: number; limit?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.page) qs.set('page', String(params.page));
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString() ? `?${qs}` : '';
+    return this.request<{ data: { topups: any[]; pagination: any } }>(`/api/dashboard/topups${query}`);
+  }
+
   // Store endpoints (Easy Way)
   async createStore(data: {
     name: string;
@@ -1038,6 +1085,8 @@ class ApiClient {
 
   async getPublicStore(storeId: string) {
     return this.request<{
+      storeId?: string;
+      subdomain?: string | null;
       branding: {
         businessName: string;
         primaryColor: string;

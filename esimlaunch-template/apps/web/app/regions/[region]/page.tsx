@@ -10,6 +10,7 @@ import { apiFetch } from '@/lib/apiClient';
 import { getCountriesForRegion, getRegionForCountry, REGION_NAMES } from '@/lib/regions';
 import type { Location } from '@/lib/types';
 import type { Region } from '@/lib/regions';
+import { getCountryName } from '@/lib/country-slugs';
 
 const VALID_REGIONS: Region[] = [
   'asia',
@@ -50,9 +51,14 @@ export default function RegionPage({
   const countries = useMemo(() => {
     if (regionSlug === 'global') return [];
     const regionCodes = getCountriesForRegion(regionSlug);
-    return locations
-      .filter((l) => l.type === 1 && regionCodes.includes(l.code.toUpperCase()))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const list = locations.filter(
+      (l) => l.type === 1 && regionCodes.includes(l.code.toUpperCase())
+    );
+    return list.sort((a, b) => {
+      const nameA = a.name?.length > 3 ? a.name : getCountryName(a.code);
+      const nameB = b.name?.length > 3 ? b.name : getCountryName(b.code);
+      return nameA.localeCompare(nameB);
+    });
   }, [locations, regionSlug]);
 
   if (!VALID_REGIONS.includes(regionSlug)) {

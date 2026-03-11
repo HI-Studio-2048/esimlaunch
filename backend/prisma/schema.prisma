@@ -52,6 +52,7 @@ model Merchant {
   emailTemplates           EmailTemplate[]
   preferences              MerchantPreference[]
   esimProfiles             EsimProfile[]
+  customerTopUps           CustomerTopUp[]
 
   @@index([email])
   @@index([serviceType])
@@ -489,6 +490,31 @@ model EsimProfile {
   @@index([iccid])
   @@index([orderNo])
   @@index([orderId])
+  @@index([createdAt])
+}
+
+// Customer eSIM data top-ups (when customer buys more data for existing eSIM)
+// Populated when store/integration reports top-up via POST /api/integration/topups
+model CustomerTopUp {
+  id            String   @id @default(uuid())
+  merchantId    String
+  storeId       String?
+  customerEmail String
+  customerName   String?
+  iccid         String?
+  esimTranNo    String?
+  packageCode   String?
+  amountCents   Int
+  status        String   @default("pending") // pending, completed, failed
+  paymentRef    String?  // Stripe payment intent or similar
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([customerEmail])
+  @@index([iccid])
   @@index([createdAt])
 }
 

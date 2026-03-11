@@ -4,13 +4,17 @@ import * as nodemailer from 'nodemailer';
 import * as handlebars from 'handlebars';
 import * as fs from 'fs';
 import * as path from 'path';
+import { StoreConfigService } from '../esim/store-config.service';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private transporter: nodemailer.Transporter;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private storeConfig: StoreConfigService,
+  ) {
     this.transporter = nodemailer.createTransport({
       host: this.config.get<string>('SMTP_HOST', 'smtp.example.com'),
       port: parseInt(this.config.get<string>('SMTP_PORT', '587'), 10),
@@ -38,7 +42,15 @@ export class EmailService {
     template: string;
     data: Record<string, unknown>;
   }): Promise<void> {
-    const html = this.renderTemplate(opts.template, opts.data);
+    const data = { ...opts.data };
+    if (this.storeConfig.isLinked()) {
+      const config = await this.storeConfig.getConfig();
+      if (config?.branding) {
+        (data as Record<string, unknown>).businessName = config.branding.businessName;
+        (data as Record<string, unknown>).logoUrl = config.branding.logoUrl ?? null;
+      }
+    }
+    const html = this.renderTemplate(opts.template, data);
     const from = this.config.get<string>('EMAIL_FROM', 'noreply@example.com');
 
     try {

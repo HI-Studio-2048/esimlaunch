@@ -78,6 +78,18 @@ function makeLocationSlug(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') + '-esim';
 }
 
+// Helper: resolve location name to full country name for SEO (when API returns code as name)
+function resolveLocationName(name: string, code: string): string {
+  if (!name || name.length <= 3 || name.toUpperCase() === code.toUpperCase()) {
+    try {
+      return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? name;
+    } catch {
+      return name;
+    }
+  }
+  return name;
+}
+
 // Helper: store is accessible via public API (isActive or admin workflow in_progress/completed)
 function isStorePubliclyAccessible(store: { isActive: boolean; adminStatus?: string | null }): boolean {
   if (store.isActive) return true;
@@ -154,7 +166,8 @@ async function buildStorePublicResponse(store: any) {
         });
 
         if (pkg.locationCode && pkg.location) {
-          locationsMap.set(pkg.locationCode, { code: pkg.locationCode, name: pkg.location });
+          const fullName = resolveLocationName(pkg.location, pkg.locationCode);
+          locationsMap.set(pkg.locationCode, { code: pkg.locationCode, name: fullName });
         }
       }
     }
@@ -176,6 +189,7 @@ async function buildStorePublicResponse(store: any) {
 
   return {
     storeId: store.id,
+    subdomain: store.subdomain || null,
     branding: {
       businessName: store.businessName,
       primaryColor: store.primaryColor,
@@ -206,6 +220,7 @@ router.get('/:storeId/public', async (req, res) => {
       where: { id: storeId },
       select: {
         id: true,
+        subdomain: true,
         businessName: true,
         primaryColor: true,
         secondaryColor: true,
@@ -254,6 +269,7 @@ router.get('/by-subdomain/:subdomain', async (req, res) => {
       where: { subdomain },
       select: {
         id: true,
+        subdomain: true,
         businessName: true,
         primaryColor: true,
         secondaryColor: true,

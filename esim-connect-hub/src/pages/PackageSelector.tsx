@@ -55,10 +55,11 @@ export default function PackageSelector() {
         }
 
         const store = await apiClient.getStore(storeId);
-        if (store?.selectedPackages && Array.isArray(store.selectedPackages)) {
+        if (store?.selectedPackages && Array.isArray(store.selectedPackages) && store.selectedPackages.length > 0) {
           // Initialize selectedPackages with existing selections
           setSelectedPackages(new Set(store.selectedPackages));
         }
+        // If no saved selection, leave empty - default-to-all effect will populate
       } catch (error: any) {
         console.error("Failed to load store packages:", error);
         // Don't show error toast - user might be creating a new store
@@ -69,6 +70,19 @@ export default function PackageSelector() {
 
     loadStorePackages();
   }, []);
+
+  // Default: when no saved selection exists, select all packages
+  useEffect(() => {
+    if (!isLoadingStore && !isLoading && allPackages.length > 0) {
+      setSelectedPackages((prev) => {
+        // Only apply default when nothing is selected yet (no prior saved selection)
+        if (prev.size === 0) {
+          return new Set(allPackages.map((pkg) => pkg.slug));
+        }
+        return prev;
+      });
+    }
+  }, [isLoadingStore, isLoading, allPackages]);
 
   // Get unique locations for filter
   const { packages: allPackages, isLoading } = usePackages({

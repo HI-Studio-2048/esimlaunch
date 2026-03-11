@@ -136,6 +136,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     apiClient.setJwtToken(null);
     apiClient.setApiKey(null);
     setError(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('current_store_id');
+      localStorage.removeItem('esimlaunch_store_config');
+    }
   };
 
   const refreshToken = async () => {

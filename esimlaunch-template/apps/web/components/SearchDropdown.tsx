@@ -1,13 +1,12 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
+import { getCountryName } from '@/lib/country-slugs';
 import type { Location } from '@/lib/types';
 
 export function SearchDropdown() {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [locations, setLocations] = useState<Location[]>([]);
@@ -21,12 +20,14 @@ export function SearchDropdown() {
       .catch(() => {});
   }, []);
 
-  const filtered = locations.filter(
-    (l) =>
-      query.trim() === '' ||
-      l.name.toLowerCase().includes(query.toLowerCase()) ||
-      l.code.toLowerCase().includes(query.toLowerCase()),
-  ).slice(0, 8);
+  const filtered = locations.filter((l) => {
+    const q = query.toLowerCase().trim();
+    if (!q) return true;
+    const name = l.name?.toLowerCase() ?? '';
+    const code = l.code?.toLowerCase() ?? '';
+    const fullName = getCountryName(l.code).toLowerCase();
+    return name.includes(q) || code.includes(q) || fullName.includes(q);
+  }).slice(0, 8);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -62,16 +63,19 @@ export function SearchDropdown() {
             {filtered.length === 0 ? (
               <p className="px-4 py-6 text-center text-sm text-slate-500">No results</p>
             ) : (
-              filtered.map((loc) => (
-                <Link
-                  key={loc.code}
-                  href={`/countries/${loc.slug}`}
-                  onClick={() => setOpen(false)}
-                  className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-violet-50 hover:text-violet-700"
-                >
-                  {loc.name}
-                </Link>
-              ))
+              filtered.map((loc) => {
+                const displayName = loc.name?.length > 3 ? loc.name : getCountryName(loc.code);
+                return (
+                  <Link
+                    key={loc.code}
+                    href={`/countries/${loc.slug}`}
+                    onClick={() => setOpen(false)}
+                    className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-violet-50 hover:text-violet-700"
+                  >
+                    {displayName}
+                  </Link>
+                );
+              })
             )}
           </div>
         </div>

@@ -59,6 +59,7 @@ import balanceRoutes from './routes/balance';
 import preferencesRoutes from './routes/preferences';
 import adminRoutes from './routes/admin';
 import voyageAdapterRoutes from './routes/voyageAdapter';
+import integrationRoutes from './routes/integration';
 
 app.use('/api/auth', authRoutes);
 app.use('/api/merchant/preferences', preferencesRoutes);
@@ -80,6 +81,7 @@ app.use('/api/affiliates', affiliateRoutes);
 app.use('/api/balance', balanceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/voyage', voyageAdapterRoutes);
+app.use('/api/integration', integrationRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

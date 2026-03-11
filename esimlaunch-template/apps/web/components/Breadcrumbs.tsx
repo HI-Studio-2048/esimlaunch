@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { getDisplayNameFromCountrySlug } from '@/lib/country-slugs';
 
 export interface BreadcrumbItem {
   label: string;
@@ -15,6 +16,7 @@ interface BreadcrumbsProps {
 const PATH_LABELS: Record<string, string> = {
   '': 'Home',
   countries: 'Destinations',
+  regions: 'Regions',
   checkout: 'Checkout',
   'my-esims': 'My eSIMs',
   account: 'Account',
@@ -35,6 +37,12 @@ const PATH_LABELS: Record<string, string> = {
   faq: 'FAQ',
 };
 
+/** Override href for path segments that don't have a standalone page */
+const PATH_HREF_OVERRIDES: Record<string, string> = {
+  countries: '/#destinations',
+  regions: '/regions',
+};
+
 export function Breadcrumbs({ items: customItems }: BreadcrumbsProps) {
   const pathname = usePathname();
 
@@ -46,11 +54,15 @@ export function Breadcrumbs({ items: customItems }: BreadcrumbsProps) {
       let href = '';
       for (let i = 0; i < segments.length; i++) {
         href += `/${segments[i]}`;
-        const label = PATH_LABELS[segments[i]] ?? segments[i].replace(/-/g, ' ');
+        let label = PATH_LABELS[segments[i]] ?? segments[i].replace(/-/g, ' ');
+        if (i > 0 && segments[0] === 'countries' && segments[i].endsWith('-esim')) {
+          label = getDisplayNameFromCountrySlug(segments[i]);
+        }
+        const linkHref = PATH_HREF_OVERRIDES[segments[i]] ?? href;
         result.push(
           i === segments.length - 1
             ? { label }
-            : { label, href },
+            : { label, href: linkHref },
         );
       }
       return result;

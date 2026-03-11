@@ -90,6 +90,16 @@ export default function Dashboard() {
       }
       if (storesData) {
         setStores(storesData);
+        // Ensure current_store_id belongs to this merchant (fixes wrong store after account switch)
+        const storeIds = storesData.map((s: any) => s.id);
+        const currentStoreId = typeof window !== 'undefined' ? localStorage.getItem('current_store_id') : null;
+        if (currentStoreId && !storeIds.includes(currentStoreId)) {
+          localStorage.removeItem('current_store_id');
+          localStorage.removeItem('esimlaunch_store_config');
+        }
+        if ((!currentStoreId || !storeIds.includes(currentStoreId)) && storesData.length > 0) {
+          localStorage.setItem('current_store_id', storesData[0].id);
+        }
       }
 
       // Update onboarding in DB (no localStorage)

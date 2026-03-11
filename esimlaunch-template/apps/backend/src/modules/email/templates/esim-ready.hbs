@@ -2,6 +2,8 @@
 <html>
 <head><meta charset="UTF-8"><title>Your eSIM is Ready</title></head>
 <body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+  {{#if logoUrl}}<img src="{{logoUrl}}" alt="{{#if businessName}}{{businessName}}{{else}}Logo{{/if}}" style="max-height: 48px; margin-bottom: 16px;" />{{/if}}
+  {{#if businessName}}<p style="color: #666; font-size: 14px;">{{businessName}}</p>{{/if}}
   <h2>Your eSIM is Ready to Install!</h2>
   <p><strong>Plan:</strong> {{planName}}</p>
   <p><strong>ICCID:</strong> {{iccid}}</p>

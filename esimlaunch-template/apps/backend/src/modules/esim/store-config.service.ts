@@ -37,9 +37,16 @@ export interface StoreConfig {
 export class StoreConfigService {
   private readonly logger = new Logger(StoreConfigService.name);
   private cached: { config: StoreConfig; expiresAt: number } | null = null;
-  private readonly cacheTtlMs = 5 * 60 * 1000; // 5 minutes
+  private readonly cacheTtlMs: number;
 
-  constructor(private config: ConfigService) {}
+  constructor(private config: ConfigService) {
+    const raw = this.config.get<string>('STORE_CONFIG_CACHE_TTL_SECONDS');
+    const seconds = raw ? parseInt(raw, 10) : NaN;
+    this.cacheTtlMs =
+      !Number.isNaN(seconds) && seconds > 0
+        ? seconds * 1000
+        : 60 * 1000; // default 1 minute
+  }
 
   /** True if this deployment is linked to a store (will use main backend for packages/locations). */
   isLinked(): boolean {

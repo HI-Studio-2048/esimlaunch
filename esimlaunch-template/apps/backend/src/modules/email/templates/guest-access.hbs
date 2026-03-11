@@ -2,6 +2,8 @@
 <html>
 <head><meta charset="UTF-8"><title>View Your Order</title></head>
 <body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+  {{#if logoUrl}}<img src="{{logoUrl}}" alt="{{#if businessName}}{{businessName}}{{else}}Logo{{/if}}" style="max-height: 48px; margin-bottom: 16px;" />{{/if}}
+  {{#if businessName}}<p style="color: #666; font-size: 14px;">{{businessName}}</p>{{/if}}
   <h2>View Your eSIM Order</h2>
   <p>Click the link below to view your order details and eSIM QR code:</p>
   <p><a href="{{link}}">View Order {{orderId}}</a></p>

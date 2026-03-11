@@ -5,8 +5,9 @@ import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
 import type { Location } from '@/lib/types';
 import { getRegionForCountry } from '@/lib/regions';
-import { REGION_NAMES, type Region } from '@/lib/regions';
-import { SearchBar } from '@/components/SearchBar';
+import { getCountryName } from '@/lib/country-slugs';
+import { REGION_NAMES, REGION_ORDER, type Region } from '@/lib/regions';
+import { DestinationSearch } from '@/components/DestinationSearch';
 import { CountryCard } from '@/components/CountryCard';
 import { CountrySkeleton } from '@/components/skeletons/CountrySkeleton';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -18,23 +19,12 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion';
 
-const REGION_ORDER: Region[] = [
-  'asia',
-  'europe',
-  'north-america',
-  'south-america',
-  'africa',
-  'oceania',
-  'global',
-];
-
 /**
  * Homepage — Browse locations.
  * Inspired by clean eSIM platform layouts: central hero search, uniform country cards, education section.
  */
 export default function HomePage() {
   const [locations, setLocations] = useState<Location[]>([]);
-  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -50,18 +40,17 @@ export default function HomePage() {
   );
 
   const filtered = useMemo(() => {
-    let list = countries;
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = countries.filter(
-        (l) =>
-          l.name.toLowerCase().includes(q) || l.code.toLowerCase().includes(q),
-      );
-    }
+    const sortByName = (a: Location, b: Location) => {
+      const nameA = a.name?.length > 3 ? a.name : getCountryName(a.code);
+      const nameB = b.name?.length > 3 ? b.name : getCountryName(b.code);
+      return nameA.localeCompare(nameB);
+    };
     const isIsrael = (l: Location) =>
       l.name.toLowerCase() === 'israel' || l.code.toUpperCase() === 'IL';
-    return [...list.filter((l) => !isIsrael(l)), ...list.filter(isIsrael)];
-  }, [countries, search]);
+    const rest = countries.filter((l) => !isIsrael(l)).sort(sortByName);
+    const israelList = countries.filter(isIsrael);
+    return [...rest, ...israelList];
+  }, [countries]);
 
   const countriesByRegion = useMemo(() => {
     const map: Record<Region, Location[]> = {
@@ -81,6 +70,14 @@ export default function HomePage() {
         map.global.push(loc);
       }
     }
+    const sortByName = (a: Location, b: Location) => {
+      const nameA = a.name?.length > 3 ? a.name : getCountryName(a.code);
+      const nameB = b.name?.length > 3 ? b.name : getCountryName(b.code);
+      return nameA.localeCompare(nameB);
+    };
+    for (const region of REGION_ORDER) {
+      map[region].sort(sortByName);
+    }
     return map;
   }, [filtered]);
 
@@ -99,26 +96,9 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Central search */}
+          {/* Central search with dropdown */}
           <div className="mt-10 flex w-full justify-center">
-            <SearchBar
-              value={search}
-              onChange={setSearch}
-              placeholder="Select your destination, connect instantly"
-              className="bg-white"
-              trailing={
-                <Link
-                  href={
-                    filtered.length > 0
-                      ? `/countries/${filtered[0].slug}`
-                      : '#destinations'
-                  }
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-violet-600 text-white transition hover:bg-violet-500"
-                >
-                  →
-                </Link>
-              }
-            />
+            <DestinationSearch countries={countries} />
           </div>
 
           {/* Trust / value badges */}
@@ -182,13 +162,8 @@ export default function HomePage() {
             {filtered.length === 0 ? (
               <EmptyState
                 title="No countries found"
-                description={search ? `No destinations match "${search}". Try a different search.` : undefined}
+                description="No destinations are currently available."
                 icon={Search}
-                action={
-                  search
-                    ? { label: 'Clear search', onClick: () => setSearch('') }
-                    : undefined
-                }
               />
             ) : (
               <div className="space-y-10">

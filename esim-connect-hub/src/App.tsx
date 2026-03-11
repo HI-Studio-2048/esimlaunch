@@ -12,6 +12,7 @@ import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { CookieBanner } from "@/components/CookieBanner";
 import { DemoStoreProvider } from "@/contexts/DemoStoreContext";
 import { DemoStoreLayout } from "@/components/demo-store/DemoStoreLayout";
+import { DemoStoreByIdLoader } from "@/components/demo-store/DemoStoreByIdLoader";
 import { SubdomainStoreLoader } from "@/components/demo-store/SubdomainStoreLoader";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
@@ -71,6 +72,8 @@ import CreateOrder from "./pages/CreateOrder";
 import ProfileManagement from "./pages/ProfileManagement";
 import Balance from "./pages/Balance";
 import OrderHistory from "./pages/OrderHistory";
+import CustomersPage from "./pages/CustomersPage";
+import TopUpsPage from "./pages/TopUpsPage";
 import PaymentSettings from "./pages/PaymentSettings";
 import Developer from "./pages/Developer";
 import Admin from "./pages/Admin";
@@ -336,6 +339,22 @@ const MainShell = () => {
                   } 
                 />
                 <Route 
+                  path="/dashboard/customers" 
+                  element={
+                    <ProtectedRoute>
+                      <CustomersPage />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/dashboard/topups" 
+                  element={
+                    <ProtectedRoute>
+                      <TopUpsPage />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
                   path="/dashboard/payment-settings" 
                   element={
                     <ProtectedRoute>
@@ -416,8 +435,8 @@ const AppRoutes = () => (
     <SubdomainRedirect />
     <ScrollToTop />
     <Routes>
-      {/* Demo Store Routes - separate layout, no main navbar/footer */}
-      <Route path="/demo-store" element={<DemoStoreLayout />}>
+      {/* Demo Store Routes - load store from API when storeId exists, then show layout */}
+      <Route path="/demo-store" element={<DemoStoreByIdLoader />}>
         <Route index element={<DemoStoreHome />} />
         <Route path="destinations" element={<DemoStoreDestinations />} />
         <Route path="country/:countrySlug" element={<DemoStoreCountry />} />

@@ -1,18 +1,35 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
-import { useUser } from '@clerk/nextjs';
 import { useCurrency } from '@/hooks/useCurrency';
-import { useReferral } from '@/hooks/useReferral';
-import { DeviceCompatibilityModal } from '@/components/DeviceCompatibilityModal';
 import { getOperatorsDisplay } from '@/lib/operators';
+import { getCountryName } from '@/lib/country-slugs';
 import type { Location, Plan } from '@/lib/types';
 import { formatVolume } from '@/lib/types';
 
 const PLANS_PER_PAGE = 12;
+
+type PlanExt = Plan & { periodNum?: number; day?: number; periodUnit?: string };
+
+function getEffectiveDays(p: PlanExt): number {
+  const d = Number(p.duration ?? p.periodNum ?? (p as PlanExt).day ?? 0);
+  const u = String(p.durationUnit ?? p.periodUnit ?? 'day').toLowerCase();
+  if (u === 'month' || u === 'months') return d * 30;
+  return d;
+}
+
+function getAvailableDurationTabs(plans: Plan[]): number[] {
+  const daysSet = new Set<number>();
+  for (const p of plans as PlanExt[]) {
+    const days = getEffectiveDays(p);
+    if (days > 0) daysSet.add(days);
+  }
+  return [...daysSet].sort((a, b) => a - b);
+}
 
 /**
  * Country / region plan page.
@@ -20,27 +37,21 @@ const PLANS_PER_PAGE = 12;
  * Flow:
  * 1. Resolve slug → locationCode via GET /api/esim/slug/:slug
  * 2. Fetch plans via GET /api/esim/packages/:locationCode
- * 3. On "Select", POST /api/orders to create a pending order, then navigate
- *    to /checkout/[orderId]
+ * 3. On "Select Plan", navigate to /countries/[slug]/plan/[packageCode] (plan preview)
+ * 4. On plan preview "Continue to Checkout", create order and go to checkout
  *
  * type 1 = country, type 2 = region.
  * Plans are differentiated by supportTopUpType (2 = top-up capable).
  */
 export default function CountryPage() {
   const { slug } = useParams<{ slug: string }>();
-  const router = useRouter();
-  const { user } = useUser();
-  const { currency, formatProviderPrice } = useCurrency();
-  const { referralCode } = useReferral();
+  const { formatProviderPrice } = useCurrency();
 
   const [location, setLocation] = useState<Location | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selecting, setSelecting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [deviceModalOpen, setDeviceModalOpen] = useState(false);
-  const [pendingPlan, setPendingPlan] = useState<Plan | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | '7d' | '30d'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | number>('all');
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
@@ -61,34 +72,24 @@ export default function CountryPage() {
       .finally(() => setLoading(false));
   }, [slug]);
 
+  useEffect(() => {
+    if (location) {
+      const name = location.name?.length > 3 ? location.name : getCountryName(location.code);
+      document.title = `${name} eSIM Plans`;
+    }
+  }, [location]);
+
+  const availableDurations = useMemo(
+    () => getAvailableDurationTabs(plans),
+    [plans]
+  );
+
   const filteredPlans = useMemo(() => {
-    if (activeTab === 'all') return plans;
-    type PlanExt = Plan & { periodNum?: number; day?: number; periodUnit?: string };
-    const getDays = (p: PlanExt) =>
-      p.duration ?? p.periodNum ?? (p as PlanExt).day ?? 0;
-    const isDayPlan = (p: PlanExt) => {
-      const u = String(p.durationUnit ?? p.periodUnit ?? 'day').toLowerCase();
-      return u.startsWith('day') || u === 'd';
-    };
-    const matchesDuration = (p: PlanExt, days: number) => {
-      const d = Number(getDays(p));
-      const u = (p.durationUnit ?? p.periodUnit ?? 'day').toLowerCase();
-      const isMonth = u === 'month' || u === 'months';
-      if (days === 7) {
-        if (d === 7 && isDayPlan(p)) return true;
-      } else if (days === 30) {
-        if (d === 30 && isDayPlan(p)) return true;
-        if (d === 1 && isMonth) return true; // 1 month ≈ 30 days
-      }
-      // Fallback: plan name contains "X day(s)" or "1 month"
-      const name = (p.name ?? '').toLowerCase();
-      if (days === 7) return /\b7\s*day/.test(name);
-      if (days === 30) return /\b30\s*day/.test(name) || /\b1\s*month/.test(name);
-      return false;
-    };
-    if (activeTab === '7d') return plans.filter((p) => matchesDuration(p as PlanExt, 7));
-    if (activeTab === '30d') return plans.filter((p) => matchesDuration(p as PlanExt, 30));
-    return plans;
+    let list = plans;
+    if (typeof activeTab === 'number') {
+      list = plans.filter((p) => getEffectiveDays(p as PlanExt) === activeTab);
+    }
+    return [...list].sort((a, b) => a.price - b.price);
   }, [plans, activeTab]);
 
   const paginatedPlans = useMemo(() => {
@@ -97,41 +98,6 @@ export default function CountryPage() {
   }, [filteredPlans, currentPage]);
 
   const totalPages = Math.ceil(filteredPlans.length / PLANS_PER_PAGE);
-
-  const doSelectPlan = async (plan: Plan) => {
-    setSelecting(plan.packageCode);
-    setError(null);
-    try {
-      const amountUsd = plan.price / 10000;
-      const order = await apiFetch<{ id: string }>('/orders', {
-        method: 'POST',
-        body: JSON.stringify({
-          planCode: plan.packageCode,
-          planName: plan.name,
-          amountUsd,
-          displayCurrency: currency,
-          email: user?.primaryEmailAddress?.emailAddress,
-          referralCode: referralCode ?? undefined,
-        }),
-      });
-      router.push(`/checkout/${order.id}`);
-    } catch (e: any) {
-      setError(e.message ?? 'Failed to create order. Please try again.');
-    } finally {
-      setSelecting(null);
-      setPendingPlan(null);
-    }
-  };
-
-  const handleSelect = (plan: Plan) => {
-    setPendingPlan(plan);
-    setDeviceModalOpen(true);
-  };
-
-  const handleDeviceConfirm = () => {
-    if (pendingPlan) doSelectPlan(pendingPlan);
-    setDeviceModalOpen(false);
-  };
 
   if (loading) {
     return (
@@ -158,18 +124,13 @@ export default function CountryPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:py-12">
-      <DeviceCompatibilityModal
-        isOpen={deviceModalOpen}
-        onClose={() => { setDeviceModalOpen(false); setPendingPlan(null); }}
-        onConfirm={handleDeviceConfirm}
-      />
       {/* Location header */}
       <div className="mb-10 flex flex-col gap-6 sm:flex-row sm:items-center">
         <div className="flex items-center gap-4">
           {location.flagUrl && location.type === 1 ? (
             <Image
               src={location.flagUrl}
-              alt={location.name}
+              alt={getCountryName(location.code)}
               width={64}
               height={48}
               className="rounded-2xl object-cover shadow-lg ring-2 ring-white"
@@ -182,7 +143,7 @@ export default function CountryPage() {
           )}
           <div>
             <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">
-              {location.name} eSIM
+              {location.name?.length > 3 ? location.name : getCountryName(location.code)} eSIM
             </h1>
             {location.type === 2 && location.subLocation && (
               <p className="mt-1 text-sm text-slate-500">
@@ -199,19 +160,30 @@ export default function CountryPage() {
         </div>
       ) : (
         <>
-          {/* Plan tabs */}
-          <div className="mb-6 flex gap-2 border-b border-slate-200 pb-4">
-            {(['all', '7d', '30d'] as const).map((tab) => (
+          {/* Plan tabs — All Plans + duration filters (only if plans exist for that duration) */}
+          <div className="mb-6 flex flex-wrap gap-2 border-b border-slate-200 pb-4">
+            <button
+              key="all"
+              onClick={() => { setActiveTab('all'); setCurrentPage(1); }}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
+                activeTab === 'all'
+                  ? 'bg-violet-100 text-violet-700'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              All Plans
+            </button>
+            {availableDurations.map((days) => (
               <button
-                key={tab}
-                onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
+                key={days}
+                onClick={() => { setActiveTab(days); setCurrentPage(1); }}
                 className={`rounded-lg px-4 py-2 text-sm font-medium transition ${
-                  activeTab === tab
+                  activeTab === days
                     ? 'bg-violet-100 text-violet-700'
                     : 'text-slate-600 hover:bg-slate-100'
                 }`}
               >
-                {tab === 'all' ? 'All Plans' : tab === '7d' ? '7 Days' : '30 Days'}
+                {days} Days
               </button>
             ))}
           </div>
@@ -221,10 +193,9 @@ export default function CountryPage() {
               <PlanCard
                 key={plan.packageCode}
                 plan={plan}
+                slug={slug!}
                 formatProviderPrice={formatProviderPrice}
                 locationCode={location.code}
-                isSelecting={selecting === plan.packageCode}
-                onSelect={() => handleSelect(plan)}
               />
             ))}
           </div>
@@ -259,18 +230,17 @@ export default function CountryPage() {
 
 function PlanCard({
   plan,
+  slug,
   formatProviderPrice,
   locationCode,
-  isSelecting,
-  onSelect,
 }: {
   plan: Plan;
+  slug: string;
   formatProviderPrice: (providerPrice: number) => string;
   locationCode: string;
-  isSelecting: boolean;
-  onSelect: () => void;
 }) {
   const operators = getOperatorsDisplay(locationCode);
+  const planPath = `/countries/${slug}/plan/${encodeURIComponent(plan.packageCode)}`;
   return (
     <div className="group flex flex-col rounded-card border border-slate-200 bg-white p-6 shadow-card transition-all duration-200 hover:border-violet-200 hover:shadow-card-hover">
       <div className="mb-4">
@@ -290,20 +260,12 @@ function PlanCard({
         <p className="text-2xl font-bold text-violet-600">
           {formatProviderPrice(plan.price)}
         </p>
-        <button
-          onClick={onSelect}
-          disabled={isSelecting}
-          className="w-full rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:from-violet-600 hover:to-purple-600 disabled:cursor-not-allowed disabled:opacity-50"
+        <Link
+          href={planPath}
+          className="block w-full rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 py-3 text-center text-sm font-semibold text-white shadow-lg shadow-violet-500/30 transition hover:from-violet-600 hover:to-purple-600"
         >
-          {isSelecting ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              Loading…
-            </span>
-          ) : (
-            'Select Plan'
-          )}
-        </button>
+          Select Plan
+        </Link>
       </div>
     </div>
   );

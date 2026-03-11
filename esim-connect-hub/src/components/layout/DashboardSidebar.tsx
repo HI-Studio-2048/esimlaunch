@@ -22,6 +22,8 @@ import {
   ChevronRight,
   Menu,
   Shield,
+  Users,
+  RefreshCw,
 } from "lucide-react";
 
 type NavItem = {
@@ -37,6 +39,9 @@ type NavSection = {
 
 const EASY_NAV: NavItem[] = [
   { label: "Dashboard",   icon: LayoutDashboard, path: "/dashboard" },
+  { label: "Customers",   icon: Users,           path: "/dashboard/customers" },
+  { label: "Orders",     icon: ShoppingCart,    path: "/dashboard/orders" },
+  { label: "Top-ups",    icon: RefreshCw,       path: "/dashboard/topups" },
   { label: "Billing",     icon: Receipt,         path: "/settings/billing" },
   { label: "Payment",     icon: CreditCard,      path: "/dashboard/payment-settings" },
   { label: "Balance",     icon: Wallet,          path: "/dashboard/balance" },

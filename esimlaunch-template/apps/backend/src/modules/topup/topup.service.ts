@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma.service';
 import { EsimService } from '../esim/esim.service';
+import { StoreConfigService } from '../esim/store-config.service';
 import { StripeService } from '../stripe/stripe.service';
 import { CurrencyService } from '../currency/currency.service';
 import { EmailService } from '../email/email.service';
@@ -13,6 +14,7 @@ export class TopUpService {
   constructor(
     private prisma: PrismaService,
     private esimService: EsimService,
+    private storeConfig: StoreConfigService,
     private stripeService: StripeService,
     private currencyService: CurrencyService,
     private emailService: EmailService,
@@ -91,7 +93,10 @@ export class TopUpService {
     const topUp = await this.prisma.topUp.findUnique({ where: { id: topUpId } });
     if (!topUp || topUp.status !== 'pending') return;
 
-    const profile = await this.prisma.esimProfile.findUnique({ where: { id: topUp.profileId } });
+    const profile = await this.prisma.esimProfile.findUnique({
+      where: { id: topUp.profileId },
+      include: { user: true, order: { include: { user: true } } },
+    });
     if (!profile?.esimTranNo) {
       this.logger.error(`No esimTranNo for profile ${topUp.profileId}`);
       return;
@@ -110,6 +115,11 @@ export class TopUpService {
           where: { id: topUp.id },
           data: { status: 'completed', rechargeOrderNo: res.obj.orderNo },
         });
+
+        // Sync to main backend when linked so top-up appears in merchant dashboard
+        this.syncTopUpToHub({ topUp, profile, session }).catch((err) =>
+          this.logger.warn('Failed to sync top-up to hub', err?.message || err),
+        );
       } else {
         throw new Error(res.errorMessage ?? 'Top-up failed');
       }
@@ -117,6 +127,43 @@ export class TopUpService {
       this.logger.error(`Top-up failed for ${topUpId}`, err);
       await this.prisma.topUp.update({ where: { id: topUp.id }, data: { status: 'failed' } });
     }
+  }
+
+  /**
+   * Sync completed top-up to main backend when linked. Top-ups appear in merchant dashboard.
+   */
+  private async syncTopUpToHub(params: {
+    topUp: { id: string; planCode: string; amountCents: number; paymentRef: string | null };
+    profile: { iccid: string | null; esimTranNo: string | null; user?: { email: string; name?: string | null } | null; order?: { user: { email: string; name?: string | null } } | null };
+    session: { id?: string };
+  }): Promise<void> {
+    if (!this.storeConfig.isLinked()) return;
+    const baseUrl = this.config.get<string>('ESIMLAUNCH_HUB_API_URL');
+    const syncSecret = this.config.get<string>('TEMPLATE_ORDER_SYNC_SECRET');
+    const config = await this.storeConfig.getConfig();
+    if (!baseUrl || !syncSecret || !config?.storeId) return;
+
+    const user = params.profile.user ?? params.profile.order?.user;
+    if (!user?.email) return;
+
+    await fetch(`${baseUrl.replace(/\/$/, '')}/api/integration/topup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-template-sync-secret': syncSecret,
+      },
+      body: JSON.stringify({
+        storeId: config.storeId,
+        customerEmail: user.email,
+        customerName: user.name ?? undefined,
+        iccid: params.profile.iccid ?? undefined,
+        esimTranNo: params.profile.esimTranNo ?? undefined,
+        packageCode: params.topUp.planCode,
+        amountCents: params.topUp.amountCents,
+        status: 'completed',
+        paymentRef: params.topUp.paymentRef ?? params.session.id ?? undefined,
+      }),
+    });
   }
 
   async retryFailedTopUps() {

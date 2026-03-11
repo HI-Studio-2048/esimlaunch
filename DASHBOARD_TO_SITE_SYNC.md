@@ -78,6 +78,8 @@ Also need the main backend URL:
 ESIMLAUNCH_HUB_API_URL=https://api.esimlaunch.com
 ```
 
+**Order sync to dashboard:** When `TEMPLATE_ORDER_SYNC_SECRET` is set (same value on main backend and template), completed template orders are reported to the main backend and appear in the merchant's Recent Orders.
+
 ### 2. Template Backend: Fetch Store Config
 
 Add a **StoreConfigService** (or extend EsimService) that:

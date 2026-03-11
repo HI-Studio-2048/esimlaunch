@@ -109,9 +109,12 @@ export class EsimService {
     for (const loc of rawList) {
       if (seen.has(loc.code)) continue;
       seen.add(loc.code);
+      const code = loc.code ?? '';
+      const rawName = loc.name ?? '';
+      const name = this.resolveLocationName(rawName, code);
       result.push({
-        code: loc.code ?? '',
-        name: loc.name ?? '',
+        code,
+        name,
         type: (loc.type ?? 1) as 1 | 2,
         subLocation: loc.subLocation,
       });
@@ -124,6 +127,18 @@ export class EsimService {
   async getLocationByCode(code: string): Promise<LocationItem | undefined> {
     const all = await this.getLocations();
     return all.find((l) => l.code.toUpperCase() === code.toUpperCase());
+  }
+
+  /** Resolve location name to full country name when API returns code as name */
+  private resolveLocationName(name: string, code: string): string {
+    if (!name || name.length <= 3 || name.toUpperCase() === code.toUpperCase()) {
+      try {
+        return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? name;
+      } catch {
+        return name;
+      }
+    }
+    return name;
   }
 
   /**
@@ -139,10 +154,15 @@ export class EsimService {
     );
   }
 
-  /** Find a location by slug. */
+  /** Find a location by slug. Supports both name-based (kyrgyzstan-esim) and code-based (kg-esim) for backwards compatibility. */
   async getLocationBySlug(slug: string): Promise<LocationItem | undefined> {
     const all = await this.getLocations();
-    return all.find((l) => this.makeSlug(l.name) === slug);
+    const lower = slug.toLowerCase();
+    return all.find(
+      (l) =>
+        this.makeSlug(l.name) === lower ||
+        (l.code.length <= 3 && this.makeSlug(l.code) === lower),
+    );
   }
 
   /** Find location by code (case-insensitive). */

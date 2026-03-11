@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
-import { Search, Menu, X, User, ShoppingCart, ChevronDown, MapPin, Globe } from "lucide-react";
+import { Search, Menu, X, User, ShoppingCart, ChevronDown, MapPin, Globe, ExternalLink } from "lucide-react";
 import { useDemoStore } from "@/contexts/DemoStoreContext";
+import { usePublicStore } from "@/hooks/usePublicStore";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -26,13 +27,15 @@ const regionalPlans = [
 ];
 
 export function DemoStoreNavbar() {
-  const { config } = useDemoStore();
+  const { config, storeId } = useDemoStore();
+  const { data: storeData } = usePublicStore(storeId);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const location = useLocation();
   const params = useParams<{ subdomain?: string }>();
 
   // Derive base path: /store/:subdomain when accessed via subdomain route, else /demo-store
   const basePath = params.subdomain ? `/store/${params.subdomain}` : "/demo-store";
+  const liveSiteUrl = storeData?.subdomain ? `https://${storeData.subdomain}.esimlaunch.com` : null;
 
   const isActive = (suffix: string) => location.pathname === `${basePath}${suffix}`;
 
@@ -131,6 +134,17 @@ export function DemoStoreNavbar() {
 
           {/* Right Side */}
           <div className="flex items-center gap-3">
+            {liveSiteUrl && (
+              <a
+                href={liveSiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden md:flex items-center gap-1.5 text-sm font-medium hover:text-primary transition-colors"
+              >
+                View Live Site
+                <ExternalLink className="h-3.5 w-3.5" />
+              </a>
+            )}
             <button className="p-2 hover:bg-muted rounded-full transition-colors">
               <Search className="h-5 w-5" />
             </button>
@@ -159,6 +173,17 @@ export function DemoStoreNavbar() {
         {mobileMenuOpen && (
           <div className="md:hidden py-4 border-t border-border">
             <nav className="flex flex-col gap-4">
+              {liveSiteUrl && (
+                <a
+                  href={liveSiteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-sm font-medium"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  View Live Site <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              )}
               <Link
                 to={`${basePath}/destinations`}
                 className="text-sm font-medium"
