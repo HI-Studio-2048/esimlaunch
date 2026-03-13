@@ -99,11 +99,14 @@ router.post('/orders', async (req, res, next) => {
     const data = orderProfilesSchema.parse(req.body);
     const merchantId = req.merchant!.id;
 
-    // Resolve order amount: use provided amount or compute from package list (eSIM Access price in 1/10000 USD)
+    // Resolve order amount and enrich packageInfoList with packageCode (eSIM Access may require it)
     let orderAmountApi = data.amount;
+    let packageInfoList = data.packageInfoList;
     if (orderAmountApi == null) {
       try {
-        orderAmountApi = await esimAccessService.getOrderAmountFromPackages(data.packageInfoList);
+        const resolved = await esimAccessService.resolveOrderFromPackages(data.packageInfoList);
+        orderAmountApi = resolved.amount;
+        packageInfoList = resolved.enrichedPackageInfoList;
       } catch (err: any) {
         return res.status(400).json({
           success: false,
@@ -139,8 +142,8 @@ router.post('/orders', async (req, res, next) => {
 
     // Use database transaction to ensure atomicity
     const result = await prisma.$transaction(async (tx) => {
-      // Call eSIM Access API with amount in API units (1/10000 USD)
-      const payload = { ...data, amount: orderAmountApi };
+      // Call eSIM Access API with amount in API units (1/10000 USD) and enriched packageInfoList (includes packageCode)
+      const payload = { ...data, amount: orderAmountApi, packageInfoList };
       const esimResult = await esimAccessService.orderProfiles(payload);
 
       if (esimResult.success && esimResult.obj?.orderNo) {
@@ -152,7 +155,7 @@ router.post('/orders', async (req, res, next) => {
             esimAccessOrderNo: esimResult.obj.orderNo,
             status: OrderStatus.PENDING,
             totalAmount: BigInt(orderAmountApi),
-            packageCount: data.packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0),
+            packageCount: packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0),
           },
         });
 
@@ -178,7 +181,7 @@ router.post('/orders', async (req, res, next) => {
             orderId: order.id,
             amount: BigInt(-merchantChargeCents), // Negative for deduction
             type: BalanceTransactionType.ORDER,
-            description: `Order ${esimResult.obj.orderNo} - ${data.packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0)} package(s)`,
+            description: `Order ${esimResult.obj.orderNo} - ${packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0)} package(s)`,
           },
         });
 
@@ -189,7 +192,12 @@ router.post('/orders', async (req, res, next) => {
         return { ...esimResult, orderId: order.id };
       }
 
-      // eSIM Access API returned failure - throw to exit transaction and surface error
+      // eSIM Access API returned failure - log full response for debugging, then surface error
+      console.error('[Order] eSIM Access rejected order:', {
+        errorCode: esimResult.errorCode,
+        errorMessage: esimResult.errorMessage,
+        payload: { amount: orderAmountApi, packageInfoList },
+      });
       const err = new Error(esimResult.errorMessage || 'Order was rejected by the eSIM provider.') as Error & { esimErrorCode?: string };
       err.esimErrorCode = esimResult.errorCode;
       throw err;
@@ -204,8 +212,12 @@ router.post('/orders', async (req, res, next) => {
         errorMessage: error.errors[0].message,
       });
     } else {
-      console.error('Order creation error:', error);
       const esimData = error?.response?.data;
+      console.error('Order creation error:', {
+        message: error?.message,
+        esimErrorCode: error?.esimErrorCode,
+        responseData: esimData,
+      });
       const isProviderError = !!(error?.esimErrorCode || esimData?.errorCode);
       const errorMessage =
         error?.message ||

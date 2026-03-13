@@ -274,9 +274,30 @@ class ESIMAccessService {
    * Fetches BASE packages and looks up price for each packageInfoList item by packageCode or slug.
    */
   async getOrderAmountFromPackages(packageInfoList: Array<{ packageCode?: string; slug?: string; count: number }>): Promise<number> {
-    // Use raw (unmarked) prices when computing the amount that will be
-    // sent to eSIM Access. The platform-level markup is applied only to
-    // what merchants see, not to what we pay the provider.
+    const { amount } = await this.resolveOrderFromPackages(packageInfoList);
+    return amount;
+  }
+
+  /**
+   * Resolve order amount and enrich packageInfoList with packageCode (eSIM Access may require it).
+   * Returns { amount, enrichedPackageInfoList } for use in the order API payload.
+   */
+  async resolveOrderFromPackages(packageInfoList: Array<{
+    packageCode?: string;
+    slug?: string;
+    count: number;
+    price?: number;
+    periodNum?: number;
+  }>): Promise<{
+    amount: number;
+    enrichedPackageInfoList: Array<{
+      packageCode?: string;
+      slug?: string;
+      count: number;
+      price?: number;
+      periodNum?: number;
+    }>;
+  }> {
     const listRes = await this.fetchPackagesRaw({ type: 'BASE' });
     if (!listRes.success || !listRes.obj?.packageList?.length) {
       throw new Error('Failed to fetch package list or no packages available');
@@ -289,14 +310,22 @@ class ESIMAccessService {
       if (p.slug) bySlug.set(p.slug, p);
     }
     let total = 0;
+    const enriched: Array<{ packageCode?: string; slug?: string; count: number; price?: number; periodNum?: number }> = [];
     for (const item of packageInfoList) {
       const pkg = (item.packageCode && byCode.get(item.packageCode)) || (item.slug && bySlug.get(item.slug));
       if (!pkg) {
         throw new Error(`Package not found: ${item.packageCode || item.slug || 'unknown'}`);
       }
       total += pkg.price * item.count;
+      enriched.push({
+        packageCode: pkg.packageCode,
+        slug: item.slug ?? pkg.slug,
+        count: item.count,
+        price: item.price,
+        periodNum: item.periodNum,
+      });
     }
-    return total;
+    return { amount: total, enrichedPackageInfoList: enriched };
   }
 
   /**
