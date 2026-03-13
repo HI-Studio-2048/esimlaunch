@@ -14,6 +14,9 @@ app.use(cors({
     
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
+    } else if (origin.endsWith('.vercel.app')) {
+      // Allow Vercel preview deployments (e.g. esimlaunch-xxx-ezza-wans-projects.vercel.app)
+      callback(null, true);
     } else {
       console.warn(`CORS blocked origin: ${origin}. Allowed origins: ${allowedOrigins.join(', ')}`);
       callback(new Error('Not allowed by CORS'));

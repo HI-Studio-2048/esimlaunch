@@ -219,11 +219,15 @@ router.post('/orders', async (req, res, next) => {
         responseData: esimData,
       });
       const isProviderError = !!(error?.esimErrorCode || esimData?.errorCode);
+      const code = error?.esimErrorCode || esimData?.errorCode;
+      // 000105 = insufficient balance on eSIM Access (platform) account — top up at eSIM Access console
       const errorMessage =
-        error?.message ||
-        esimData?.errorMessage ||
-        esimData?.message ||
-        'Failed to create order';
+        code === '000105'
+          ? 'Insufficient platform balance with eSIM provider. Please contact support to top up.'
+          : error?.message ||
+            esimData?.errorMessage ||
+            esimData?.message ||
+            'Failed to create order';
       res.status(isProviderError ? 400 : 500).json({
         success: false,
         errorCode: error?.esimErrorCode || esimData?.errorCode || 'ORDER_FAILED',

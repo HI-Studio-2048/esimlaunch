@@ -77,12 +77,13 @@ export default function CreateOrder() {
               .map((item: any) => {
                 const pkg = item?.pkg || {};
                 const id = pkg.slug || pkg.packageCode || pkg.name || "";
-                if (!id) return null;
+                const qty = typeof item.qty === "number" && item.qty > 0 ? item.qty : 0;
+                if (!id || qty <= 0) return null;
                 return {
                   slug: id,
                   name: pkg.name || id,
                   price: typeof pkg.price === "number" ? pkg.price : 0,
-                  qty: typeof item.qty === "number" && item.qty > 0 ? item.qty : 1,
+                  qty,
                 } as CartItem;
               })
               .filter(Boolean) as CartItem[];
@@ -174,13 +175,37 @@ export default function CreateOrder() {
 
       // Let backend resolve amount from provider catalog (raw prices). Frontend prices are marked-up
       // and would cause "Package price error" if sent to eSIM provider.
-      if (fromCart && cartItems) {
+      if (fromCart) {
+        // Re-read cart from localStorage at order time to avoid sending stale/removed items
+        // (e.g. user removed items in another tab or navigated back and forth)
+        let itemsToOrder: CartItem[] = [];
+        try {
+          const raw = typeof window !== "undefined" ? localStorage.getItem("esim_cart") : null;
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              itemsToOrder = parsed
+                .map((item: any) => {
+                  const pkg = item?.pkg || {};
+                  const id = pkg.slug || pkg.packageCode || pkg.name || "";
+                  const qty = typeof item.qty === "number" && item.qty > 0 ? item.qty : 0;
+                  if (!id || qty <= 0) return null;
+                  return { slug: id, name: pkg.name || id, price: typeof pkg.price === "number" ? pkg.price : 0, qty } as CartItem;
+                })
+                .filter(Boolean) as CartItem[];
+            }
+          }
+        } catch {
+          itemsToOrder = cartItems || [];
+        }
+        if (itemsToOrder.length === 0) {
+          toast({ title: "Cart is empty", description: "Add at least one eSIM plan before checking out.", variant: "destructive" });
+          setOrdering(false);
+          return;
+        }
         payload = {
           transactionId: txId,
-          packageInfoList: cartItems.map((item) => ({
-            slug: item.slug,
-            count: item.qty,
-          })),
+          packageInfoList: itemsToOrder.map((item) => ({ slug: item.slug, count: item.qty })),
         };
       } else {
         payload = {
