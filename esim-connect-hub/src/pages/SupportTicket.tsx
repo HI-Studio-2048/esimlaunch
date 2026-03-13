@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { API_BASE_URL } from "@/lib/api";
+import { API_BASE_URL, apiClient } from "@/lib/api";
 
 const priorityColors: Record<string, string> = {
   low: "bg-gray-500",
@@ -39,8 +38,10 @@ const statusColors: Record<string, string> = {
 export default function SupportTicket() {
   const { ticketId } = useParams<{ ticketId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
   const { customer, isAuthenticated } = useCustomerAuth();
+  const isDashboard = location.pathname.includes('/dashboard/');
   const [ticket, setTicket] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -57,22 +58,23 @@ export default function SupportTicket() {
   const loadTicket = async () => {
     setIsLoading(true);
     try {
-      const token = isAuthenticated ? localStorage.getItem('customer_token') : null;
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/support/tickets/${ticketId}`, {
-        headers,
-      });
-
-      const result = await response.json();
-      if (result.success) {
-        setTicket(result.data);
-        setMessages(result.data.messages || []);
+      let result: any;
+      if (isDashboard) {
+        const ticketData = await apiClient.getSupportTicket(ticketId!);
+        if (ticketData) {
+          setTicket(ticketData);
+          setMessages(ticketData.messages || []);
+        }
+      } else {
+        const token = isAuthenticated ? localStorage.getItem('customer_token') : null;
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const response = await fetch(`${API_BASE_URL}/api/support/tickets/${ticketId}`, { headers });
+        const res = await response.json();
+        if (res?.success && res.data) {
+          setTicket(res.data);
+          setMessages(res.data.messages || []);
+        }
       }
     } catch (error: any) {
       toast({
@@ -90,30 +92,28 @@ export default function SupportTicket() {
 
     setIsSubmitting(true);
     try {
-      const token = isAuthenticated ? localStorage.getItem('customer_token') : null;
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`${API_BASE_URL}/api/support/tickets/${ticketId}/messages`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ message: newMessage }),
-      });
-
-      const result = await response.json();
-      if (result.success) {
+      if (isDashboard) {
+        await apiClient.addTicketMessage(ticketId!, newMessage.trim());
         setNewMessage("");
-        loadTicket(); // Reload to get updated messages
-        toast({
-          title: "Message Sent",
-          description: "Your message has been sent successfully.",
-        });
+        loadTicket();
+        toast({ title: "Message Sent", description: "Your message has been sent successfully." });
       } else {
-        throw new Error(result.errorMessage || 'Failed to send message');
+        const token = isAuthenticated ? localStorage.getItem('customer_token') : null;
+        const headers: HeadersInit = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+        const response = await fetch(`${API_BASE_URL}/api/support/tickets/${ticketId}/messages`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ message: newMessage }),
+        });
+        const result = await response.json();
+        if (result.success) {
+          setNewMessage("");
+          loadTicket();
+          toast({ title: "Message Sent", description: "Your message has been sent successfully." });
+        } else {
+          throw new Error(result.errorMessage || 'Failed to send message');
+        }
       }
     } catch (error: any) {
       toast({

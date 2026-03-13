@@ -75,6 +75,63 @@ router.get('/methods', authenticateSessionOrJWT, async (req, res) => {
 });
 
 /**
+ * DELETE /api/payments/methods/:methodId
+ * Detach a payment method from the merchant's Stripe customer.
+ */
+router.delete('/methods/:methodId', authenticateSessionOrJWT, async (req, res) => {
+  try {
+    const merchantId = (req as any).merchant!.id;
+    const methodId = req.params.methodId;
+    if (!methodId) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: 'Payment method ID is required',
+      });
+    }
+
+    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2024-11-20.acacia' as any });
+    const { prisma } = await import('../lib/prisma');
+    const sub = await prisma.subscription.findUnique({
+      where: { merchantId },
+      select: { stripeCustomerId: true },
+    });
+    if (!sub?.stripeCustomerId) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'NO_CUSTOMER',
+        errorMessage: 'No payment methods to remove',
+      });
+    }
+
+    const pm = await stripe.paymentMethods.retrieve(methodId);
+    if (pm.customer !== sub.stripeCustomerId) {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'UNAUTHORIZED',
+        errorMessage: 'This payment method does not belong to your account',
+      });
+    }
+
+    await stripe.paymentMethods.detach(methodId);
+    res.json({ success: true, message: 'Payment method removed' });
+  } catch (e: any) {
+    if (e?.code === 'resource_missing') {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'NOT_FOUND',
+        errorMessage: 'Payment method not found',
+      });
+    }
+    res.status(500).json({
+      success: false,
+      errorCode: 'DELETE_FAILED',
+      errorMessage: e?.message || 'Failed to remove payment method',
+    });
+  }
+});
+
+/**
  * POST /api/payments/setup-intent
  * Create a Stripe SetupIntent so the merchant can save a payment method.
  */
@@ -398,9 +455,34 @@ router.post('/confirm-topup', authenticateSessionOrJWT, async (req, res, next) =
 
     const paymentIntent = await paymentService.confirmPayment({ paymentIntentId });
 
+    // Verify this payment intent belongs to the authenticated merchant
+    const intentMerchantId = paymentIntent.metadata?.merchantId;
+    if (intentMerchantId && intentMerchantId !== merchantId) {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'UNAUTHORIZED',
+        errorMessage: 'This payment does not belong to your account.',
+      });
+    }
+
     if (paymentIntent.status === 'succeeded') {
       const { prisma } = await import('../lib/prisma');
       const amountCents = paymentIntent.amount; // already in cents from Stripe
+
+      // Idempotency: skip if we already credited this payment intent (prevent double-credit on retry)
+      const existingTx = await prisma.balanceTransaction.findFirst({
+        where: {
+          merchantId,
+          type: 'TOPUP',
+          description: { contains: paymentIntent.id },
+        },
+      });
+      if (existingTx) {
+        return res.json({
+          success: true,
+          data: { id: paymentIntent.id, status: paymentIntent.status, amount: amountCents },
+        });
+      }
 
       // Credit merchant balance and record transaction
       await prisma.$transaction([

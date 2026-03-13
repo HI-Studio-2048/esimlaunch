@@ -114,9 +114,10 @@ export function LiveGlobeView() {
         <Globe
           width={undefined}
           height={380}
-          globeImageUrl="https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-          bumpImageUrl="https://unpkg.com/three-globe/example/img/earth-topology.png"
-          backgroundImageUrl="https://unpkg.com/three-globe/example/img/night-sky.png"
+          globeImageUrl="/earth-blue-marble.jpg"
+          bumpImageUrl="/earth-topology.png"
+          backgroundColor="#0a0a12"
+          backgroundImageUrl="/night-sky.png"
           showAtmosphere={true}
           atmosphereColor="#22d3ee"
           atmosphereAltitude={0.25}

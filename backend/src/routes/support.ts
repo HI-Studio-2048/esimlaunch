@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { authenticateCustomer } from '../middleware/customerAuth';
+import { optionalSupportAuth } from '../middleware/optionalSupportAuth';
 import { supportService } from '../services/supportService';
 import { prisma } from '../lib/prisma';
 
@@ -154,9 +155,9 @@ router.get('/tickets/number/:ticketNumber', async (req, res, next) => {
 
 /**
  * GET /api/support/tickets/:ticketId
- * Get ticket by ID
+ * Get ticket by ID (optional auth: merchant JWT or customer JWT for access control)
  */
-router.get('/tickets/:ticketId', async (req, res, next) => {
+router.get('/tickets/:ticketId', optionalSupportAuth, async (req, res, next) => {
   try {
     const ticketId = req.params.ticketId;
     const customer = (req as any).customer;
@@ -210,9 +211,9 @@ router.get('/tickets/:ticketId', async (req, res, next) => {
 
 /**
  * POST /api/support/tickets/:ticketId/messages
- * Add message to ticket
+ * Add message to ticket (optional auth: merchant JWT = staff reply, customer JWT = customer reply)
  */
-router.post('/tickets/:ticketId/messages', async (req, res, next) => {
+router.post('/tickets/:ticketId/messages', optionalSupportAuth, async (req, res, next) => {
   try {
     const ticketId = req.params.ticketId;
     const data = addMessageSchema.parse(req.body);

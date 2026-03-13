@@ -31,12 +31,20 @@ interface OrderResult {
   }>;
 }
 
+interface CartItem {
+  slug: string;
+  name: string;
+  price: number;
+  qty: number;
+}
+
 export default function CreateOrder() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
   const prefillSlug = searchParams.get("slug") || "";
+  const fromCart = searchParams.get("cart") === "1";
 
   const [slug, setSlug] = useState(prefillSlug);
   const [quantity, setQuantity] = useState(1);
@@ -46,10 +54,39 @@ export default function CreateOrder() {
   const [ordering, setOrdering] = useState(false);
   const [orderResult, setOrderResult] = useState<OrderResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cartItems, setCartItems] = useState<CartItem[] | null>(null);
 
   useEffect(() => {
     fetchBalance();
-    if (prefillSlug) {
+    if (fromCart) {
+      try {
+        if (typeof window === "undefined") return;
+        const raw = localStorage.getItem("esim_cart");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            const normalized: CartItem[] = parsed
+              .map((item: any) => {
+                const pkg = item?.pkg || {};
+                const id = pkg.slug || pkg.packageCode || pkg.name || "";
+                if (!id) return null;
+                return {
+                  slug: id,
+                  name: pkg.name || id,
+                  price: typeof pkg.price === "number" ? pkg.price : 0,
+                  qty: typeof item.qty === "number" && item.qty > 0 ? item.qty : 1,
+                } as CartItem;
+              })
+              .filter(Boolean) as CartItem[];
+            if (normalized.length > 0) {
+              setCartItems(normalized);
+            }
+          }
+        }
+      } catch {
+        // ignore cart load errors
+      }
+    } else if (prefillSlug) {
       lookupPackage(prefillSlug);
     }
   }, []);
@@ -89,35 +126,74 @@ export default function CreateOrder() {
   const pricePerUnit =
     packageInfo?.price != null ? packageInfo.price / 10000 : null;
   const totalCost = pricePerUnit != null ? pricePerUnit * quantity : null;
+  const cartTotal =
+    fromCart && cartItems
+      ? cartItems.reduce(
+          (sum, item) => sum + (item.price / 10000) * item.qty,
+          0
+        )
+      : null;
+  const effectiveTotal = fromCart ? cartTotal : totalCost;
   const hasEnoughBalance =
-    balance == null || totalCost == null || balance >= totalCost;
+    balance == null || effectiveTotal == null || balance >= effectiveTotal;
 
   const handleOrder = async () => {
-    if (!slug.trim()) {
-      toast({
-        title: "Missing package",
-        description: "Enter a package slug to continue.",
-        variant: "destructive",
-      });
-      return;
+    if (fromCart) {
+      if (!cartItems || cartItems.length === 0) {
+        toast({
+          title: "Cart is empty",
+          description: "Add at least one eSIM plan before checking out.",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      if (!slug.trim()) {
+        toast({
+          title: "Missing package",
+          description: "Enter a package slug to continue.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     setOrdering(true);
     setError(null);
     try {
       const txId = `TX-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-      const payload: Parameters<typeof apiClient.createOrder>[0] = {
-        transactionId: txId,
-        amount: totalCost != null ? Math.round(totalCost * 10000) : undefined,
-        packageInfoList: [
-          {
-            slug: slug.trim(),
-            count: quantity,
-            price:
-              pricePerUnit != null ? Math.round(pricePerUnit * 10000) : undefined,
-          },
-        ],
-      };
+      let payload: Parameters<typeof apiClient.createOrder>[0];
+
+      if (fromCart && cartItems) {
+        const amountRaw = cartItems.reduce(
+          (sum, item) => sum + (item.price || 0) * item.qty,
+          0
+        );
+        payload = {
+          transactionId: txId,
+          amount: amountRaw,
+          packageInfoList: cartItems.map((item) => ({
+            slug: item.slug,
+            count: item.qty,
+            price: item.price || undefined,
+          })),
+        };
+      } else {
+        payload = {
+          transactionId: txId,
+          amount: totalCost != null ? Math.round(totalCost * 10000) : undefined,
+          packageInfoList: [
+            {
+              slug: slug.trim(),
+              count: quantity,
+              price:
+                pricePerUnit != null
+                  ? Math.round(pricePerUnit * 10000)
+                  : undefined,
+            },
+          ],
+        };
+      }
 
       const result = await apiClient.createOrder(payload);
 
@@ -137,6 +213,9 @@ export default function CreateOrder() {
       }
 
       setOrderResult({ orderNo: result.orderNo, profiles });
+      if (fromCart && typeof window !== "undefined") {
+        localStorage.removeItem("esim_cart");
+      }
       toast({
         title: "Order placed!",
         description: `Order ${result.orderNo} created successfully.`,
@@ -152,9 +231,13 @@ export default function CreateOrder() {
   };
 
   if (orderResult) {
+    const totalCartQty =
+      fromCart && cartItems
+        ? cartItems.reduce((sum, item) => sum + item.qty, 0)
+        : quantity;
     return (
       <div className="min-h-screen bg-background">
-        <div className="container-custom py-8 max-w-2xl">
+        <div className="container-custom py-8 max-w-3xl">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -169,8 +252,13 @@ export default function CreateOrder() {
               </span>
             </p>
             <p className="text-sm text-muted-foreground mb-6">
-              {quantity} eSIM{quantity > 1 ? "s" : ""} ordered for package{" "}
-              <span className="font-mono">{slug}</span>
+              {totalCartQty} eSIM{totalCartQty > 1 ? "s" : ""} ordered
+              {!fromCart && (
+                <>
+                  {" "}
+                  for package <span className="font-mono">{slug}</span>
+                </>
+              )}
             </p>
 
             {orderResult.profiles && orderResult.profiles.length > 0 && (
@@ -257,7 +345,7 @@ export default function CreateOrder() {
         </div>
       </div>
 
-      <div className="container-custom py-8 max-w-2xl">
+      <div className="container-custom py-8 max-w-3xl">
         {/* Balance Banner */}
         {balance !== null && (
           <motion.div
@@ -289,91 +377,158 @@ export default function CreateOrder() {
           animate={{ opacity: 1, y: 0 }}
           className="bg-card rounded-2xl p-6 border space-y-6"
         >
-          {/* Package Slug */}
-          <div className="space-y-2">
-            <Label htmlFor="slug">Package Slug</Label>
-            <div className="flex gap-2">
-              <Input
-                id="slug"
-                placeholder="e.g. esim-us-1gb-7days"
-                value={slug}
-                onChange={(e) => {
-                  setSlug(e.target.value);
-                  setPackageInfo(null);
-                  setError(null);
-                }}
-                className="flex-1 font-mono text-sm"
-              />
-              <Button
-                variant="outline"
-                onClick={() => lookupPackage(slug)}
-                disabled={lookingUp || !slug.trim()}
-                className="gap-2"
-              >
-                {lookingUp ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Package className="w-4 h-4" />
-                )}
-                Lookup
-              </Button>
+          {/* Package Slug (single package mode) */}
+          {!fromCart && (
+            <div className="space-y-3">
+              <Label htmlFor="slug">Package Slug</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="slug"
+                  placeholder="e.g. esim-us-1gb-7days"
+                  value={slug}
+                  onChange={(e) => {
+                    setSlug(e.target.value);
+                    setPackageInfo(null);
+                    setError(null);
+                  }}
+                  className="flex-1 font-mono text-sm"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => lookupPackage(slug)}
+                  disabled={lookingUp || !slug.trim()}
+                  className="gap-2"
+                >
+                  {lookingUp ? (
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Package className="w-4 h-4" />
+                  )}
+                  Lookup
+                </Button>
+              </div>
+              <div className="mt-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-primary" />
+                  <div className="text-xs">
+                    <p className="font-semibold text-foreground">Don&apos;t know the slug?</p>
+                    <p className="text-muted-foreground">Search and copy it from the Package Browser.</p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-primary text-primary hover:bg-primary/10 whitespace-nowrap"
+                  onClick={() => navigate("/dashboard/packages")}
+                >
+                  Open Package Browser
+                </Button>
+              </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Browse packages in the{" "}
-              <button
-                className="text-primary underline"
-                onClick={() => navigate("/dashboard/packages")}
-              >
-                Package Browser
-              </button>
-            </p>
-          </div>
+          )}
 
-          {/* Package Info */}
-          <AnimatePresence>
-            {packageInfo && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                className="p-4 rounded-xl bg-primary/5 border border-primary/20 space-y-2"
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <CheckCircle2 className="w-4 h-4 text-green-500" />
-                  <p className="text-sm font-medium">
-                    {packageInfo.name || slug}
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-3 text-center text-sm">
-                  <div>
-                    <p className="font-semibold">
-                      {packageInfo.dataAmount
-                        ? `${packageInfo.dataAmount} ${packageInfo.dataUnit || "MB"}`
-                        : "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Data</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold">
-                      {packageInfo.duration
-                        ? `${packageInfo.duration} ${packageInfo.durationUnit || "days"}`
-                        : "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Validity</p>
-                  </div>
-                  <div>
-                    <p className="font-semibold gradient-text">
-                      {pricePerUnit != null
-                        ? `$${pricePerUnit.toFixed(4)}`
-                        : "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Per eSIM</p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Cart summary (multi-plan checkout) */}
+          {fromCart && cartItems && cartItems.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Cart summary</Label>
+                <span className="text-xs text-muted-foreground">
+                  {cartItems.reduce((sum, item) => sum + item.qty, 0)} eSIMs ·{" "}
+                  <span className="font-semibold">
+                    ${cartTotal?.toFixed(2) ?? "0.00"}
+                  </span>
+                </span>
+              </div>
+              <div className="rounded-xl border bg-muted/30 overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/60 text-xs text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-4 py-2">Plan</th>
+                      <th className="text-right px-4 py-2">Qty</th>
+                      <th className="text-right px-4 py-2">Price / eSIM</th>
+                      <th className="text-right px-4 py-2">Line total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cartItems.map((item) => {
+                      const unit = item.price / 10000;
+                      const line = unit * item.qty;
+                      return (
+                        <tr key={item.slug} className="border-t border-border/60">
+                          <td className="px-4 py-2">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{item.name}</span>
+                              <span className="text-[11px] text-muted-foreground font-mono">
+                                {item.slug}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2 text-right">{item.qty}</td>
+                          <td className="px-4 py-2 text-right">
+                            ${unit.toFixed(4)}
+                          </td>
+                          <td className="px-4 py-2 text-right font-medium">
+                            ${line.toFixed(4)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
+          {/* Package Info (single package mode) */}
+          {!fromCart && (
+            <AnimatePresence>
+              {packageInfo && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="p-4 rounded-xl bg-primary/5 border border-primary/20 space-y-2"
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <CheckCircle2 className="w-4 h-4 text-green-500" />
+                    <p className="text-sm font-medium">
+                      {packageInfo.name || slug}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-center text-sm">
+                    <div>
+                      <p className="font-semibold">
+                        {packageInfo.dataAmount
+                          ? `${packageInfo.dataAmount} ${
+                              packageInfo.dataUnit || "MB"
+                            }`
+                          : "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Data</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold">
+                        {packageInfo.duration
+                          ? `${packageInfo.duration} ${
+                              packageInfo.durationUnit || "days"
+                            }`
+                          : "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Validity</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold gradient-text">
+                        {pricePerUnit != null
+                          ? `$${pricePerUnit.toFixed(4)}`
+                          : "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Per eSIM</p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
           {/* Error */}
           {error && (
             <div className="flex items-center gap-2 text-sm text-destructive p-3 rounded-lg bg-destructive/10">
@@ -382,36 +537,38 @@ export default function CreateOrder() {
             </div>
           )}
 
-          {/* Quantity */}
-          <div className="space-y-2">
-            <Label>Quantity</Label>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                disabled={quantity <= 1}
-              >
-                <Minus className="w-4 h-4" />
-              </Button>
-              <span className="text-2xl font-bold w-12 text-center">
-                {quantity}
-              </span>
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => setQuantity(quantity + 1)}
-              >
-                <Plus className="w-4 h-4" />
-              </Button>
-              <span className="text-sm text-muted-foreground ml-2">
-                eSIM{quantity > 1 ? "s" : ""}
-              </span>
+          {/* Quantity (single package mode) */}
+          {!fromCart && (
+            <div className="space-y-2">
+              <Label>Quantity</Label>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  disabled={quantity <= 1}
+                >
+                  <Minus className="w-4 h-4" />
+                </Button>
+                <span className="text-2xl font-bold w-12 text-center">
+                  {quantity}
+                </span>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setQuantity(quantity + 1)}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+                <span className="text-sm text-muted-foreground ml-2">
+                  eSIM{quantity > 1 ? "s" : ""}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Order Summary */}
-          {totalCost != null && (
+          {!fromCart && totalCost != null && (
             <div className="p-4 rounded-xl bg-muted/50 border space-y-2">
               <h3 className="font-semibold text-sm">Order Summary</h3>
               <div className="flex justify-between text-sm">
@@ -448,11 +605,53 @@ export default function CreateOrder() {
             </div>
           )}
 
+          {fromCart && cartTotal != null && cartItems && cartItems.length > 0 && (
+            <div className="p-4 rounded-xl bg-muted/50 border space-y-2">
+              <h3 className="font-semibold text-sm">Order Summary</h3>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">
+                  {cartItems.reduce((sum, item) => sum + item.qty, 0)} eSIMs
+                </span>
+                <span className="font-medium">${cartTotal.toFixed(4)}</span>
+              </div>
+              {balance !== null && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Balance after order</span>
+                  <span
+                    className={cn(
+                      "font-medium",
+                      hasEnoughBalance ? "text-green-600" : "text-destructive"
+                    )}
+                  >
+                    ${(balance - cartTotal).toFixed(4)}
+                  </span>
+                </div>
+              )}
+              {!hasEnoughBalance && (
+                <p className="text-xs text-destructive flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" />
+                  Insufficient balance.{" "}
+                  <button
+                    className="underline"
+                    onClick={() => navigate("/dashboard/balance")}
+                  >
+                    Add funds
+                  </button>
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Submit */}
           <Button
             variant="gradient"
             onClick={handleOrder}
-            disabled={ordering || !slug.trim() || !hasEnoughBalance}
+            disabled={
+              ordering ||
+              !hasEnoughBalance ||
+              (!fromCart && !slug.trim()) ||
+              (fromCart && (!cartItems || cartItems.length === 0))
+            }
             className="w-full gap-2"
           >
             {ordering ? (

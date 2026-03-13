@@ -71,7 +71,10 @@ export default function Billing() {
     try {
       const result = await apiClient.request<any>('/api/subscriptions/me', {
         method: 'PUT',
-        body: JSON.stringify({ plan: newPlan }),
+        body: JSON.stringify({
+          plan: newPlan,
+          billingPeriod: subscription?.billingPeriod || 'monthly',
+        }),
       });
 
       if (result && typeof result === 'object') {

@@ -112,11 +112,12 @@ export const subscriptionService = {
     const currentPeriodStart = new Date(sub.current_period_start * 1000);
     const currentPeriodEnd = new Date(sub.current_period_end * 1000);
 
-    // Store subscription in database
+    // Store subscription in database (including billingPeriod)
     const dbSubscription = await prisma.subscription.upsert({
       where: { merchantId },
       update: {
         plan,
+        billingPeriod: params.billingPeriod,
         status: subscription.status as SubscriptionStatus,
         currentPeriodStart,
         currentPeriodEnd,
@@ -127,6 +128,7 @@ export const subscriptionService = {
       create: {
         merchantId,
         plan,
+        billingPeriod: params.billingPeriod,
         status: subscription.status as SubscriptionStatus,
         currentPeriodStart,
         currentPeriodEnd,
@@ -157,9 +159,8 @@ export const subscriptionService = {
       throw new Error('Subscription not found');
     }
 
-    // If billing period not provided, keep the current one (would need to store it in DB)
-    // For now, default to monthly if not specified
-    const currentBillingPeriod = billingPeriod || 'monthly';
+    // Preserve current billing period from DB when not specified
+    const currentBillingPeriod = (billingPeriod || subscription.billingPeriod || 'monthly') as 'monthly' | 'yearly';
 
     // Get new plan price ID
     const planPriceIds: Record<SubscriptionPlan, Record<'monthly' | 'yearly', string>> = {
@@ -197,11 +198,12 @@ export const subscriptionService = {
       },
     });
 
-    // Update database
+    // Update database (preserve billing period; Stripe price implies it)
     const dbSubscription = await prisma.subscription.update({
       where: { merchantId },
       data: {
         plan: newPlan,
+        billingPeriod: currentBillingPeriod,
         status: updatedSubscription.status as SubscriptionStatus,
         currentPeriodStart: new Date((updatedSubscription as any).current_period_start * 1000),
         currentPeriodEnd: new Date((updatedSubscription as any).current_period_end * 1000),
@@ -290,10 +292,14 @@ export const subscriptionService = {
       return;
     }
 
-    // Update subscription status
+    const metadata = subscription.metadata || {};
+    const planFromStripe = (metadata.plan as SubscriptionPlan) || dbSubscription.plan;
+
+    // Update subscription status and plan (sync from Stripe metadata)
     await prisma.subscription.update({
       where: { merchantId: dbSubscription.merchantId },
       data: {
+        plan: planFromStripe,
         status: subscription.status as SubscriptionStatus,
         currentPeriodStart: new Date((subscription as any).current_period_start * 1000),
         currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),

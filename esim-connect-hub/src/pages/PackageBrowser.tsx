@@ -143,6 +143,22 @@ export default function PackageBrowser() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showCart, setShowCart] = useState(false);
 
+  // Load cart from previous session (if any)
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined") return;
+      const raw = localStorage.getItem("esim_cart");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          setCart(parsed);
+        }
+      }
+    } catch {
+      // ignore corrupted cart
+    }
+  }, []);
+
   useEffect(() => {
     fetchPackages();
     fetchBalance();
@@ -233,8 +249,22 @@ export default function PackageBrowser() {
   const cartTotal = cart.reduce((sum, item) => sum + ((item.pkg.price || 0) / 10000) * item.qty, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
 
-  const addToCart = (pkg: EsimPackage) => {
+  const updateCart = (updater: (prev: CartItem[]) => CartItem[]) => {
     setCart((prev) => {
+      const next = updater(prev);
+      try {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("esim_cart", JSON.stringify(next));
+        }
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  };
+
+  const addToCart = (pkg: EsimPackage) => {
+    updateCart((prev) => {
       const id = pkg.slug || pkg.packageCode || pkg.name || "";
       const existing = prev.find((c) => (c.pkg.slug || c.pkg.packageCode) === id);
       if (existing) return prev.map((c) => (c.pkg.slug || c.pkg.packageCode) === id ? { ...c, qty: c.qty + 1 } : c);
@@ -244,14 +274,25 @@ export default function PackageBrowser() {
   };
 
   const removeFromCart = (id: string) => {
-    setCart((prev) => prev.filter((c) => (c.pkg.slug || c.pkg.packageCode) !== id));
+    updateCart((prev) => prev.filter((c) => (c.pkg.slug || c.pkg.packageCode) !== id));
   };
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
-    const first = cart[0];
-    const slug = first.pkg.slug || first.pkg.packageCode || "";
-    navigate(`/dashboard/create-order?slug=${encodeURIComponent(slug)}&qty=${first.qty}`);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("esim_cart", JSON.stringify(cart));
+      }
+    } catch {
+      // ignore storage errors
+    }
+    if (cart.length === 1) {
+      const first = cart[0];
+      const slug = first.pkg.slug || first.pkg.packageCode || "";
+      navigate(`/dashboard/create-order?slug=${encodeURIComponent(slug)}&qty=${first.qty}`);
+    } else {
+      navigate("/dashboard/create-order?cart=1");
+    }
   };
 
   const exportCSV = () => {

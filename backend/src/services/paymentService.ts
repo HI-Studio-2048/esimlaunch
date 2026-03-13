@@ -186,6 +186,42 @@ export const paymentService = {
       },
     });
 
+    // Top-up: credit merchant balance if frontend didn't call confirm-topup (e.g. tab closed, network error)
+    const metadata = paymentIntent.metadata;
+    if (metadata?.type === 'TOPUP' && metadata?.merchantId) {
+      try {
+        const merchantId = metadata.merchantId;
+        const amountCents = paymentIntent.amount;
+
+        const existingTx = await prisma.balanceTransaction.findFirst({
+          where: {
+            merchantId,
+            type: 'TOPUP',
+            description: { contains: paymentIntent.id },
+          },
+        });
+        if (!existingTx) {
+          await prisma.$transaction([
+            prisma.merchant.update({
+              where: { id: merchantId },
+              data: { balance: { increment: BigInt(amountCents) } },
+            }),
+            prisma.balanceTransaction.create({
+              data: {
+                merchantId,
+                amount: BigInt(amountCents),
+                type: BalanceTransactionType.TOPUP,
+                description: `Balance top-up via Stripe webhook (${paymentIntent.id})`,
+              },
+            }),
+          ]);
+          console.log(`TOPUP: Credited ${amountCents} cents to merchant ${merchantId} via webhook for payment ${paymentIntent.id}`);
+        }
+      } catch (topupError: any) {
+        console.error('Error crediting TOPUP in webhook:', topupError);
+      }
+    }
+
     // Create customer order as backup if not already created
     // This ensures orders are created even if frontend confirmation fails
     try {

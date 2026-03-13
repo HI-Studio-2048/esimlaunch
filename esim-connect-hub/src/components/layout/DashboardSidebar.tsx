@@ -20,6 +20,7 @@ import {
   Store,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Menu,
   Shield,
   Users,
@@ -33,8 +34,8 @@ type NavItem = {
 };
 
 type NavSection = {
+  label: string;
   items: NavItem[];
-  bottom?: boolean;
 };
 
 const EASY_NAV: NavItem[] = [
@@ -50,8 +51,42 @@ const EASY_NAV: NavItem[] = [
   { label: "My eSIM",     icon: Cpu,             path: "/dashboard/profiles" },
   { label: "Affiliates",  icon: Handshake,       path: "/dashboard/affiliates" },
   { label: "Packages",    icon: Package,         path: "/package-selector" },
+  { label: "Buy eSIMs",   icon: Package,         path: "/dashboard/packages" },
   { label: "Pricing",     icon: DollarSign,      path: "/pricing-config" },
   { label: "Demo Store",  icon: Store,           path: "/demo-store" },
+];
+
+const EASY_SECTIONS: NavSection[] = [
+  {
+    label: "Overview",
+    items: [
+      { label: "Dashboard",   icon: LayoutDashboard, path: "/dashboard" },
+      { label: "Customers",   icon: Users,           path: "/dashboard/customers" },
+      { label: "Orders",      icon: ShoppingCart,    path: "/dashboard/orders" },
+      { label: "Top-ups",     icon: RefreshCw,       path: "/dashboard/topups" },
+      { label: "My eSIM",     icon: Cpu,             path: "/dashboard/profiles" },
+    ],
+  },
+  {
+    label: "Billing & Payments",
+    items: [
+      { label: "Billing",     icon: Receipt,         path: "/settings/billing" },
+      { label: "Payment",     icon: CreditCard,      path: "/dashboard/payment-settings" },
+      { label: "Balance",     icon: Wallet,          path: "/dashboard/balance" },
+      { label: "Pricing",     icon: DollarSign,      path: "/pricing-config" },
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      { label: "Analytics",   icon: BarChart3,       path: "/dashboard/analytics" },
+      { label: "Support",     icon: MessageSquare,   path: "/dashboard/support" },
+      { label: "Affiliates",  icon: Handshake,       path: "/dashboard/affiliates" },
+      { label: "Packages",    icon: Package,         path: "/package-selector" },
+      { label: "Buy eSIMs",   icon: Package,         path: "/dashboard/packages" },
+      { label: "Demo Store",  icon: Store,           path: "/demo-store" },
+    ],
+  },
 ];
 
 const ADVANCED_NAV: NavItem[] = [
@@ -66,6 +101,40 @@ const ADVANCED_NAV: NavItem[] = [
   { label: "Analytics",    icon: BarChart3,       path: "/dashboard/analytics" },
   { label: "Support",      icon: MessageSquare,   path: "/dashboard/support" },
   { label: "Affiliates",   icon: Handshake,       path: "/dashboard/affiliates" },
+];
+
+const ADVANCED_SECTIONS: NavSection[] = [
+  {
+    label: "Overview",
+    items: [
+      { label: "Dashboard",    icon: LayoutDashboard, path: "/dashboard" },
+      { label: "eSIM Plans",   icon: Package,         path: "/dashboard/packages" },
+      { label: "My eSIM",      icon: Cpu,             path: "/dashboard/profiles" },
+      { label: "My Order",     icon: History,         path: "/dashboard/orders" },
+      { label: "Create Order", icon: ShoppingCart,    path: "/dashboard/create-order" },
+    ],
+  },
+  {
+    label: "Billing & Payments",
+    items: [
+      { label: "Billing",      icon: Wallet,          path: "/dashboard/balance" },
+      { label: "Payment",      icon: CreditCard,      path: "/dashboard/payment-settings" },
+    ],
+  },
+  {
+    label: "Developer & Analytics",
+    items: [
+      { label: "Developer",    icon: Code2,           path: "/dashboard/developer" },
+      { label: "Analytics",    icon: BarChart3,       path: "/dashboard/analytics" },
+    ],
+  },
+  {
+    label: "Support",
+    items: [
+      { label: "Support",      icon: MessageSquare,   path: "/dashboard/support" },
+      { label: "Affiliates",   icon: Handshake,       path: "/dashboard/affiliates" },
+    ],
+  },
 ];
 
 const BOTTOM_NAV: NavItem[] = [
@@ -126,6 +195,14 @@ export function DashboardSidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const mainNav = user?.serviceType === "ADVANCED" ? ADVANCED_NAV : EASY_NAV;
+  const sections = user?.serviceType === "ADVANCED" ? ADVANCED_SECTIONS : EASY_SECTIONS;
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    "Overview": true,
+    "Billing & Payments": true,
+    "Operations": true,
+    "Developer & Analytics": true,
+    "Support": true,
+  });
 
   const sidebarContent = (isMobile = false) => (
     <div
@@ -180,14 +257,56 @@ export function DashboardSidebar() {
             />
           </div>
         )}
-        {mainNav.map((item) => (
-          <NavItemButton
-            key={item.label}
-            item={item}
-            collapsed={collapsed && !isMobile}
-            pathname={location.pathname}
-          />
-        ))}
+
+        {/* When collapsed on desktop, show flat list for quick icon access */}
+        {collapsed && !isMobile ? (
+          mainNav.map((item) => (
+            <NavItemButton
+              key={item.label}
+              item={item}
+              collapsed
+              pathname={location.pathname}
+            />
+          ))
+        ) : (
+          sections.map((section) => {
+            const isOpen = openSections[section.label] ?? true;
+            return (
+              <div key={section.label} className="mb-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setOpenSections((prev) => ({
+                      ...prev,
+                      [section.label]: !isOpen,
+                    }))
+                  }
+                  className="flex w-full items-center justify-between px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+                >
+                  <span>{section.label}</span>
+                  <ChevronDown
+                    className={cn(
+                      "w-3 h-3 transition-transform",
+                      isOpen ? "rotate-0" : "-rotate-90"
+                    )}
+                  />
+                </button>
+                {isOpen && (
+                  <div className="mt-0.5 space-y-0.5">
+                    {section.items.map((item) => (
+                      <NavItemButton
+                        key={item.label}
+                        item={item}
+                        collapsed={false}
+                        pathname={location.pathname}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
       </nav>
 
       {/* Bottom nav (Settings) */}
