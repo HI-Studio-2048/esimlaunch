@@ -255,8 +255,9 @@ class WebhookService {
 
   /**
    * Deliver eSIMs to customer after order completion
+   * @returns { statusUpdated: boolean } - true if order status was updated to COMPLETED
    */
-  async deliverESIMs(orderId: string): Promise<void> {
+  async deliverESIMs(orderId: string): Promise<{ statusUpdated: boolean }> {
     try {
       const order = await prisma.order.findUnique({
         where: { id: orderId },
@@ -264,24 +265,30 @@ class WebhookService {
       });
       if (!order?.esimAccessOrderNo) {
         console.log(`Order ${orderId} not found or missing esimAccessOrderNo`);
-        return;
+        return { statusUpdated: false };
       }
 
       const profilesResult = await esimAccessService.queryProfiles({
         orderNo: order.esimAccessOrderNo,
+        pager: { pageSize: 50, pageNum: 1 },
       });
       if (!profilesResult.success || !profilesResult.obj?.esimList) {
-        console.error('Failed to fetch eSIM profiles:', profilesResult.errorMessage);
-        return;
+        console.error('[Sync] Failed to fetch eSIM profiles:', profilesResult.errorMessage, { orderNo: order.esimAccessOrderNo });
+        return { statusUpdated: false };
       }
       const profiles = profilesResult.obj.esimList;
+      if (profiles.length === 0) {
+        console.log('[Sync] No profiles found yet for order', order.esimAccessOrderNo);
+      }
 
       // Update order status to COMPLETED when profiles are found (fixes stuck "Processing")
+      let statusUpdated = false;
       if (profiles.length > 0) {
         await prisma.order.update({
           where: { id: orderId },
           data: { status: 'COMPLETED' },
         });
+        statusUpdated = true;
       }
 
       for (const p of profiles) {
@@ -358,7 +365,7 @@ class WebhookService {
       });
       if (!customerOrder) {
         console.log(`Profiles saved for merchant order ${orderId} (no store order to email)`);
-        return;
+        return { statusUpdated };
       }
 
       const qrCodes = await Promise.all(
@@ -389,6 +396,7 @@ class WebhookService {
         storeName: customerOrder.store.businessName || customerOrder.store.name,
       });
       console.log(`eSIM delivery email sent for order ${customerOrder.id}`);
+      return { statusUpdated };
     } catch (error: any) {
       console.error('Error in deliverESIMs:', error);
       throw error;

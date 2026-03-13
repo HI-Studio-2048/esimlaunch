@@ -143,6 +143,22 @@ export default function OrderHistory() {
     if (!orderId) return;
     runAction("sync", () => apiClient.syncOrder(orderId));
   };
+
+  const syncOrderRow = async (order: Order) => {
+    const orderId = order.source === "store" ? order.orderId : order.id;
+    if (!orderId) return;
+    const key = `sync-${order.id ?? order.orderId ?? orderId}`;
+    setActionLoading(key);
+    try {
+      await apiClient.syncOrder(orderId);
+      toast({ title: "Synced", description: "Order status updated." });
+      fetchOrders(page);
+    } catch (err: any) {
+      toast({ title: "Sync failed", description: err?.message || "Could not sync.", variant: "destructive" });
+    } finally {
+      setActionLoading(null);
+    }
+  };
   const handleRefund = () => {
     const o = selectedOrder!;
     if (o.source !== "store" || !o.id) return;
@@ -345,9 +361,26 @@ export default function OrderHistory() {
                             : "—"}
                         </td>
                         <td className="py-3 px-4">
-                          <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", statusBadge.cls)}>
-                            {statusBadge.label}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", statusBadge.cls)}>
+                              {statusBadge.label}
+                            </span>
+                            {["PENDING", "PROCESSING"].includes((order.status || "").toUpperCase()) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2"
+                                onClick={(e) => { e.stopPropagation(); syncOrderRow(order); }}
+                                disabled={!!actionLoading}
+                              >
+                                {actionLoading === `sync-${order.id || order.orderId}` ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                )}
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </motion.tr>
                     );

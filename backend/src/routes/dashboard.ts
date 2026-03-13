@@ -526,11 +526,13 @@ router.post('/orders/:orderId/sync', async (req, res) => {
       });
     }
 
-    await webhookService.deliverESIMs(order.id);
+    const { statusUpdated } = await webhookService.deliverESIMs(order.id);
 
     res.json({
       success: true,
-      message: 'Sync completed. Profiles updated and email sent if newly ready.',
+      message: statusUpdated
+        ? 'Sync completed. Order status updated to Completed.'
+        : 'Sync completed. No eSIM profiles found yet — they may still be provisioning.',
     });
   } catch (error: any) {
     res.status(500).json({
