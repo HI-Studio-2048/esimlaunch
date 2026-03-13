@@ -1,6 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
-import { esimAccessService } from '../services/esimAccessService';
+import { esimAccessService, PLATFORM_PRICE_MARKUP } from '../services/esimAccessService';
 import { authenticateSessionOrApiKey, logApiRequest, createRateLimiter } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { OrderStatus, BalanceTransactionType } from '@prisma/client';
@@ -113,8 +113,8 @@ router.post('/orders', async (req, res, next) => {
       }
     }
 
-    // Merchant balance is stored in cents (USD). Convert API amount (1/10000 USD) to cents for comparison.
-    const orderAmountCents = Math.round(Number(orderAmountApi) / 100);
+    // eSIM Access expects wholesale amount (1/10000 USD). Charge merchant marked-up amount for platform margin.
+    const merchantChargeCents = Math.round((Number(orderAmountApi) * PLATFORM_PRICE_MARKUP) / 100);
     const merchant = await prisma.merchant.findUnique({
       where: { id: merchantId },
       select: { balance: true },
@@ -129,11 +129,11 @@ router.post('/orders', async (req, res, next) => {
     }
 
     const currentBalance = Number(merchant.balance);
-    if (currentBalance < orderAmountCents) {
+    if (currentBalance < merchantChargeCents) {
       return res.status(400).json({
         success: false,
         errorCode: 'INSUFFICIENT_BALANCE',
-        errorMessage: `Insufficient balance. Current balance: $${(currentBalance / 100).toFixed(2)} USD, Required: $${(orderAmountCents / 100).toFixed(2)} USD`,
+        errorMessage: `Insufficient balance. Current balance: $${(currentBalance / 100).toFixed(2)} USD, Required: $${(merchantChargeCents / 100).toFixed(2)} USD`,
       });
     }
 
@@ -156,12 +156,12 @@ router.post('/orders', async (req, res, next) => {
           },
         });
 
-        // Deduct balance from merchant (balance is in cents)
+        // Deduct marked-up amount from merchant (balance is in cents)
         const updatedMerchant = await tx.merchant.update({
           where: { id: merchantId },
           data: {
             balance: {
-              decrement: BigInt(orderAmountCents),
+              decrement: BigInt(merchantChargeCents),
             },
           },
         });
@@ -176,7 +176,7 @@ router.post('/orders', async (req, res, next) => {
           data: {
             merchantId,
             orderId: order.id,
-            amount: BigInt(-orderAmountCents), // Negative for deduction
+            amount: BigInt(-merchantChargeCents), // Negative for deduction
             type: BalanceTransactionType.ORDER,
             description: `Order ${esimResult.obj.orderNo} - ${data.packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0)} package(s)`,
           },

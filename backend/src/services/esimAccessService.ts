@@ -179,7 +179,7 @@ export interface RegionsResponse {
 // Hidden platform-level markup applied to all package prices
 // exposed through our APIs. This is NOT sent to eSIM Access — it is
 // only used for what merchants and internal tools see.
-const PLATFORM_PRICE_MARKUP = 1.25;
+export const PLATFORM_PRICE_MARKUP = 1.25;
 
 class ESIMAccessService {
   private client: AxiosInstance;

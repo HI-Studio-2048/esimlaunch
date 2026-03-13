@@ -172,33 +172,21 @@ export default function CreateOrder() {
       const txId = `TX-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
       let payload: Parameters<typeof apiClient.createOrder>[0];
 
+      // Let backend resolve amount from provider catalog (raw prices). Frontend prices are marked-up
+      // and would cause "Package price error" if sent to eSIM provider.
       if (fromCart && cartItems) {
-        const amountRaw = cartItems.reduce(
-          (sum, item) => sum + (item.price || 0) * item.qty,
-          0
-        );
         payload = {
           transactionId: txId,
-          amount: amountRaw,
           packageInfoList: cartItems.map((item) => ({
             slug: item.slug,
             count: item.qty,
-            price: item.price || undefined,
           })),
         };
       } else {
         payload = {
           transactionId: txId,
-          amount: totalCost != null ? Math.round(totalCost * 10000) : undefined,
           packageInfoList: [
-            {
-              slug: slug.trim(),
-              count: quantity,
-              price:
-                pricePerUnit != null
-                  ? Math.round(pricePerUnit * 10000)
-                  : undefined,
-            },
+            { slug: slug.trim(), count: quantity },
           ],
         };
       }
