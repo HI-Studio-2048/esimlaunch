@@ -38,6 +38,14 @@ interface CartItem {
   qty: number;
 }
 
+/** Format volume (bytes) from API to human-readable data string */
+function formatData(volume?: number): string {
+  if (!volume) return "—";
+  if (volume >= 1_000_000_000) return `${(volume / 1_000_000_000).toFixed(0)} GB`;
+  if (volume >= 1_000_000) return `${(volume / 1_000_000).toFixed(0)} MB`;
+  return `${volume} B`;
+}
+
 export default function CreateOrder() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -465,10 +473,10 @@ export default function CreateOrder() {
                           </td>
                           <td className="px-4 py-2 text-right">{item.qty}</td>
                           <td className="px-4 py-2 text-right">
-                            ${unit.toFixed(4)}
+                            ${unit.toFixed(2)}
                           </td>
                           <td className="px-4 py-2 text-right font-medium">
-                            ${line.toFixed(4)}
+                            ${line.toFixed(2)}
                           </td>
                         </tr>
                       );
@@ -498,11 +506,7 @@ export default function CreateOrder() {
                   <div className="grid grid-cols-3 gap-3 text-center text-sm">
                     <div>
                       <p className="font-semibold">
-                        {packageInfo.dataAmount
-                          ? `${packageInfo.dataAmount} ${
-                              packageInfo.dataUnit || "MB"
-                            }`
-                          : "—"}
+                        {formatData(packageInfo.volume)}
                       </p>
                       <p className="text-xs text-muted-foreground">Data</p>
                     </div>
@@ -519,7 +523,7 @@ export default function CreateOrder() {
                     <div>
                       <p className="font-semibold gradient-text">
                         {pricePerUnit != null
-                          ? `$${pricePerUnit.toFixed(4)}`
+                          ? `$${pricePerUnit.toFixed(2)}`
                           : "—"}
                       </p>
                       <p className="text-xs text-muted-foreground">Per eSIM</p>
@@ -573,9 +577,9 @@ export default function CreateOrder() {
               <h3 className="font-semibold text-sm">Order Summary</h3>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">
-                  {quantity} × ${pricePerUnit?.toFixed(4)}
+                  {quantity} × ${pricePerUnit?.toFixed(2)}
                 </span>
-                <span className="font-medium">${totalCost.toFixed(4)}</span>
+                <span className="font-medium">${totalCost.toFixed(2)}</span>
               </div>
               {balance !== null && (
                 <div className="flex justify-between text-sm">
@@ -586,7 +590,7 @@ export default function CreateOrder() {
                       hasEnoughBalance ? "text-green-600" : "text-destructive"
                     )}
                   >
-                    ${(balance - totalCost).toFixed(4)}
+                    ${(balance - totalCost).toFixed(2)}
                   </span>
                 </div>
               )}
@@ -612,7 +616,7 @@ export default function CreateOrder() {
                 <span className="text-muted-foreground">
                   {cartItems.reduce((sum, item) => sum + item.qty, 0)} eSIMs
                 </span>
-                <span className="font-medium">${cartTotal.toFixed(4)}</span>
+                <span className="font-medium">${cartTotal.toFixed(2)}</span>
               </div>
               {balance !== null && (
                 <div className="flex justify-between text-sm">
@@ -623,7 +627,7 @@ export default function CreateOrder() {
                       hasEnoughBalance ? "text-green-600" : "text-destructive"
                     )}
                   >
-                    ${(balance - cartTotal).toFixed(4)}
+                    ${(balance - cartTotal).toFixed(2)}
                   </span>
                 </div>
               )}

@@ -1,5 +1,21 @@
 import axios, { AxiosInstance } from 'axios';
+import path from 'path';
+import fs from 'fs';
 import { env } from '../config/env';
+
+/** Set of package codes that are non-reloadable (Top=No in price CSV). Overrides eSIM Access API when wrong. */
+let nonReloadablePackageCodes: Set<string> | null = null;
+function getNonReloadableSet(): Set<string> {
+  if (nonReloadablePackageCodes) return nonReloadablePackageCodes;
+  try {
+    const filePath = path.join(__dirname, '..', '..', 'data', 'supportTopUpTypeOverrides.json');
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    nonReloadablePackageCodes = new Set(Array.isArray(data) ? data : []);
+  } catch {
+    nonReloadablePackageCodes = new Set();
+  }
+  return nonReloadablePackageCodes;
+}
 
 export interface PackageInfo {
   packageCode: string;
@@ -232,14 +248,20 @@ class ESIMAccessService {
   }): Promise<PackageListResponse> {
     const data = await this.fetchPackagesRaw(params);
 
-    // Apply hidden platform markup to all package prices that are returned
+    // Apply hidden platform markup and supportTopUpType overrides (eSIM Access API has incorrect values for some plans)
     if (data.success && data.obj?.packageList?.length) {
+      const nonReloadable = getNonReloadableSet();
       data.obj.packageList = data.obj.packageList.map((pkg) => {
         const originalPrice = typeof pkg.price === 'number' ? pkg.price : 0;
         const markedUpPrice = Math.round(originalPrice * PLATFORM_PRICE_MARKUP);
+        // Override supportTopUpType to 0 for plans that are non-reloadable per our CSV (Top=No)
+        const supportTopUpType = nonReloadable.has(pkg.packageCode || '')
+          ? '0'
+          : (pkg.supportTopUpType ?? undefined);
         return {
           ...pkg,
           price: markedUpPrice,
+          supportTopUpType,
         };
       });
     }

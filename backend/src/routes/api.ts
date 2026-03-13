@@ -189,7 +189,10 @@ router.post('/orders', async (req, res, next) => {
         return { ...esimResult, orderId: order.id };
       }
 
-      return esimResult;
+      // eSIM Access API returned failure - throw to exit transaction and surface error
+      const err = new Error(esimResult.errorMessage || 'Order was rejected by the eSIM provider.') as Error & { esimErrorCode?: string };
+      err.esimErrorCode = esimResult.errorCode;
+      throw err;
     });
 
     res.json(result);
@@ -202,10 +205,17 @@ router.post('/orders', async (req, res, next) => {
       });
     } else {
       console.error('Order creation error:', error);
-      res.status(500).json({
+      const esimData = error?.response?.data;
+      const isProviderError = !!(error?.esimErrorCode || esimData?.errorCode);
+      const errorMessage =
+        error?.message ||
+        esimData?.errorMessage ||
+        esimData?.message ||
+        'Failed to create order';
+      res.status(isProviderError ? 400 : 500).json({
         success: false,
-        errorCode: 'ORDER_FAILED',
-        errorMessage: error.message || 'Failed to create order',
+        errorCode: error?.esimErrorCode || esimData?.errorCode || 'ORDER_FAILED',
+        errorMessage,
       });
     }
   }

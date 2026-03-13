@@ -21,6 +21,8 @@ import {
   ArrowUpDown,
   Check,
   Copy,
+  Minus,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -87,7 +89,7 @@ const formatPerGB = (pkg: EsimPackage) => {
 const formatTopUpType = (v?: number | string) => {
   const n = Number(v);
   if (v == null || v === "") return "—";
-  if (n === 0) return "None";
+  if (n === 0) return "Non-reloadable";
   if (n === 1) return "Data Reloadable for same area within validity";
   if (n === 2) return "Data Reloadable for other area";
   return String(v);
@@ -163,6 +165,15 @@ export default function PackageBrowser() {
     fetchPackages();
     fetchBalance();
   }, [typeFilter]);
+
+  // Lock body scroll when Plan Details modal is open to prevent layout shift when add/toast triggers
+  useEffect(() => {
+    if (selectedPlan) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [selectedPlan]);
 
   const fetchPackages = async () => {
     // Top-up packages are per-ICCID; eSIM Access API requires iccid for type=TOPUP and errors without it.
@@ -273,8 +284,14 @@ export default function PackageBrowser() {
     toast({ title: "Added to cart", description: pkg.name || pkg.slug || "Package added." });
   };
 
-  const removeFromCart = (id: string) => {
-    updateCart((prev) => prev.filter((c) => (c.pkg.slug || c.pkg.packageCode) !== id));
+  const adjustCartQty = (id: string, delta: number) => {
+    updateCart((prev) => {
+      const existing = prev.find((c) => (c.pkg.slug || c.pkg.packageCode) === id);
+      if (!existing) return prev;
+      const newQty = existing.qty + delta;
+      if (newQty <= 0) return prev.filter((c) => (c.pkg.slug || c.pkg.packageCode) !== id);
+      return prev.map((c) => (c.pkg.slug || c.pkg.packageCode) === id ? { ...c, qty: newQty } : c);
+    });
   };
 
   const handleCheckout = () => {
@@ -505,7 +522,18 @@ export default function PackageBrowser() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[1000px]">
+                <table className="w-full min-w-[1100px] table-fixed">
+                  <colgroup>
+                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "8%" }} />
+                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "8%" }} />
+                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "112px" }} />
+                  </colgroup>
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
                       <th className="text-left py-2.5 px-3 text-xs font-medium text-muted-foreground">
@@ -544,7 +572,8 @@ export default function PackageBrowser() {
                       const id = pkg.slug || pkg.packageCode || String(index);
                       const loc = pkg.location || pkg.locationCode || "Global";
                       const flag = getFlag(pkg.locationCode);
-                      const inCart = cart.some((c) => (c.pkg.slug || c.pkg.packageCode) === id);
+                      const cartItem = cart.find((c) => (c.pkg.slug || c.pkg.packageCode) === id);
+                      const inCart = !!cartItem;
 
                       return (
                         <tr
@@ -552,41 +581,59 @@ export default function PackageBrowser() {
                           className="border-b border-border/50 hover:bg-muted/20 transition-colors cursor-pointer"
                           onClick={() => { setSelectedPlan(pkg); setCoverageSearch(""); }}
                         >
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center gap-2">
-                              <span className="text-base">{flag}</span>
-                              <span className="text-sm font-medium line-clamp-1">{pkg.name || id}</span>
+                          <td className="py-2.5 px-3 overflow-hidden">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-base shrink-0">{flag}</span>
+                              <span className="text-sm font-medium truncate" title={pkg.name || id}>{pkg.name || id}</span>
                             </div>
                           </td>
-                          <td className="py-2.5 px-3">
-                            <span className="text-sm font-semibold">{formatPrice(pkg.price)}</span>
-                          </td>
-                          <td className="py-2.5 px-3">
+                          <td className="py-2.5 px-3 text-sm font-semibold whitespace-nowrap">{formatPrice(pkg.price)}</td>
+                          <td className="py-2.5 px-3 text-sm whitespace-nowrap">{formatData(pkg)}</td>
+                          <td className="py-2.5 px-3 text-sm text-muted-foreground whitespace-nowrap">
                             <div className="flex items-center gap-1">
-                              <span className="text-sm">{formatData(pkg)}</span>
-                            </div>
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                              <Clock className="w-3.5 h-3.5" />
+                              <Clock className="w-3.5 h-3.5 shrink-0" />
                               {pkg.duration ? `${pkg.duration} ${pkg.durationUnit || "DAY"}${pkg.duration !== 1 ? "s" : ""}` : "—"}
                             </div>
                           </td>
-                          <td className="py-2.5 px-3 text-sm text-muted-foreground">{formatPerGB(pkg)}</td>
-                          <td className="py-2.5 px-3 text-sm text-muted-foreground">{formatPrice(pkg.price != null ? pkg.price * 2 : undefined)}</td>
-                          <td className="py-2.5 px-3 text-xs text-muted-foreground">{pkg.speed || "3G/4G/5G"}</td>
-                          <td className="py-2.5 px-3 text-sm text-muted-foreground">{loc}</td>
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                variant={inCart ? "outline" : "gradient"}
-                                size="sm"
-                                onClick={() => addToCart(pkg)}
-                                className="h-7 px-2 text-xs gap-1"
-                              >
-                                {inCart ? <Check className="w-3 h-3" /> : <ShoppingCart className="w-3 h-3" />}
-                                {inCart ? "Added" : "Add"}
-                              </Button>
+                          <td className="py-2.5 px-3 text-sm text-muted-foreground whitespace-nowrap">{formatPerGB(pkg)}</td>
+                          <td className="py-2.5 px-3 text-sm text-muted-foreground whitespace-nowrap">{formatPrice(pkg.price != null ? pkg.price * 2 : undefined)}</td>
+                          <td className="py-2.5 px-3 text-xs text-muted-foreground whitespace-nowrap">{pkg.speed || "3G/4G/5G"}</td>
+                          <td className="py-2.5 px-3 text-sm text-muted-foreground overflow-hidden">
+                            <span className="truncate block" title={loc}>{loc}</span>
+                          </td>
+                          <td className="py-2.5 px-3 w-28 min-w-28 shrink-0">
+                            <div className="flex items-center justify-end w-[7rem] min-w-[7rem]" onClick={(e) => e.stopPropagation()}>
+                              {inCart ? (
+                                <div className="flex items-center gap-0.5 rounded-md border border-border overflow-hidden">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => adjustCartQty(id, -1)}
+                                    className="h-7 w-7 p-0 rounded-none hover:bg-muted"
+                                  >
+                                    <Minus className="w-3 h-3" />
+                                  </Button>
+                                  <span className="min-w-[1.5rem] text-center text-sm font-medium px-1">{cartItem.qty}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => adjustCartQty(id, 1)}
+                                    className="h-7 w-7 p-0 rounded-none hover:bg-muted"
+                                  >
+                                    <Plus className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <Button
+                                  variant="gradient"
+                                  size="sm"
+                                  onClick={() => addToCart(pkg)}
+                                  className="h-7 px-2 text-xs gap-1 w-[7rem]"
+                                >
+                                  <ShoppingCart className="w-3 h-3" />
+                                  Add
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -598,45 +645,64 @@ export default function PackageBrowser() {
             )}
 
             {/* Pagination */}
-            {filteredPackages.length > 0 && (
-              <div className="flex items-center justify-between p-4 border-t border-border">
-                <span className="text-sm text-muted-foreground">Total {filteredPackages.length}</span>
-                <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" className="h-7 w-7 p-0"
-                    disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                    <ChevronLeft className="w-3.5 h-3.5" />
-                  </Button>
-                  {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => i + 1).map((p) => (
-                    <Button
-                      key={p}
-                      variant={p === page ? "gradient" : "outline"}
-                      size="sm"
-                      className="h-7 w-7 p-0 text-xs"
-                      onClick={() => setPage(p)}
-                    >
-                      {p}
+            {filteredPackages.length > 0 && (() => {
+              // Sliding window: show first, last, current ± 2, with ellipsis
+              const delta = 2;
+              const show: (number | "ellipsis")[] = [];
+              if (totalPages <= 7) {
+                for (let i = 1; i <= totalPages; i++) show.push(i);
+              } else {
+                show.push(1);
+                const low = Math.max(2, page - delta);
+                const high = Math.min(totalPages - 1, page + delta);
+                if (low > 2) show.push("ellipsis");
+                for (let i = low; i <= high; i++) show.push(i);
+                if (high < totalPages - 1) show.push("ellipsis");
+                if (totalPages > 1) show.push(totalPages);
+              }
+              return (
+                <div className="flex items-center justify-between p-4 border-t border-border">
+                  <span className="text-sm text-muted-foreground">Total {filteredPackages.length}</span>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="sm" className="h-7 w-7 p-0"
+                      disabled={page <= 1} onClick={() => setPage(page - 1)}>
+                      <ChevronLeft className="w-3.5 h-3.5" />
                     </Button>
-                  ))}
-                  {totalPages > 7 && <span className="text-muted-foreground text-xs px-1">...</span>}
-                  <Button variant="outline" size="sm" className="h-7 w-7 p-0"
-                    disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </Button>
-                  <span className="text-xs text-muted-foreground ml-2">{PAGE_SIZE}/page</span>
-                  <span className="text-xs text-muted-foreground ml-2">Go to</span>
-                  <Input
-                    type="number" min={1} max={totalPages}
-                    className="h-7 w-14 text-xs ml-1"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        const v = parseInt((e.target as HTMLInputElement).value);
-                        if (v >= 1 && v <= totalPages) setPage(v);
-                      }
-                    }}
-                  />
+                    {show.map((p, i) =>
+                      p === "ellipsis" ? (
+                        <span key={`ell-${i}`} className="text-muted-foreground text-xs px-1">...</span>
+                      ) : (
+                        <Button
+                          key={p}
+                          variant={p === page ? "gradient" : "outline"}
+                          size="sm"
+                          className="h-7 w-7 p-0 text-xs"
+                          onClick={() => setPage(p)}
+                        >
+                          {p}
+                        </Button>
+                      )
+                    )}
+                    <Button variant="outline" size="sm" className="h-7 w-7 p-0"
+                      disabled={page >= totalPages} onClick={() => setPage(page + 1)}>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </Button>
+                    <span className="text-xs text-muted-foreground ml-2">{PAGE_SIZE}/page</span>
+                    <span className="text-xs text-muted-foreground ml-2">Go to</span>
+                    <Input
+                      type="number" min={1} max={totalPages}
+                      className="h-7 w-14 text-xs ml-1"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const v = parseInt((e.target as HTMLInputElement).value);
+                          if (!isNaN(v) && v >= 1 && v <= totalPages) setPage(v);
+                        }
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </motion.div>
         )}
       </div>
@@ -742,7 +808,7 @@ export default function PackageBrowser() {
                 {/* Add to cart */}
                 <div className="mt-6 flex gap-2 justify-end">
                   <Button variant="outline" onClick={() => setSelectedPlan(null)}>Close</Button>
-                  <Button variant="gradient" onClick={() => { addToCart(selectedPlan); setSelectedPlan(null); }} className="gap-2">
+                  <Button variant="gradient" onClick={() => addToCart(selectedPlan)} className="gap-2">
                     <ShoppingCart className="w-4 h-4" />
                     Add to cart
                   </Button>

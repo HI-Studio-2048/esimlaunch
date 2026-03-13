@@ -162,9 +162,14 @@ class ApiClient {
           response.status
         );
       }
+      const msg =
+        (data as any).errorMessage ||
+        (data as any).message ||
+        (data as any).data?.errorMessage ||
+        'An error occurred';
       throw new ApiError(
-        data.errorCode || 'UNKNOWN_ERROR',
-        data.errorMessage || 'An error occurred',
+        (data as any).errorCode || 'UNKNOWN_ERROR',
+        msg,
         response.status
       );
     }

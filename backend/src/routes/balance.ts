@@ -23,7 +23,11 @@ router.get('/transactions', async (req, res, next) => {
     const merchantId = (req as any).merchant!.id;
     const skip = (page - 1) * pageSize;
 
-    const [transactions, total] = await Promise.all([
+    const [merchant, transactions, total] = await Promise.all([
+      prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { balance: true },
+      }),
       prisma.balanceTransaction.findMany({
         where: { merchantId },
         orderBy: { createdAt: 'desc' },
@@ -33,16 +37,29 @@ router.get('/transactions', async (req, res, next) => {
       prisma.balanceTransaction.count({ where: { merchantId } }),
     ]);
 
+    // Compute running balance (newest first): balance after each tx = running, then go backwards
+    const currentBalanceCents = merchant?.balance ? Number(merchant.balance) : 0;
+    let runningCents = currentBalanceCents;
+    const transactionsWithBalance = transactions.map((tx) => {
+      const amount = Number(tx.amount);
+      const isIncoming = tx.type === 'TOPUP' || tx.type === 'REFUND';
+      const effect = isIncoming ? amount : -amount;
+      const balanceAfterUsd = runningCents / 100;
+      runningCents -= effect;
+      return {
+        id: tx.id,
+        amount,
+        type: tx.type,
+        description: tx.description,
+        createdAt: tx.createdAt.toISOString(),
+        balance: Math.round(balanceAfterUsd * 100) / 100,
+      };
+    });
+
     res.json({
       success: true,
       data: {
-        transactions: transactions.map((tx) => ({
-          id: tx.id,
-          amount: Number(tx.amount), // in cents
-          type: tx.type,
-          description: tx.description,
-          createdAt: tx.createdAt.toISOString(),
-        })),
+        transactions: transactionsWithBalance,
         total,
         page,
         pageSize,

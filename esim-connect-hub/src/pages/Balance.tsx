@@ -320,18 +320,6 @@ export default function Balance() {
               Top up
             </Button>
           </div>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-gray-400" />
-              <span>Disabled</span>
-              <button className="text-primary text-xs hover:underline">Edit Setting</button>
-              <span className="text-xs">Auto Recharge</span>
-            </div>
-            <button className="flex items-center gap-1 text-primary text-xs hover:underline">
-              <History className="w-3.5 h-3.5" />
-              View Payment history
-            </button>
-          </div>
         </motion.div>
 
         {/* Filters */}
