@@ -335,7 +335,7 @@ router.get('/profiles', async (req, res, next) => {
         nickname: p.nickname ?? undefined,
         orderedAt: p.orderedAt?.toISOString() ?? undefined,
         dbCreatedAt: p.createdAt.toISOString(),
-        totalAmount: orderTotal != null ? Number(orderTotal) : undefined,
+        totalAmount: orderTotal != null ? Number(orderTotal) * PLATFORM_PRICE_MARKUP : undefined,
         esimStatus: p.esimStatus ?? null,
         smdpStatus: p.smdpStatus ?? null,
         totalVolume: undefined,

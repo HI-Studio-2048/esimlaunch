@@ -4,6 +4,7 @@ import { ServiceType, BalanceTransactionType } from '@prisma/client';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { prisma } from '../lib/prisma';
 import { webhookService } from '../services/webhookService';
+import { PLATFORM_PRICE_MARKUP } from '../services/esimAccessService';
 import { customerOrderService } from '../services/customerOrderService';
 import { paymentService } from '../services/paymentService';
 
@@ -162,7 +163,7 @@ router.get('/orders', async (req, res, next) => {
       transactionId: o.transactionId,
       esimAccessOrderNo: o.esimAccessOrderNo,
       status: o.status,
-      totalAmount: o.totalAmount ? Number(o.totalAmount) / 10000 : null,
+      totalAmount: o.totalAmount ? (Number(o.totalAmount) * PLATFORM_PRICE_MARKUP) / 10000 : null,
       packageCount: o.packageCount,
       createdAt: o.createdAt,
       updatedAt: o.updatedAt,

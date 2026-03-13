@@ -120,10 +120,10 @@ class WebhookService {
    * Map eSIM Access order status to our OrderStatus enum
    */
   private mapOrderStatus(esimAccessStatus: string): OrderStatus | null {
-    // eSIM Access statuses: GOT_RESOURCE, FAILED, CANCELLED, etc.
+    // eSIM Access statuses: GOT_RESOURCE (eSIM ready), COMPLETED, FAILED, CANCELLED, etc.
     switch (esimAccessStatus) {
       case 'GOT_RESOURCE':
-        return OrderStatus.PROCESSING;
+        return OrderStatus.COMPLETED; // eSIM is ready — treat as completed
       case 'COMPLETED':
       case 'SUCCESS':
         return OrderStatus.COMPLETED;
@@ -275,6 +275,14 @@ class WebhookService {
         return;
       }
       const profiles = profilesResult.obj.esimList;
+
+      // Update order status to COMPLETED when profiles are found (fixes stuck "Processing")
+      if (profiles.length > 0) {
+        await prisma.order.update({
+          where: { id: orderId },
+          data: { status: 'COMPLETED' },
+        });
+      }
 
       for (const p of profiles) {
         try {
