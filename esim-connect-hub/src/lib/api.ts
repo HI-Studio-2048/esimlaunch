@@ -169,10 +169,11 @@ class ApiClient {
       );
     }
 
-    // For eSIM Access API endpoints, the response structure is different
-    // They return { success, obj, ... } directly, not wrapped in { success, data }
+    // For eSIM Access API endpoints: some (e.g. /api/v1/balance) use standard { success, data } format
     if (isESIMAccessAPI) {
-      // eSIM Access API returns the response object directly
+      if ((data as any).data !== undefined) {
+        return (data as any).data as T;
+      }
       return data as T;
     }
 
