@@ -55,10 +55,16 @@ export default function SupportTicket() {
     }
   }, [ticketId]);
 
-  const loadTicket = async () => {
-    setIsLoading(true);
+  // Poll for new customer replies every 15s when ticket is open
+  useEffect(() => {
+    if (!ticket || !ticketId || ticket.status === 'closed' || ticket.status === 'resolved') return;
+    const interval = setInterval(() => loadTicket(true), 15_000);
+    return () => clearInterval(interval);
+  }, [ticket?.id, ticket?.status, ticketId]);
+
+  const loadTicket = async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
-      let result: any;
       if (isDashboard) {
         const ticketData = await apiClient.getSupportTicket(ticketId!);
         if (ticketData) {
@@ -77,13 +83,15 @@ export default function SupportTicket() {
         }
       }
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message || "Failed to load ticket",
-        variant: "destructive",
-      });
+      if (!silent) {
+        toast({
+          title: "Error",
+          description: error.message || "Failed to load ticket",
+          variant: "destructive",
+        });
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   };
 

@@ -32,13 +32,27 @@ export default function TicketDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const email = user?.primaryEmailAddress?.emailAddress;
+
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !user?.primaryEmailAddress?.emailAddress || !id) return;
-    apiFetch<TicketDetail>(`/support/tickets/${id}`, { userEmail: user.primaryEmailAddress.emailAddress })
+    if (!isLoaded || !isSignedIn || !email || !id) return;
+    setLoading(true);
+    apiFetch<TicketDetail>(`/support/tickets/${id}`, { userEmail: email })
       .then(setTicket)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [isLoaded, isSignedIn, user?.primaryEmailAddress?.emailAddress, id]);
+  }, [isLoaded, isSignedIn, email, id]);
+
+  // Poll for new support replies every 15s when ticket is open
+  useEffect(() => {
+    if (!ticket || ticket.status === 'closed' || ticket.status === 'resolved' || !email || !id) return;
+    const interval = setInterval(() => {
+      apiFetch<TicketDetail>(`/support/tickets/${id}`, { userEmail: email })
+        .then(setTicket)
+        .catch(() => {}); // Ignore poll errors
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [ticket?.id, ticket?.status, id, email]);
 
   const handleReply = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -582,14 +582,14 @@ export default function Balance() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-y-auto"
             onClick={closeTopup}
           >
             <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className="bg-card rounded-2xl p-6 border w-full max-w-md mx-4 shadow-xl"
+              className="bg-card rounded-2xl p-6 border w-full max-w-md mx-auto my-auto shadow-xl max-h-[calc(100vh-2rem)] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-6">
