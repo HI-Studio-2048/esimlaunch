@@ -220,10 +220,10 @@ router.post('/orders', async (req, res, next) => {
       });
       const isProviderError = !!(error?.esimErrorCode || esimData?.errorCode);
       const code = error?.esimErrorCode || esimData?.errorCode;
-      // 000105 = insufficient balance on eSIM Access (platform) account — top up at eSIM Access console
+      // 000105 = Request parameters (mandatory) are not contained — missing required fields
       const errorMessage =
         code === '000105'
-          ? 'Insufficient platform balance with eSIM provider. Please contact support to top up.'
+          ? 'Order request is missing required parameters. Please try again or contact support.'
           : error?.message ||
             esimData?.errorMessage ||
             esimData?.message ||

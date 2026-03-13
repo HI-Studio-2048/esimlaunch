@@ -321,7 +321,7 @@ class ESIMAccessService {
         packageCode: pkg.packageCode,
         slug: item.slug ?? pkg.slug,
         count: item.count,
-        price: item.price,
+        price: item.price ?? pkg.price, // eSIM Access requires price per item (000105 = mandatory params missing)
         periodNum: item.periodNum,
       });
     }
