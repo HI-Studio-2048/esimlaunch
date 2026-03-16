@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
+import { preferencesService } from './preferencesService';
 
 const stripe = new Stripe(env.stripeSecretKey, {
   apiVersion: '2026-01-28.clover' as any,
@@ -21,7 +22,7 @@ export const subscriptionService = {
    * Create or get Stripe customer for merchant
    */
   async getOrCreateStripeCustomer(merchantId: string, email: string): Promise<string> {
-    // Check if merchant already has a Stripe customer ID
+    // Check if merchant already has a Stripe customer ID (from subscription or from setup-intent)
     const subscription = await prisma.subscription.findUnique({
       where: { merchantId },
       select: { stripeCustomerId: true },
@@ -29,6 +30,12 @@ export const subscriptionService = {
 
     if (subscription?.stripeCustomerId) {
       return subscription.stripeCustomerId;
+    }
+
+    // Check preference (e.g. customer created during setup-intent before subscription existed)
+    const storedCustomerId = await preferencesService.get<string>(merchantId, 'stripe_customer_id');
+    if (storedCustomerId) {
+      return storedCustomerId;
     }
 
     // Create new Stripe customer
@@ -117,11 +124,15 @@ export const subscriptionService = {
       throw new Error(`Price ID not configured for plan: ${plan} (${params.billingPeriod})`);
     }
 
-    // Attach payment method if provided
+    // Attach payment method if provided (skip if already attached to our customer from setup-intent)
     if (paymentMethodId) {
-      await stripe.paymentMethods.attach(paymentMethodId, {
-        customer: stripeCustomerId,
-      });
+      const pm = await stripe.paymentMethods.retrieve(paymentMethodId);
+      const attachedTo = typeof pm.customer === 'string' ? pm.customer : (pm.customer as any)?.id ?? null;
+      if (attachedTo !== stripeCustomerId) {
+        await stripe.paymentMethods.attach(paymentMethodId, {
+          customer: stripeCustomerId,
+        });
+      }
 
       // Set as default payment method
       await stripe.customers.update(stripeCustomerId, {

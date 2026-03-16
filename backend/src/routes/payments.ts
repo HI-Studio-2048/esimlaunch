@@ -4,6 +4,7 @@ import { BalanceTransactionType } from '@prisma/client';
 import { paymentService } from '../services/paymentService';
 import { customerOrderService } from '../services/customerOrderService';
 import { prisma } from '../lib/prisma';
+import { preferencesService } from '../services/preferencesService';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { env } from '../config/env';
 import Stripe from 'stripe';
@@ -149,6 +150,13 @@ router.post('/setup-intent', authenticateSessionOrJWT, async (req, res) => {
 
     let customerId = sub?.stripeCustomerId;
     if (!customerId) {
+      // Check if we created a customer earlier (e.g. during a previous setup-intent before subscription existed)
+      const stored = await preferencesService.get<string>(merchantId, 'stripe_customer_id');
+      if (stored) {
+        customerId = stored;
+      }
+    }
+    if (!customerId) {
       const merchant = await prisma.merchant.findUnique({ where: { id: merchantId }, select: { email: true, name: true } });
       if (!merchant) {
         return res.status(404).json({
@@ -163,6 +171,7 @@ router.post('/setup-intent', authenticateSessionOrJWT, async (req, res) => {
         metadata: { merchantId },
       });
       customerId = customer.id;
+      await preferencesService.set(merchantId, 'stripe_customer_id', customerId);
     }
 
     const setupIntent = await stripe.setupIntents.create({
