@@ -321,10 +321,10 @@ export const subscriptionService = {
   },
 
   /**
-   * Get subscription
+   * Get subscription. Auto-syncs period dates from Stripe if they look wrong (e.g. same-day from old API bug).
    */
   async getSubscription(merchantId: string) {
-    return prisma.subscription.findUnique({
+    let subscription = await prisma.subscription.findUnique({
       where: { merchantId },
       include: {
         invoices: {
@@ -333,6 +333,32 @@ export const subscriptionService = {
         },
       },
     });
+
+    // Self-heal: if we have a Stripe sub but period dates look wrong (same day = 0 trial), sync from Stripe
+    if (subscription?.stripeSubscriptionId) {
+      const start = subscription.currentPeriodStart.getTime();
+      const end = subscription.currentPeriodEnd.getTime();
+      const sameDay = start === end || (end - start) < 24 * 60 * 60 * 1000;
+      if (sameDay && subscription.status === 'trialing') {
+        try {
+          const stripeSub = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
+          const { start: correctStart, end: correctEnd } = getSubscriptionPeriodDates(stripeSub as any);
+          if (correctEnd.getTime() - correctStart.getTime() > 24 * 60 * 60 * 1000) {
+            subscription = await prisma.subscription.update({
+              where: { merchantId },
+              data: { currentPeriodStart: correctStart, currentPeriodEnd: correctEnd },
+              include: {
+                invoices: { orderBy: { createdAt: 'desc' as const }, take: 10 },
+              },
+            });
+          }
+        } catch (e) {
+          console.warn('Could not sync subscription dates from Stripe:', (e as Error).message);
+        }
+      }
+    }
+
+    return subscription;
   },
 
   /**
