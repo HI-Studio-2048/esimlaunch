@@ -180,10 +180,11 @@ export const subscriptionService = {
 
   /**
    * Update subscription (upgrade/downgrade)
+   * Only supports Stripe-backed plans; api_only cannot be set via this method.
    */
   async updateSubscription(
     merchantId: string,
-    newPlan: SubscriptionPlan,
+    newPlan: Exclude<SubscriptionPlan, 'api_only'>,
     billingPeriod?: 'monthly' | 'yearly'
   ): Promise<any> {
     const subscription = await prisma.subscription.findUnique({
