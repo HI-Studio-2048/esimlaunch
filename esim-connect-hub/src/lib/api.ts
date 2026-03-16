@@ -863,7 +863,7 @@ class ApiClient {
   }
 
   async createSubscription(data: {
-    plan: 'starter' | 'growth' | 'scale';
+    plan: 'starter' | 'growth' | 'scale' | 'test' | 'api_only';
     billingPeriod?: 'monthly' | 'yearly';
     paymentMethodId?: string;
   }) {

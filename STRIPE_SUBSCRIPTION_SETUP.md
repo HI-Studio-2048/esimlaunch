@@ -44,6 +44,17 @@ Create three products, one for each plan:
 7. Click **"Save product"**
 8. **Copy the Price ID**
 
+#### Product 4: Test Plan ($1 for testing)
+1. Click **"+ Add product"**
+2. **Name:** `Test Plan`
+3. **Description:** `Verify the full subscription flow. Same features as Starter.`
+4. **Pricing model:** `Standard pricing`
+5. **Price:** `$1` (monthly)
+6. **Billing period:** `Monthly`
+7. Click **"Save product"**
+8. **Copy the Price ID** → use for `STRIPE_TEST_PRICE_ID_MONTHLY`
+9. Add a second price to the same product: **$10**, **Yearly** → copy for `STRIPE_TEST_PRICE_ID_YEARLY`
+
 ### 3. Find Price IDs
 
 After creating each product, you'll see the Price ID in one of these places:
@@ -65,9 +76,14 @@ Add the Price IDs to your `backend/.env` file:
 
 ```env
 # Stripe Subscription Price IDs
-STRIPE_STARTER_PRICE_ID=price_1ABC123def456GHI789
-STRIPE_GROWTH_PRICE_ID=price_1XYZ789abc123DEF456
-STRIPE_SCALE_PRICE_ID=price_1MNO456pqr789STU012
+STRIPE_STARTER_PRICE_ID_MONTHLY=price_xxx
+STRIPE_STARTER_PRICE_ID_YEARLY=price_xxx
+STRIPE_GROWTH_PRICE_ID_MONTHLY=price_xxx
+STRIPE_GROWTH_PRICE_ID_YEARLY=price_xxx
+STRIPE_SCALE_PRICE_ID_MONTHLY=price_xxx
+STRIPE_SCALE_PRICE_ID_YEARLY=price_xxx
+STRIPE_TEST_PRICE_ID_MONTHLY=price_xxx
+STRIPE_TEST_PRICE_ID_YEARLY=price_xxx
 ```
 
 **Important:**

@@ -6,7 +6,7 @@ const stripe = new Stripe(env.stripeSecretKey, {
   apiVersion: '2026-01-28.clover' as any,
 });
 
-export type SubscriptionPlan = 'starter' | 'growth' | 'scale';
+export type SubscriptionPlan = 'starter' | 'growth' | 'scale' | 'test' | 'api_only';
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing';
 
 export interface CreateSubscriptionParams {
@@ -58,11 +58,42 @@ export const subscriptionService = {
       throw new Error('Merchant not found');
     }
 
+    // API Only plan: free, no Stripe
+    if (plan === 'api_only') {
+      const now = new Date();
+      const periodEnd = new Date(now);
+      periodEnd.setFullYear(periodEnd.getFullYear() + 100); // Effectively perpetual
+      const dbSubscription = await prisma.subscription.upsert({
+        where: { merchantId },
+        update: {
+          plan: 'api_only',
+          billingPeriod: 'monthly',
+          status: 'active',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          stripeSubscriptionId: null,
+          stripeCustomerId: null,
+          updatedAt: new Date(),
+        },
+        create: {
+          merchantId,
+          plan: 'api_only',
+          billingPeriod: 'monthly',
+          status: 'active',
+          currentPeriodStart: now,
+          currentPeriodEnd: periodEnd,
+          stripeSubscriptionId: null,
+          stripeCustomerId: null,
+        },
+      });
+      return dbSubscription;
+    }
+
     // Get or create Stripe customer
     const stripeCustomerId = await this.getOrCreateStripeCustomer(merchantId, merchant.email);
 
     // Get plan price ID from environment based on plan and billing period
-    const planPriceIds: Record<SubscriptionPlan, Record<'monthly' | 'yearly', string>> = {
+    const planPriceIds: Record<Exclude<SubscriptionPlan, 'api_only'>, Record<'monthly' | 'yearly', string>> = {
       starter: {
         monthly: env.stripeStarterPriceIdMonthly || '',
         yearly: env.stripeStarterPriceIdYearly || '',
@@ -74,6 +105,10 @@ export const subscriptionService = {
       scale: {
         monthly: env.stripeScalePriceIdMonthly || '',
         yearly: env.stripeScalePriceIdYearly || '',
+      },
+      test: {
+        monthly: env.stripeTestPriceIdMonthly || '',
+        yearly: env.stripeTestPriceIdYearly || '',
       },
     };
 
@@ -162,8 +197,8 @@ export const subscriptionService = {
     // Preserve current billing period from DB when not specified
     const currentBillingPeriod = (billingPeriod || subscription.billingPeriod || 'monthly') as 'monthly' | 'yearly';
 
-    // Get new plan price ID
-    const planPriceIds: Record<SubscriptionPlan, Record<'monthly' | 'yearly', string>> = {
+    // Get new plan price ID (excludes api_only - no Stripe)
+    const planPriceIds: Record<Exclude<SubscriptionPlan, 'api_only'>, Record<'monthly' | 'yearly', string>> = {
       starter: {
         monthly: env.stripeStarterPriceIdMonthly || '',
         yearly: env.stripeStarterPriceIdYearly || '',
@@ -175,6 +210,10 @@ export const subscriptionService = {
       scale: {
         monthly: env.stripeScalePriceIdMonthly || '',
         yearly: env.stripeScalePriceIdYearly || '',
+      },
+      test: {
+        monthly: env.stripeTestPriceIdMonthly || '',
+        yearly: env.stripeTestPriceIdYearly || '',
       },
     };
 

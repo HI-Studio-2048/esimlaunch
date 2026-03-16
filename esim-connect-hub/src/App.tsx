@@ -64,6 +64,7 @@ import VerifyEmail from "./pages/VerifyEmail";
 import TwoFactorSetup from "./pages/TwoFactorSetup";
 import Settings from "./pages/Settings";
 import Onboarding from "./pages/Onboarding";
+import Subscribe from "./pages/Subscribe";
 import SSOCallback from "./pages/SSOCallback";
 import StorePreview from "./pages/StorePreview";
 import { PublicStoreInvalidationProvider } from "@/contexts/PublicStoreInvalidationContext";
@@ -190,6 +191,7 @@ const MainShell = () => {
                 <Route path="/changelog" element={<Changelog />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/signup" element={<Signup />} />
+                <Route path="/subscribe" element={<Subscribe />} />
                 <Route path="/sso-callback" element={<SSOCallback />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password" element={<ResetPassword />} />

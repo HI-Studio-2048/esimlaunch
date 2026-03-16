@@ -1,5 +1,5 @@
 export interface Plan {
-  id: 'starter' | 'growth' | 'scale';
+  id: 'starter' | 'growth' | 'scale' | 'test';
   name: string;
   monthlyPrice: number;
   yearlyPrice: number;
@@ -8,6 +8,13 @@ export interface Plan {
 }
 
 export const PLANS: Plan[] = [
+  {
+    id: 'test',
+    name: 'Test',
+    monthlyPrice: 1,
+    yearlyPrice: 10,
+    features: ['24h Support Response Time', 'Full White-Labeling'],
+  },
   {
     id: 'starter',
     name: 'Starter',

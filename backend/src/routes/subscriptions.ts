@@ -12,13 +12,13 @@ router.use(authenticateSessionOrJWT);
 
 // Validation schemas
 const createSubscriptionSchema = z.object({
-  plan: z.enum(['starter', 'growth', 'scale']),
+  plan: z.enum(['starter', 'growth', 'scale', 'test', 'api_only']),
   billingPeriod: z.enum(['monthly', 'yearly']),
   paymentMethodId: z.string().optional(),
 });
 
 const updateSubscriptionSchema = z.object({
-  plan: z.enum(['starter', 'growth', 'scale']),
+  plan: z.enum(['starter', 'growth', 'scale', 'test']),
   billingPeriod: z.enum(['monthly', 'yearly']).optional(),
 });
 

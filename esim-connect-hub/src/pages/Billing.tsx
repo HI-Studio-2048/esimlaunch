@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,10 +19,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-const plans = {
-  starter: { name: 'Starter', price: 0, features: ['Basic features'] },
-  growth: { name: 'Growth', price: 49, features: ['All Starter features', 'Custom domain', 'Advanced analytics'] },
-  scale: { name: 'Scale', price: 149, features: ['All Growth features', 'Priority support', 'White-label options'] },
+const plans: Record<string, { name: string; price: number; features: string[] }> = {
+  test: { name: 'Test', price: 1, features: ['Same as Starter, for testing'] },
+  starter: { name: 'Starter', price: 29, features: ['Basic features'] },
+  growth: { name: 'Growth', price: 79, features: ['All Starter features', 'Custom domain', 'Advanced analytics'] },
+  scale: { name: 'Scale', price: 299, features: ['All Growth features', 'Priority support', 'White-label options'] },
+  api_only: { name: 'API Only', price: 0, features: ['REST API', 'Webhooks', 'API keys'] },
 };
 
 export default function Billing() {
@@ -208,10 +211,46 @@ export default function Billing() {
                 </div>
 
                 {/* Upgrade Options */}
-                {currentPlan !== 'scale' && (
+                {currentPlan === 'api_only' && (
+                  <div className="border-t pt-4">
+                    <p className="text-sm font-medium mb-3">Upgrade to a paid plan</p>
+                    <Button variant="outline" asChild>
+                      <Link to="/subscribe">View Plans</Link>
+                    </Button>
+                  </div>
+                )}
+                {currentPlan !== 'scale' && currentPlan !== 'api_only' && (
                   <div className="border-t pt-4">
                     <p className="text-sm font-medium mb-3">Upgrade Plan</p>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
+                      {currentPlan === 'test' && (
+                        <>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleUpgrade('starter')}
+                            disabled={isUpdating}
+                          >
+                            <ArrowUp className="h-4 w-4 mr-2" />
+                            Upgrade to Starter
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleUpgrade('growth')}
+                            disabled={isUpdating}
+                          >
+                            <ArrowUp className="h-4 w-4 mr-2" />
+                            Upgrade to Growth
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => handleUpgrade('scale')}
+                            disabled={isUpdating}
+                          >
+                            <ArrowUp className="h-4 w-4 mr-2" />
+                            Upgrade to Scale
+                          </Button>
+                        </>
+                      )}
                       {currentPlan === 'starter' && (
                         <>
                           <Button
@@ -249,8 +288,8 @@ export default function Billing() {
             ) : (
               <div className="text-center py-8">
                 <p className="text-muted-foreground mb-4">No active subscription</p>
-                <Button onClick={() => window.location.href = '/pricing'}>
-                  View Plans
+                <Button asChild>
+                  <Link to="/pricing">View Plans</Link>
                 </Button>
               </div>
             )}
