@@ -18,6 +18,16 @@ function stripeTimestampToDate(v: unknown): Date {
   return new Date();
 }
 
+/** Get period dates from Stripe subscription. Newer API (2025+) moved them to items.data[0]. */
+function getSubscriptionPeriodDates(sub: any): { start: Date; end: Date } {
+  const startVal = sub.current_period_start ?? sub.items?.data?.[0]?.current_period_start;
+  const endVal = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end;
+  return {
+    start: stripeTimestampToDate(startVal),
+    end: stripeTimestampToDate(endVal),
+  };
+}
+
 export type SubscriptionPlan = 'starter' | 'growth' | 'scale' | 'test' | 'api_only';
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing';
 
@@ -164,9 +174,7 @@ export const subscriptionService = {
       },
     });
 
-    const sub = subscription as any;
-    const currentPeriodStart = stripeTimestampToDate(sub.current_period_start);
-    const currentPeriodEnd = stripeTimestampToDate(sub.current_period_end);
+    const { start: currentPeriodStart, end: currentPeriodEnd } = getSubscriptionPeriodDates(subscription as any);
 
     // Store subscription in database (including billingPeriod)
     const dbSubscription = await prisma.subscription.upsert({
@@ -266,8 +274,8 @@ export const subscriptionService = {
         plan: newPlan,
         billingPeriod: currentBillingPeriod,
         status: updatedSubscription.status as SubscriptionStatus,
-        currentPeriodStart: stripeTimestampToDate((updatedSubscription as any).current_period_start),
-        currentPeriodEnd: stripeTimestampToDate((updatedSubscription as any).current_period_end),
+        currentPeriodStart: getSubscriptionPeriodDates(updatedSubscription as any).start,
+        currentPeriodEnd: getSubscriptionPeriodDates(updatedSubscription as any).end,
         updatedAt: new Date(),
       },
     });
@@ -362,8 +370,8 @@ export const subscriptionService = {
       data: {
         plan: planFromStripe,
         status: subscription.status as SubscriptionStatus,
-        currentPeriodStart: stripeTimestampToDate((subscription as any).current_period_start),
-        currentPeriodEnd: stripeTimestampToDate((subscription as any).current_period_end),
+        currentPeriodStart: getSubscriptionPeriodDates(subscription as any).start,
+        currentPeriodEnd: getSubscriptionPeriodDates(subscription as any).end,
         cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
         updatedAt: new Date(),
       },
