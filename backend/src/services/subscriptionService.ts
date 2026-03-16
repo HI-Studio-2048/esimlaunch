@@ -18,14 +18,17 @@ function stripeTimestampToDate(v: unknown): Date {
   return new Date();
 }
 
-/** Get period dates from Stripe subscription. Newer API (2025+) moved them to items.data[0]. */
+/** Get period dates from Stripe subscription. Checks top-level, items.data[0], and trial_start/trial_end. */
 function getSubscriptionPeriodDates(sub: any): { start: Date; end: Date } {
-  const startVal = sub.current_period_start ?? sub.items?.data?.[0]?.current_period_start;
-  const endVal = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end;
-  return {
-    start: stripeTimestampToDate(startVal),
-    end: stripeTimestampToDate(endVal),
-  };
+  const startVal = sub.current_period_start ?? sub.items?.data?.[0]?.current_period_start ?? sub.trial_start ?? sub.created;
+  const endVal = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? sub.trial_end;
+  const start = stripeTimestampToDate(startVal);
+  let end = stripeTimestampToDate(endVal);
+  // If end still invalid/same-day but we have trial_end, use it (trialing subs)
+  if (sub.trial_end && (end.getTime() <= start.getTime() || isNaN(end.getTime()))) {
+    end = stripeTimestampToDate(sub.trial_end);
+  }
+  return { start, end };
 }
 
 export type SubscriptionPlan = 'starter' | 'growth' | 'scale' | 'test' | 'api_only';
@@ -341,7 +344,9 @@ export const subscriptionService = {
       const sameDay = start === end || (end - start) < 24 * 60 * 60 * 1000;
       if (sameDay && subscription.status === 'trialing') {
         try {
-          const stripeSub = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
+          const stripeSub = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId, {
+            expand: ['items.data'],
+          });
           const { start: correctStart, end: correctEnd } = getSubscriptionPeriodDates(stripeSub as any);
           if (correctEnd.getTime() - correctStart.getTime() > 24 * 60 * 60 * 1000) {
             subscription = await prisma.subscription.update({
