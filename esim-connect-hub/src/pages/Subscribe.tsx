@@ -303,20 +303,20 @@ function PaidPlanForm({
       <RadioGroup value={plan} onValueChange={(v) => setPlan(v as PlanId)}>
         <div className="grid md:grid-cols-3 gap-4">
           {paidPlans.map((p) => (
-            <div
+            <Label
               key={p.id}
+              htmlFor={`plan-${p.id}`}
               className={cn(
-                "rounded-xl border-2 p-4 cursor-pointer transition-all",
+                "flex flex-col rounded-xl border-2 p-4 cursor-pointer transition-all select-none",
                 plan === p.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/50"
               )}
-              onClick={() => setPlan(p.id as PlanId)}
             >
               <div className="flex items-start gap-3">
-                <RadioGroupItem value={p.id} id={p.id} className="mt-1" />
-                <div>
-                  <Label htmlFor={p.id} className="text-base font-semibold cursor-pointer">
+                <RadioGroupItem value={p.id} id={`plan-${p.id}`} className="mt-1" />
+                <div className="flex-1 min-w-0">
+                  <span className="text-base font-semibold block">
                     {p.name}
-                  </Label>
+                  </span>
                   <p className="text-2xl font-bold gradient-text mt-1">
                     ${isYearly ? Math.round(p.yearlyPrice / 12) : p.monthlyPrice}
                     <span className="text-sm text-muted-foreground font-normal">/mo</span>
@@ -335,7 +335,7 @@ function PaidPlanForm({
                   </ul>
                 </div>
               </div>
-            </div>
+            </Label>
           ))}
         </div>
       </RadioGroup>

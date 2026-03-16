@@ -7,6 +7,17 @@ const stripe = new Stripe(env.stripeSecretKey, {
   apiVersion: '2026-01-28.clover' as any,
 });
 
+/** Convert Stripe timestamp (Unix seconds or ms) or Date to valid Date. Stripe SDK types vary by API version. */
+function stripeTimestampToDate(v: unknown): Date {
+  if (v instanceof Date && !isNaN(v.getTime())) return v;
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? parseInt(v, 10) : NaN;
+  if (!isNaN(n)) {
+    const d = new Date(n >= 1e12 ? n : n * 1000);
+    if (!isNaN(d.getTime())) return d;
+  }
+  return new Date();
+}
+
 export type SubscriptionPlan = 'starter' | 'growth' | 'scale' | 'test' | 'api_only';
 export type SubscriptionStatus = 'active' | 'canceled' | 'past_due' | 'trialing';
 
@@ -153,10 +164,9 @@ export const subscriptionService = {
       },
     });
 
-    // Calculate period dates (cast to any — Stripe SDK types vary by API version)
     const sub = subscription as any;
-    const currentPeriodStart = new Date(sub.current_period_start * 1000);
-    const currentPeriodEnd = new Date(sub.current_period_end * 1000);
+    const currentPeriodStart = stripeTimestampToDate(sub.current_period_start);
+    const currentPeriodEnd = stripeTimestampToDate(sub.current_period_end);
 
     // Store subscription in database (including billingPeriod)
     const dbSubscription = await prisma.subscription.upsert({
@@ -256,8 +266,8 @@ export const subscriptionService = {
         plan: newPlan,
         billingPeriod: currentBillingPeriod,
         status: updatedSubscription.status as SubscriptionStatus,
-        currentPeriodStart: new Date((updatedSubscription as any).current_period_start * 1000),
-        currentPeriodEnd: new Date((updatedSubscription as any).current_period_end * 1000),
+        currentPeriodStart: stripeTimestampToDate((updatedSubscription as any).current_period_start),
+        currentPeriodEnd: stripeTimestampToDate((updatedSubscription as any).current_period_end),
         updatedAt: new Date(),
       },
     });
@@ -352,8 +362,8 @@ export const subscriptionService = {
       data: {
         plan: planFromStripe,
         status: subscription.status as SubscriptionStatus,
-        currentPeriodStart: new Date((subscription as any).current_period_start * 1000),
-        currentPeriodEnd: new Date((subscription as any).current_period_end * 1000),
+        currentPeriodStart: stripeTimestampToDate((subscription as any).current_period_start),
+        currentPeriodEnd: stripeTimestampToDate((subscription as any).current_period_end),
         cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
         updatedAt: new Date(),
       },
