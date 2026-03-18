@@ -28,7 +28,7 @@ export default function Subscribe() {
   const initialPlan =
     planParam && ["starter", "growth", "scale", "test", "api_only"].includes(planParam)
       ? planParam
-      : "test";
+      : "growth";
 
   const [plan, setPlan] = useState<PlanId>(initialPlan);
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
@@ -43,7 +43,11 @@ export default function Subscribe() {
   }, [planParam]);
 
   const isApiOnly = plan === "api_only";
-  const paidPlans = PLANS;
+  // Include test plan only when explicitly requested via URL (for devs)
+  const paidPlans =
+    planParam === "test"
+      ? PLANS
+      : PLANS.filter((p) => !p.hiddenFromPublic);
   const samplePlan = paidPlans[0];
   const savingsPercent = Math.round(
     ((samplePlan.monthlyPrice * 12 - samplePlan.yearlyPrice) / (samplePlan.monthlyPrice * 12)) * 100

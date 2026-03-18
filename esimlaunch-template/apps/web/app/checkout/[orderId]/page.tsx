@@ -9,6 +9,7 @@ import { useAuthFetch } from '@/hooks/useAuthFetch';
 import { CheckoutProgress } from '@/components/checkout/CheckoutProgress';
 import type { Order } from '@/lib/types';
 import { formatDisplayAmount } from '@/lib/types';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 
 /**
  * Checkout page.
@@ -39,17 +40,30 @@ export default function CheckoutPage() {
   const [paying, setPaying] = useState(false);
   const [balanceCents, setBalanceCents] = useState<number | null>(null);
 
+  // Restore persisted values from localStorage on mount
   useEffect(() => {
-    const userEmail = user?.primaryEmailAddress?.emailAddress ?? '';
+    const savedPromo = localStorage.getItem('checkout_promo');
+    const savedReferral = localStorage.getItem('checkout_referral');
+    const savedEmail = localStorage.getItem('checkout_email');
+    if (savedPromo) setPromoCode(savedPromo);
+    if (savedReferral) setReferralCode(savedReferral);
+
+    const userEmail = user?.primaryEmailAddress?.emailAddress ?? savedEmail ?? '';
     setEmail(userEmail);
-    // Use authFetch when signed in (attaches Clerk JWT); falls back to bare fetch for guests.
-    // Pending orders are accessible without auth, so both paths work during checkout.
+
     const fetchOrder = user ? authFetch<Order>(`/orders/${orderId}`) : apiFetch<Order>(`/orders/${orderId}`);
     fetchOrder
       .then(setOrder)
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [orderId, user]);
+
+  // Persist email to localStorage for guest access flow on success page
+  useEffect(() => {
+    if (email && !email.startsWith('guest-')) {
+      localStorage.setItem('checkout_email', email);
+    }
+  }, [email]);
 
   const displayCurrency = order?.displayCurrency ?? 'USD';
   const displayAmountCents = order?.displayAmountCents ?? order?.amountCents ?? 0;
@@ -87,6 +101,7 @@ export default function CheckoutPage() {
       );
       setPromoApplied(true);
       setMessage(`Promo applied: ${res.discount}% off`);
+      localStorage.setItem('checkout_promo', promoCode);
     } catch (e: any) {
       setMessage(e.message);
     }
@@ -114,6 +129,7 @@ export default function CheckoutPage() {
       setPromoApplied(false);
       setPromoCode('');
       setMessage('Promo removed.');
+      localStorage.removeItem('checkout_promo');
     } catch (e: any) {
       setMessage(e.message);
     }
@@ -142,7 +158,11 @@ export default function CheckoutPage() {
         method: 'POST',
         body: JSON.stringify({ referralCode: referralCode || undefined }),
       });
-      if (res.url) window.location.href = res.url;
+      if (res.url) {
+        localStorage.removeItem('checkout_promo');
+        localStorage.removeItem('checkout_referral');
+        window.location.href = res.url;
+      }
     } catch (e: any) {
       setMessage(e.message ?? 'Payment failed. Please try again.');
       setPaying(false);
@@ -189,6 +209,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="mx-auto max-w-md px-4 py-12 sm:py-16">
+      <Breadcrumbs items={[{ label: 'Checkout' }]} />
       <h1 className="mb-8 text-2xl font-bold text-slate-900 sm:text-3xl">Checkout</h1>
 
       {/* Order summary */}
@@ -262,7 +283,12 @@ export default function CheckoutPage() {
         <input
           type="text"
           value={referralCode}
-          onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+          onChange={(e) => {
+            const val = e.target.value.toUpperCase();
+            setReferralCode(val);
+            if (val) localStorage.setItem('checkout_referral', val);
+            else localStorage.removeItem('checkout_referral');
+          }}
           placeholder="FRIEND123"
           className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm uppercase text-slate-900 transition focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/20"
         />

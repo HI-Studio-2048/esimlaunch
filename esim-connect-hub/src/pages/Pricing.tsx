@@ -26,6 +26,7 @@ const pricingPlans = [
     highlighted: false,
     cta: "Start Free Trial",
     badge: "Testing",
+    hiddenFromPublic: true,
   },
   {
     id: "starter",
@@ -99,8 +100,8 @@ export default function Pricing() {
   const [isYearly, setIsYearly] = useState(false);
   const { isAuthenticated } = useAuth();
 
-  // Calculate actual savings percentage (using first plan as reference)
-  const samplePlan = pricingPlans[0];
+  // Calculate actual savings percentage (using first public plan as reference)
+  const samplePlan = pricingPlans.find((p) => !p.hiddenFromPublic) ?? pricingPlans[0];
   const annualCost = samplePlan.monthlyPrice * 12;
   const yearlyCost = samplePlan.yearlyPrice;
   const savingsPercent = Math.round(((annualCost - yearlyCost) / annualCost) * 100);
@@ -139,8 +140,8 @@ export default function Pricing() {
           </motion.div>
 
           {/* Pricing Cards */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mt-16">
-            {pricingPlans.map((plan, index) => (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mt-16">
+            {pricingPlans.filter((plan) => !plan.hiddenFromPublic).map((plan, index) => (
               <motion.div
                 key={plan.name}
                 initial={{ opacity: 0, y: 30 }}

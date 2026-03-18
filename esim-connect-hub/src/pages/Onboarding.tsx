@@ -1059,7 +1059,7 @@ const PaymentStep = ({
       {/* Plan Selection */}
       <RadioGroup value={payment.plan} onValueChange={(val) => setPayment({ ...payment, plan: val })}>
         <div className="grid md:grid-cols-3 gap-4">
-          {PLANS.map((plan) => (
+          {PLANS.filter((plan) => !plan.hiddenFromPublic).map((plan) => (
             <div
               key={plan.id}
               className={`relative rounded-xl border-2 p-4 cursor-pointer transition-all ${

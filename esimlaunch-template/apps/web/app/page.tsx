@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
 import { useStoreConfig } from '@/contexts/StoreConfigContext';
@@ -12,6 +12,7 @@ import { DestinationSearch } from '@/components/DestinationSearch';
 import { CountryCard } from '@/components/CountryCard';
 import { CountrySkeleton } from '@/components/skeletons/CountrySkeleton';
 import { EmptyState } from '@/components/ui/empty-state';
+import { useCountryPriceSummaries } from '@/hooks/useCountryPriceSummaries';
 import { Search } from 'lucide-react';
 import {
   Accordion,
@@ -97,6 +98,12 @@ export default function HomePage() {
     }
     return map;
   }, [filtered]);
+
+  // Lazy-load price summaries for visible countries
+  const allCodes = useMemo(() => filtered.map((l) => l.code), [filtered]);
+  const { summaries: priceSummaries, loading: summariesLoading } = useCountryPriceSummaries(
+    loading ? [] : allCodes,
+  );
 
   return (
     <div className="min-h-screen bg-white">
@@ -200,17 +207,23 @@ export default function HomePage() {
                         {REGION_NAMES[region]}
                       </h3>
                       <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-                        {locs.map((loc) => (
-                          <CountryCard
-                            key={loc.code}
-                            country={{
-                              code: loc.code,
-                              name: loc.name,
-                              slug: loc.slug,
-                              flagUrl: loc.flagUrl,
-                            }}
-                          />
-                        ))}
+                        {locs.map((loc) => {
+                          const summary = priceSummaries[loc.code];
+                          return (
+                            <CountryCard
+                              key={loc.code}
+                              country={{
+                                code: loc.code,
+                                name: loc.name,
+                                slug: loc.slug,
+                                flagUrl: loc.flagUrl,
+                              }}
+                              lowestPriceUSD={summary?.lowestPriceUSD}
+                              planCount={summary?.planCount}
+                              loadingSummary={summariesLoading && !summary}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   );

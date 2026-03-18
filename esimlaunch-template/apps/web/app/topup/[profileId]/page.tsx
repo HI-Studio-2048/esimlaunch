@@ -7,6 +7,7 @@ import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { Plan, EsimProfile } from '@/lib/types';
 import { formatVolume } from '@/lib/types';
 import { useCurrency } from '@/hooks/useCurrency';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 
 /**
  * Top-up page for a specific eSIM profile.
@@ -79,6 +80,7 @@ export default function TopUpPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10 sm:py-12">
+      <Breadcrumbs items={[{ label: 'My eSIMs', href: '/my-esims' }, { label: 'Top Up' }]} />
       <h1 className="mb-8 text-2xl font-bold text-slate-900">Top Up Your eSIM</h1>
 
       {error && (

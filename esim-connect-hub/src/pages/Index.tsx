@@ -186,18 +186,23 @@ export default function Index() {
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6"
               >
                 <Zap className="w-4 h-4" />
-                Launch your eSIM business today
+                Build, Launch & Scale Your eSIM Store
               </motion.div>
 
               <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
-                Build Your
-                <span className="gradient-text"> Store </span>
-                Today
+                launch your
+                <span className="gradient-text"> eSIM </span>
+                company today
               </h1>
 
               <p className="text-lg md:text-xl text-muted-foreground max-w-xl mx-auto lg:mx-0 mb-8">
                 The all-in-one platform to create, manage, and scale your eSIM reselling business. No coding required. Global coverage.
               </p>
+
+              {/* Video - mobile only: between subheading and CTAs */}
+              <div className="block lg:hidden my-6">
+                <HeroVideo />
+              </div>
 
               <div className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center lg:justify-start items-center">
                 <Button variant="hero" size="xl" asChild>
@@ -241,8 +246,10 @@ export default function Index() {
               </div>
             </motion.div>
 
-            {/* Hero Visual - Tutorial Video */}
-            <HeroVideo />
+            {/* Hero Visual - Tutorial Video (desktop only) */}
+            <div className="hidden lg:block">
+              <HeroVideo />
+            </div>
           </div>
         </div>
       </section>

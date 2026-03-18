@@ -5,6 +5,7 @@ import { useUser } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 
 interface OrderSummary {
   id: string;
@@ -56,6 +57,7 @@ export default function AccountDashboardPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-12 sm:py-16">
+      <Breadcrumbs items={[{ label: 'Account' }]} />
       <h1 className="mb-8 text-2xl font-bold text-slate-900">Account Dashboard</h1>
 
       {loading ? (

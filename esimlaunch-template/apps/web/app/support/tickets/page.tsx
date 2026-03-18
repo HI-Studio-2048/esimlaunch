@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
 
 interface Ticket {
   id: string;
@@ -49,6 +50,7 @@ export default function SupportTicketsPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 sm:py-24">
+      <Breadcrumbs items={[{ label: 'Support', href: '/support' }, { label: 'My Tickets' }]} />
       <div className="mb-8 flex items-center justify-between">
         <h1 className="text-3xl font-bold text-slate-900">My Tickets</h1>
         <Link

@@ -4,12 +4,15 @@ import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useUser } from '@clerk/nextjs';
-import { redirect } from 'next/navigation';
+import { redirect, useSearchParams } from 'next/navigation';
 import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { EsimProfile } from '@/lib/types';
 import { formatVolume } from '@/lib/types';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ExpiryCountdown } from '@/components/esim/expiry-countdown';
+import { useToast } from '@/components/ui/use-toast';
+import { Breadcrumbs } from '@/components/ui/breadcrumbs';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Wifi } from 'lucide-react';
 
 /**
@@ -21,11 +24,22 @@ import { Wifi } from 'lucide-react';
 export default function MyEsimsPage() {
   const { user, isLoaded, isSignedIn } = useUser();
   const { authFetch, authFetchBlob, getToken } = useAuthFetch();
+  const { toast } = useToast();
+  const searchParams = useSearchParams();
   const [profiles, setProfiles] = useState<EsimProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Show success toast when redirected back from topup Stripe checkout
+  useEffect(() => {
+    if (searchParams.get('topup_success') === '1') {
+      toast({ title: 'Top-up successful!', description: 'Your additional data is now available.' });
+      // Clean URL without reload
+      window.history.replaceState({}, '', '/my-esims');
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -38,7 +52,7 @@ export default function MyEsimsPage() {
 
     authFetch<EsimProfile[]>('/user/esims')
       .then(setProfiles)
-      .catch(console.error)
+      .catch(() => toast({ title: 'Failed to load eSIMs', description: 'Please try again.', variant: 'destructive' }))
       .finally(() => setLoading(false));
   }, [isLoaded, isSignedIn, user, authFetch]);
 
@@ -74,15 +88,34 @@ export default function MyEsimsPage() {
 
   if (!isLoaded || loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-200 border-t-violet-500" />
-        <p className="mt-4 text-slate-500">Loading your eSIMs…</p>
+      <div className="mx-auto max-w-4xl px-4 py-10 sm:py-12">
+        <Skeleton className="mb-8 h-8 w-40" />
+        <div className="flex flex-col gap-6">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-2xl border border-slate-200 bg-white p-6">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 space-y-3">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                </div>
+                <Skeleton className="h-[88px] w-[88px] rounded-xl" />
+              </div>
+              <Skeleton className="mt-5 h-2 w-full rounded-full" />
+              <div className="mt-4 flex gap-2">
+                <Skeleton className="h-9 w-24 rounded-lg" />
+                <Skeleton className="h-9 w-20 rounded-lg" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:py-12">
+      <Breadcrumbs items={[{ label: 'My eSIMs' }]} />
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">My eSIMs</h1>
         <Link
@@ -231,18 +264,9 @@ function EsimCard({
           </div>
         </div>
 
-        {/* QR Code */}
+        {/* QR Code — click to enlarge */}
         {profile.qrCodeUrl && (
-          <div className="flex-shrink-0 rounded-xl border border-slate-200 bg-white p-2 shadow-sm">
-            <Image
-              src={profile.qrCodeUrl}
-              alt="eSIM QR Code"
-              width={88}
-              height={88}
-              className="rounded-lg"
-              unoptimized
-            />
-          </div>
+          <QrThumbnail qrCodeUrl={profile.qrCodeUrl} planName={profile.order?.planName ?? 'eSIM'} />
         )}
       </div>
 
@@ -299,23 +323,96 @@ function EsimCard({
         )}
       </div>
 
-      {/* Activation code */}
+      {/* Activation code with copy */}
       {profile.ac && (
-        <details className="mt-4 group">
-          <summary className="cursor-pointer text-xs font-medium text-slate-500 hover:text-slate-700">
-            Show activation code
-          </summary>
-          <p className="mt-2 break-all rounded-lg bg-slate-50 p-3 font-mono text-xs text-slate-700">
-            {profile.ac}
-          </p>
-        </details>
+        <CopyActivationCode ac={profile.ac} />
       )}
     </div>
   );
 }
 
+function CopyActivationCode({ ac }: { ac: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(ac);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="mt-4">
+      <p className="mb-1 text-xs font-medium text-slate-500">Activation Code</p>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 break-all rounded-lg bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700">
+          {ac}
+        </code>
+        <button
+          onClick={handleCopy}
+          className="shrink-0 rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+        >
+          {copied ? 'Copied!' : 'Copy'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function QrThumbnail({ qrCodeUrl, planName }: { qrCodeUrl: string; planName: string }) {
+  const [showModal, setShowModal] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setShowModal(true)}
+        className="flex-shrink-0 rounded-xl border border-slate-200 bg-white p-2 shadow-sm transition hover:shadow-md"
+        title="Click to enlarge"
+      >
+        <Image
+          src={qrCodeUrl}
+          alt="eSIM QR Code"
+          width={88}
+          height={88}
+          className="rounded-lg"
+          unoptimized
+        />
+      </button>
+      {showModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowModal(false)}
+        >
+          <div
+            className="relative rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowModal(false)}
+              className="absolute right-3 top-3 rounded-full p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <p className="mb-3 text-center text-sm font-medium text-slate-700">{planName}</p>
+            <Image
+              src={qrCodeUrl}
+              alt="eSIM QR Code"
+              width={280}
+              height={280}
+              className="rounded-xl"
+              unoptimized
+            />
+            <p className="mt-3 text-center text-xs text-slate-500">
+              Scan with your phone&apos;s camera to install
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ReceiptDownloadButton({ orderId, authFetchBlob }: { orderId: string; authFetchBlob: (path: string, options?: RequestInit) => Promise<Blob> }) {
   const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
   const handleClick = async () => {
     setLoading(true);
     try {
@@ -326,8 +423,8 @@ function ReceiptDownloadButton({ orderId, authFetchBlob }: { orderId: string; au
       a.download = `receipt-${orderId}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      toast({ title: 'Download failed', description: 'Could not download receipt.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -461,14 +558,16 @@ function BulkShare({ profiles }: { profiles: EsimProfile[] }) {
 function ResendReceiptButton({ orderId, authFetch }: { orderId: string; authFetch: <T = unknown>(path: string, options?: RequestInit) => Promise<T> }) {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const { toast } = useToast();
   const handleClick = async () => {
     setLoading(true);
     setSent(false);
     try {
       await authFetch(`/orders/${orderId}/resend-receipt`, { method: 'POST' });
       setSent(true);
-    } catch (e) {
-      console.error(e);
+      toast({ title: 'Receipt sent', description: 'Check your email.' });
+    } catch {
+      toast({ title: 'Failed to resend', description: 'Please try again.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }

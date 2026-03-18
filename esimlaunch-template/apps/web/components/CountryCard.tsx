@@ -87,9 +87,16 @@ export function CountryCard({
             </div>
           ) : (
             planCount > 0 && (
-              <div className="text-xs text-slate-500">
-                {planCount} plan{planCount !== 1 ? 's' : ''} available
-              </div>
+              <>
+                {lowestPriceUSD > 0 && (
+                  <div className="text-sm font-semibold text-violet-600">
+                    From ${lowestPriceUSD.toFixed(2)}
+                  </div>
+                )}
+                <div className="text-xs text-slate-500">
+                  {planCount} plan{planCount !== 1 ? 's' : ''} available
+                </div>
+              </>
             )
           )}
         </div>

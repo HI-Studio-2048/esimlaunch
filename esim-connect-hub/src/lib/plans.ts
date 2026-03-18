@@ -5,6 +5,8 @@ export interface Plan {
   yearlyPrice: number;
   features: string[];
   recommended?: boolean;
+  /** When true, plan is hidden from public UI (Pricing, Onboarding) but still usable via URL for devs */
+  hiddenFromPublic?: boolean;
 }
 
 export const PLANS: Plan[] = [
@@ -14,6 +16,7 @@ export const PLANS: Plan[] = [
     monthlyPrice: 1,
     yearlyPrice: 10,
     features: ['24h Support Response Time', 'Full White-Labeling'],
+    hiddenFromPublic: true,
   },
   {
     id: 'starter',
