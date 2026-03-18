@@ -190,7 +190,7 @@ export default function Index() {
               </motion.div>
 
               <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
-                launch your
+                Launch your
                 <span className="gradient-text"> eSIM </span>
                 company today
               </h1>
