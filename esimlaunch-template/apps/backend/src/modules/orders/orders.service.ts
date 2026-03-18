@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -14,12 +15,18 @@ import { EmailService } from '../email/email.service';
 import { Order, OrderStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 
-// Promo code map: code → discount percent
-const PROMO_CODES: Record<string, number> = {
-  // Add promo codes here in env or a DB table; for now a static example
-  WELCOME10: 10,
-  LAUNCH20: 20,
-};
+// Promo codes loaded from environment (JSON format: '{"WELCOME10":10,"LAUNCH20":20}')
+function loadPromoCodes(): Record<string, number> {
+  const raw = process.env.PROMO_CODES;
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+const PROMO_CODES = loadPromoCodes();
 
 @Injectable()
 export class OrdersService {
@@ -33,7 +40,20 @@ export class OrdersService {
     private currencyService: CurrencyService,
     private emailService: EmailService,
     private config: ConfigService,
-  ) {}
+  ) {
+    const guestSecret = this.config.get<string>('GUEST_TOKEN_SECRET');
+    if (!guestSecret || guestSecret === 'change-this-to-a-long-random-secret') {
+      this.logger.warn('GUEST_TOKEN_SECRET is not set or uses the default value. Guest access tokens are insecure!');
+    }
+  }
+
+  private getGuestSecret(): string {
+    const secret = this.config.get<string>('GUEST_TOKEN_SECRET');
+    if (!secret) {
+      throw new Error('GUEST_TOKEN_SECRET must be configured');
+    }
+    return secret;
+  }
 
   // -----------------------------------------------------------------------
   // User helpers
@@ -49,7 +69,8 @@ export class OrdersService {
   }
 
   async createGuestUser() {
-    const guestEmail = `guest-${crypto.randomUUID()}@esimlaunch-guest.com`;
+    const guestDomain = this.config.get<string>('GUEST_EMAIL_DOMAIN') || 'guest.noreply';
+    const guestEmail = `guest-${crypto.randomUUID()}@${guestDomain}`;
     return this.prisma.user.create({ data: { email: guestEmail } });
   }
 
@@ -174,7 +195,7 @@ export class OrdersService {
     if (!balance || balance.balanceCents < amountCents) {
       throw new BadRequestException('Insufficient Store Credit balance');
     }
-    if (order.userId !== userId) throw new BadRequestException('Order does not belong to user');
+    if (order.userId !== userId) throw new ForbiddenException('This order does not belong to your account');
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new BadRequestException('User not found');
@@ -247,9 +268,27 @@ export class OrdersService {
     return { discount, newAmountCents, newDisplayAmountCents };
   }
 
-  async removePromo(orderId: string, originalAmountCents: number, originalDisplayAmountCents: number) {
+  async removePromo(orderId: string) {
     const order = await this.getOrderOrThrow(orderId);
     if (order.status !== 'pending') throw new BadRequestException('Order is not pending');
+    if (!order.promoCode) throw new BadRequestException('No promo applied');
+
+    // Recalculate original amount from discount
+    const discount = PROMO_CODES[order.promoCode];
+    if (!discount) {
+      // Promo code no longer valid, just clear it
+      return this.prisma.order.update({
+        where: { id: orderId },
+        data: { promoCode: null },
+      });
+    }
+
+    // Reverse the discount using integer math to avoid floating-point issues:
+    // discounted = original * (100 - discount) / 100
+    // original = discounted * 100 / (100 - discount)
+    const originalAmountCents = Math.round((order.amountCents * 100) / (100 - discount));
+    const currency = order.displayCurrency ?? 'USD';
+    const originalDisplayAmountCents = await this.currencyService.convertUsdCents(originalAmountCents, currency);
 
     return this.prisma.order.update({
       where: { id: orderId },
@@ -290,6 +329,11 @@ export class OrdersService {
   // -----------------------------------------------------------------------
 
   async createStripeCheckout(orderId: string, referralCode?: string) {
+    // Block checkout if store has been deactivated
+    if (!(await this.storeConfig.isStoreActive())) {
+      throw new BadRequestException('This store is currently unavailable');
+    }
+
     const order = await this.getOrderOrThrow(orderId);
     if (order.status !== 'pending') throw new BadRequestException('Order is not pending');
 
@@ -316,14 +360,38 @@ export class OrdersService {
       }
     }
 
+    const plan = await this.esimService.getPlanByCode(order.planId);
+    const planName = plan?.name ?? order.planName ?? order.planId;
+
+    // Server-side price verification: don't trust client-supplied amountCents
+    if (plan?.price != null) {
+      const serverAmountCents = Math.round(plan.price);
+      if (serverAmountCents !== finalAmountCents) {
+        // Recalculate with server price, applying referral discount if applicable
+        const baseServerCents = referralDiscountApplied
+          ? Math.round(serverAmountCents * 0.9)
+          : serverAmountCents;
+        finalAmountCents = baseServerCents;
+        finalDisplayAmountCents = await this.currencyService.convertUsdCents(
+          finalAmountCents,
+          currency,
+        );
+        // Update order with correct server-side price
+        await this.prisma.order.update({
+          where: { id: orderId },
+          data: {
+            amountCents: serverAmountCents,
+            displayAmountCents: await this.currencyService.convertUsdCents(serverAmountCents, currency),
+          },
+        });
+      }
+    }
+
     // Minimum charge check
     const minCents = await this.currencyService.minimumChargeCents(currency);
     if (finalDisplayAmountCents < minCents) {
       finalDisplayAmountCents = minCents;
     }
-
-    const plan = await this.esimService.getPlanByCode(order.planId);
-    const planName = plan?.name ?? order.planName ?? order.planId;
 
     const session = await this.stripeService.createCheckoutSession({
       lineItems: [
@@ -380,10 +448,18 @@ export class OrdersService {
 
     // Update user email/name from Stripe customer_details if it was a guest
     if (session.customer_details?.email && user?.email.startsWith('guest-')) {
-      await this.upsertUserByEmail(
+      const realUser = await this.upsertUserByEmail(
         session.customer_details.email,
         session.customer_details.name ?? undefined,
       );
+
+      // Reassign order from guest user to real user
+      if (realUser.id !== order.userId) {
+        await this.prisma.order.update({
+          where: { id: order.id },
+          data: { userId: realUser.id },
+        });
+      }
     }
 
     // Update order to paid
@@ -480,7 +556,7 @@ export class OrdersService {
     if (!config?.storeId) return;
 
     const amountCents = order.displayAmountCents ?? order.amountCents;
-    await fetch(`${baseUrl.replace(/\/$/, '')}/api/integration/template-order`, {
+    await this.fetchWithRetry(`${baseUrl.replace(/\/$/, '')}/api/integration/template-order`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -493,10 +569,97 @@ export class OrdersService {
         customerName: user.name ?? undefined,
         totalAmountCents: amountCents,
         packageCount: 1,
-        status: 'COMPLETED',
+        status: 'PROCESSING',
         paymentRef: order.paymentRef,
       }),
     });
+  }
+
+  /**
+   * Update order status on main backend after provisioning succeeds/fails.
+   */
+  private async updateOrderStatusOnMainBackend(
+    orderId: string,
+    status: string,
+  ): Promise<void> {
+    if (!this.storeConfig.isLinked()) return;
+    const baseUrl = this.config.get<string>('ESIMLAUNCH_HUB_API_URL');
+    const syncSecret = this.config.get<string>('TEMPLATE_ORDER_SYNC_SECRET');
+    if (!baseUrl || !syncSecret) return;
+
+    const config = await this.storeConfig.getConfig();
+    if (!config?.storeId) return;
+
+    await this.fetchWithRetry(`${baseUrl.replace(/\/$/, '')}/api/integration/template-order`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-template-sync-secret': syncSecret,
+      },
+      body: JSON.stringify({
+        storeId: config.storeId,
+        templateOrderId: orderId,
+        status,
+      }),
+    });
+  }
+
+  /**
+   * Sync eSIM profile to main backend so it appears in merchant dashboard.
+   */
+  private async syncEsimProfileToMainBackend(
+    orderId: string,
+    profile: { esimTranNo: string; iccid?: string | null; qrCodeUrl?: string | null; ac?: string | null; smdpStatus?: string | null; esimStatus?: string | null },
+    plan?: { packageCode?: string; name?: string; locationCode?: string } | null,
+  ): Promise<void> {
+    if (!this.storeConfig.isLinked()) return;
+    const baseUrl = this.config.get<string>('ESIMLAUNCH_HUB_API_URL');
+    const syncSecret = this.config.get<string>('TEMPLATE_ORDER_SYNC_SECRET');
+    if (!baseUrl || !syncSecret) return;
+
+    const config = await this.storeConfig.getConfig();
+    if (!config?.storeId) return;
+
+    await this.fetchWithRetry(`${baseUrl.replace(/\/$/, '')}/api/integration/esim-profile`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-template-sync-secret': syncSecret,
+      },
+      body: JSON.stringify({
+        storeId: config.storeId,
+        templateOrderId: orderId,
+        esimTranNo: profile.esimTranNo,
+        iccid: profile.iccid ?? undefined,
+        qrCodeUrl: profile.qrCodeUrl ?? undefined,
+        ac: profile.ac ?? undefined,
+        smdpStatus: profile.smdpStatus ?? undefined,
+        esimStatus: profile.esimStatus ?? undefined,
+        packageCode: plan?.packageCode ?? undefined,
+        packageName: plan?.name ?? undefined,
+        locationCode: plan?.locationCode ?? undefined,
+      }),
+    });
+  }
+
+  /**
+   * Fetch with retry (up to 3 attempts with exponential backoff).
+   */
+  private async fetchWithRetry(url: string, init: RequestInit, retries = 3): Promise<Response> {
+    let lastError: Error | undefined;
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(url, init);
+        if (res.ok || res.status < 500) return res;
+        lastError = new Error(`HTTP ${res.status}`);
+      } catch (err: any) {
+        lastError = err;
+      }
+      if (i < retries - 1) {
+        await new Promise((r) => setTimeout(r, 2000 * Math.pow(3, i))); // 2s, 6s, 18s
+      }
+    }
+    throw lastError ?? new Error('fetchWithRetry exhausted');
   }
 
   // -----------------------------------------------------------------------
@@ -554,6 +717,21 @@ export class OrdersService {
         });
 
         await this.prisma.order.update({ where: { id: order.id }, data: { receiptSent: true } });
+
+        // Sync profile + completed status to main backend dashboard
+        if (esimProfile.esimTranNo) {
+          this.syncEsimProfileToMainBackend(order.id, { ...esimProfile, esimTranNo: esimProfile.esimTranNo }, plan).catch((e) =>
+            this.logger.warn('eSIM profile sync to main backend failed', e?.message || e),
+          );
+        }
+        this.updateOrderStatusOnMainBackend(order.id, 'COMPLETED').catch((e) =>
+          this.logger.warn('Order status update to main backend failed', e?.message || e),
+        );
+      } else if (!esimProfile) {
+        // Provisioning didn't complete yet — update status to pending
+        this.updateOrderStatusOnMainBackend(order.id, 'esim_pending').catch((e) =>
+          this.logger.warn('Order status update to main backend failed', e?.message || e),
+        );
       }
 
       // Add commission for affiliate if applicable
@@ -564,6 +742,10 @@ export class OrdersService {
         where: { id: order.id },
         data: { status: 'esim_order_failed' },
       });
+      // Sync failure status to main backend
+      this.updateOrderStatusOnMainBackend(order.id, 'esim_order_failed').catch((e) =>
+        this.logger.warn('Order failure status sync to main backend failed', e?.message || e),
+      );
     }
   }
 
@@ -643,7 +825,7 @@ export class OrdersService {
   // -----------------------------------------------------------------------
 
   generateGuestToken(orderId: string, email: string): string {
-    const secret = this.config.get<string>('GUEST_TOKEN_SECRET', 'changeme-guest-secret');
+    const secret = this.getGuestSecret();
     const expiry = Date.now() + 7 * 24 * 60 * 60 * 1000;
     const payload = Buffer.from(JSON.stringify({ orderId, email, expiry })).toString('base64url');
     const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
@@ -651,12 +833,20 @@ export class OrdersService {
   }
 
   verifyGuestToken(token: string, orderId: string, email: string): boolean {
-    const secret = this.config.get<string>('GUEST_TOKEN_SECRET', 'changeme-guest-secret');
+    const secret = this.getGuestSecret();
     const [payload, sig] = token.split('.');
     if (!payload || !sig) return false;
 
     const expectedSig = crypto.createHmac('sha256', secret).update(payload).digest('hex');
-    if (sig !== expectedSig) return false;
+
+    // Timing-safe comparison to prevent timing attacks on HMAC
+    if (sig.length !== expectedSig.length) return false;
+    try {
+      const sigValid = crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expectedSig));
+      if (!sigValid) return false;
+    } catch {
+      return false;
+    }
 
     try {
       const data = JSON.parse(Buffer.from(payload, 'base64url').toString());
@@ -664,6 +854,15 @@ export class OrdersService {
     } catch {
       return false;
     }
+  }
+
+  async sendGuestAccessEmail(email: string, guestUrl: string, orderId: string): Promise<void> {
+    await this.emailService.send({
+      to: email,
+      subject: 'Your Order Access Link',
+      template: 'guest-access',
+      data: { link: guestUrl, orderId },
+    });
   }
 
   // -----------------------------------------------------------------------

@@ -1031,7 +1031,7 @@ const PaymentStep = ({
     <div className="space-y-6">
       <div>
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold mb-3">
-          14-day free trial · No charges until it ends
+          7-day free trial · No charges until it ends
         </div>
         <h2 className="text-2xl font-bold mb-2">Set up payment to start your free trial</h2>
         <p className="text-muted-foreground">
@@ -1192,7 +1192,7 @@ const LaunchStep = ({
       </div>
       <div className="p-4 rounded-xl bg-card border">
         <p className="text-sm text-muted-foreground mb-2">Plan</p>
-        <p className="font-semibold">14-day free trial</p>
+        <p className="font-semibold">7-day free trial</p>
       </div>
     </div>
 

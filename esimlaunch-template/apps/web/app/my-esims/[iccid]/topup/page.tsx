@@ -5,7 +5,7 @@ import { useUser } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { Plan, EsimProfile } from '@/lib/types';
 import { formatVolume } from '@/lib/types';
 import { useCurrency } from '@/hooks/useCurrency';
@@ -17,6 +17,7 @@ import { getPlanFlagLabels } from '@/lib/plan-flags';
 export default function TopUpByIccidPage() {
   const { iccid } = useParams<{ iccid: string }>();
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch } = useAuthFetch();
   const { currency, formatProviderPrice } = useCurrency();
   const [profile, setProfile] = useState<EsimProfile | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -33,7 +34,7 @@ export default function TopUpByIccidPage() {
     const email = user?.primaryEmailAddress?.emailAddress;
     if (!email || !iccid) return;
 
-    apiFetch<EsimProfile[]>('/user/esims', { userEmail: email })
+    authFetch<EsimProfile[]>('/user/esims')
       .then((profiles) => {
         const match = profiles.find(
           (p) => p.iccid?.toLowerCase() === iccid?.toLowerCase()
@@ -43,7 +44,7 @@ export default function TopUpByIccidPage() {
           return;
         }
         setProfile(match);
-        return apiFetch<Plan[]>(
+        return authFetch<Plan[]>(
           `/topup/plans?iccid=${match.iccid ?? ''}&locationCode=${match.order?.planId ?? ''}`
         );
       })
@@ -59,9 +60,8 @@ export default function TopUpByIccidPage() {
     if (!email || !profile) return;
     setSelecting(plan.packageCode);
     try {
-      const res = await apiFetch<{ url: string }>('/topup/checkout', {
+      const res = await authFetch<{ url: string }>('/topup/checkout', {
         method: 'POST',
-        userEmail: email,
         body: JSON.stringify({
           profileId: profile.id,
           planCode: plan.packageCode,

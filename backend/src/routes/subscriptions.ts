@@ -222,7 +222,7 @@ router.post('/apply-coupon', async (req, res, next) => {
 
     const Stripe = (await import('stripe')).default;
     const { env } = await import('../config/env');
-    const stripe = new Stripe(env.stripeSecretKey, { apiVersion: '2024-11-20.acacia' as any });
+    const stripe = new Stripe(env.stripeSecretKey, { apiVersion: '2026-01-28.clover' as any });
 
     // Try promotion code first, then legacy coupon
     let discount: string | undefined;

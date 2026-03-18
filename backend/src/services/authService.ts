@@ -1,10 +1,31 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { randomBytes } from 'crypto';
+import crypto, { randomBytes } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import { ServiceType, MerchantRole } from '@prisma/client';
 import { emailService } from './emailService';
+
+// AES-256-GCM encryption for SMTP passwords at rest
+const ENCRYPTION_KEY = crypto.createHash('sha256').update(env.jwtSecret).digest(); // 32 bytes for AES-256
+
+export function encryptSmtpPassword(plaintext: string): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, encrypted]).toString('base64');
+}
+
+export function decryptSmtpPassword(ciphertext: string): string {
+  const buf = Buffer.from(ciphertext, 'base64');
+  const iv = buf.subarray(0, 12);
+  const tag = buf.subarray(12, 28);
+  const encrypted = buf.subarray(28);
+  const decipher = crypto.createDecipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
+  decipher.setAuthTag(tag);
+  return decipher.update(encrypted) + decipher.final('utf8');
+}
 
 export interface RegisterData {
   email: string;
@@ -25,6 +46,7 @@ export interface AuthResponse {
     name: string | null;
     role: MerchantRole;
     serviceType: ServiceType;
+    twoFactorEnabled: boolean;
   };
   token: string;
 }
@@ -78,6 +100,7 @@ class AuthService {
         name: true,
         role: true,
         serviceType: true,
+        twoFactorEnabled: true,
       },
     });
 
@@ -129,6 +152,7 @@ class AuthService {
         serviceType: true,
         password: true,
         isActive: true,
+        twoFactorEnabled: true,
       },
     });
 
@@ -156,6 +180,7 @@ class AuthService {
         name: merchant.name,
         role: merchant.role,
         serviceType: merchant.serviceType,
+        twoFactorEnabled: merchant.twoFactorEnabled,
       },
       token,
     };
@@ -371,7 +396,7 @@ class AuthService {
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password and mark token as used
+    // Update password, mark token as used, and invalidate all sessions
     await prisma.$transaction([
       prisma.merchant.update({
         where: { id: resetToken.merchantId },
@@ -380,6 +405,9 @@ class AuthService {
       prisma.passwordResetToken.update({
         where: { id: resetToken.id },
         data: { used: true },
+      }),
+      prisma.session.deleteMany({
+        where: { merchantId: resetToken.merchantId },
       }),
     ]);
   }
@@ -437,7 +465,7 @@ class AuthService {
     if (data.smtpHost !== undefined) updateData.smtpHost = data.smtpHost || null;
     if (data.smtpPort !== undefined) updateData.smtpPort = data.smtpPort || null;
     if (data.smtpUser !== undefined) updateData.smtpUser = data.smtpUser || null;
-    if (data.smtpPass !== undefined) updateData.smtpPass = data.smtpPass || null;
+    if (data.smtpPass !== undefined) updateData.smtpPass = data.smtpPass ? encryptSmtpPassword(data.smtpPass) : null;
     if (data.smtpFromName !== undefined) updateData.smtpFromName = data.smtpFromName || null;
     if (data.smtpFromEmail !== undefined) updateData.smtpFromEmail = data.smtpFromEmail || null;
 

@@ -74,7 +74,12 @@ export function ClerkAuthSync() {
         // spinner instead of flashing "Sign In" while the backend call runs.
         setAuthLoading(true);
         try {
-          const result = await apiClient.clerkSync(clerkUser.id);
+          const sessionToken = await clerk.session?.getToken();
+          if (!sessionToken) {
+            console.error('No Clerk session token available');
+            return;
+          }
+          const result = await apiClient.clerkSync(sessionToken);
           apiClient.setJwtToken(result.token);
           setUser(result.merchant);
           hasSynced.current = clerkUser.id;

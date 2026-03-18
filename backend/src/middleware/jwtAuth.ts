@@ -42,8 +42,29 @@ export async function authenticateJWT(
     // Verify token
     const decoded = await authService.verifyToken(token);
 
+    // Reject pre-2FA tokens on non-2FA endpoints
+    const fullPath = req.baseUrl + req.path;
+    const is2FAEndpoint = /\/auth\/2fa\//.test(fullPath);
+    if ((decoded as any).scope === 'pre_2fa' && !is2FAEndpoint) {
+      res.status(403).json({
+        success: false,
+        errorCode: '2FA_REQUIRED',
+        errorMessage: 'Please complete 2FA verification before accessing this endpoint',
+      });
+      return;
+    }
+
     // Get merchant info
     const merchant = await authService.getMerchantById(decoded.merchantId);
+
+    if (!merchant) {
+      res.status(401).json({
+        success: false,
+        errorCode: 'MERCHANT_NOT_FOUND',
+        errorMessage: 'Merchant account no longer exists',
+      });
+      return;
+    }
 
     if (!merchant.isActive) {
       res.status(403).json({

@@ -126,8 +126,10 @@ router.get('/summary', async (_req, res) => {
  */
 router.get('/store-requests', async (req, res) => {
   try {
-    const { status, email, page = '1', limit = '50' } = req.query as Record<string, string>;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { status, email } = req.query as Record<string, string>;
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 50), 200);
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const skip = (page - 1) * limit;
 
     const where: any = {};
     if (status) where.adminStatus = status;
@@ -138,7 +140,7 @@ router.get('/store-requests', async (req, res) => {
         where,
         orderBy: { createdAt: 'desc' },
         skip,
-        take: parseInt(limit),
+        take: limit,
         select: {
           id: true,
           name: true,
@@ -169,7 +171,7 @@ router.get('/store-requests', async (req, res) => {
     res.json({
       success: true,
       data: stores,
-      meta: { total, page: parseInt(page), limit: parseInt(limit) },
+      meta: { total, page, limit },
     });
   } catch (error: any) {
     res.status(500).json({
@@ -233,8 +235,10 @@ router.patch('/store-requests/:id', async (req, res) => {
  */
 router.get('/merchants', async (req, res) => {
   try {
-    const { search, page = '1', limit = '50' } = req.query as Record<string, string>;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { search } = req.query as Record<string, string>;
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 50), 200);
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const skip = (page - 1) * limit;
 
     const where: any = {};
     if (search) {
@@ -249,7 +253,7 @@ router.get('/merchants', async (req, res) => {
         where,
         orderBy: { createdAt: 'desc' },
         skip,
-        take: parseInt(limit),
+        take: limit,
         select: {
           id: true,
           email: true,
@@ -273,7 +277,7 @@ router.get('/merchants', async (req, res) => {
     res.json({
       success: true,
       data: merchants,
-      meta: { total, page: parseInt(page), limit: parseInt(limit) },
+      meta: { total, page, limit },
     });
   } catch (error: any) {
     res.status(500).json({
@@ -451,8 +455,10 @@ router.get('/stores/:storeId', async (req, res) => {
  */
 router.get('/subscriptions', async (req, res) => {
   try {
-    const { status, plan, page = '1', limit = '50' } = req.query as Record<string, string>;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { status, plan } = req.query as Record<string, string>;
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 50), 200);
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const skip = (page - 1) * limit;
 
     const where: any = {};
     if (status) where.status = status;
@@ -463,7 +469,7 @@ router.get('/subscriptions', async (req, res) => {
         where,
         orderBy: { createdAt: 'desc' },
         skip,
-        take: parseInt(limit),
+        take: limit,
         include: {
           merchant: {
             select: { id: true, email: true, name: true, isActive: true },
@@ -476,7 +482,7 @@ router.get('/subscriptions', async (req, res) => {
     res.json({
       success: true,
       data: subscriptions,
-      meta: { total, page: parseInt(page), limit: parseInt(limit) },
+      meta: { total, page, limit },
     });
   } catch (error: any) {
     res.status(500).json({
@@ -495,8 +501,10 @@ router.get('/subscriptions', async (req, res) => {
  */
 router.get('/support', async (req, res) => {
   try {
-    const { status, priority, page = '1', limit = '50' } = req.query as Record<string, string>;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const { status, priority } = req.query as Record<string, string>;
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 50), 200);
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const skip = (page - 1) * limit;
 
     const where: any = {};
     if (status) where.status = status;
@@ -507,7 +515,7 @@ router.get('/support', async (req, res) => {
         where,
         orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
         skip,
-        take: parseInt(limit),
+        take: limit,
         select: {
           id: true,
           ticketNumber: true,
@@ -528,7 +536,7 @@ router.get('/support', async (req, res) => {
     res.json({
       success: true,
       data: tickets,
-      meta: { total, page: parseInt(page), limit: parseInt(limit) },
+      meta: { total, page, limit },
     });
   } catch (error: any) {
     res.status(500).json({

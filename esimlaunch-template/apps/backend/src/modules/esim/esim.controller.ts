@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, ForbiddenException } from '@nestjs/common';
 import { EsimService } from './esim.service';
 import { StoreConfigService } from './store-config.service';
 
@@ -30,15 +30,22 @@ export class EsimController {
       currency: config.currency,
       supportedCurrencies: config.supportedCurrencies,
       templateSettings: config.templateSettings,
+      isActive: config.isActive !== false,
     };
   }
 
   /**
    * GET /api/esim/store-config-status
    * Debug endpoint: shows whether store config is linked and fetch status.
+   * Protected by ADMIN_RETRY_SECRET header.
    */
   @Get('store-config-status')
-  async getStoreConfigStatus() {
+  async getStoreConfigStatus(@Req() req: any) {
+    const adminSecret = process.env.ADMIN_RETRY_SECRET;
+    const provided = req.headers['x-admin-secret'];
+    if (!adminSecret || !provided || provided !== adminSecret) {
+      throw new ForbiddenException('Not authorized');
+    }
     const isLinked = this.storeConfig.isLinked();
     if (!isLinked) {
       return {

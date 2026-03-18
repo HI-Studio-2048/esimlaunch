@@ -34,7 +34,7 @@ const faqs = {
     },
     {
       question: "How long does the free trial last?",
-      answer: "We offer a 14-day free trial on all paid plans. During this time, you have full access to all features with no restrictions. No credit card is required to start your trial."
+      answer: "We offer a 7-day free trial on all paid plans. During this time, you have full access to all features with no restrictions. No credit card is required to start your trial."
     },
     {
       question: "What happens after the trial ends?",

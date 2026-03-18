@@ -21,6 +21,7 @@ export interface StoreConfigState {
   currency: string;
   supportedCurrencies: string[];
   templateSettings?: Record<string, unknown>;
+  isActive: boolean;
   isLoading: boolean;
 }
 
@@ -35,6 +36,7 @@ export function StoreConfigProvider({ children }: { children: React.ReactNode })
     currency: 'USD',
     supportedCurrencies: DEFAULT_CURRENCIES,
     templateSettings: undefined,
+    isActive: true,
     isLoading: true,
   });
 
@@ -44,6 +46,7 @@ export function StoreConfigProvider({ children }: { children: React.ReactNode })
       currency?: string;
       supportedCurrencies?: string[];
       templateSettings?: Record<string, unknown>;
+      isActive?: boolean;
     }>('/esim/store-config')
       .then((data) => {
         setState({
@@ -54,6 +57,7 @@ export function StoreConfigProvider({ children }: { children: React.ReactNode })
               ? data.supportedCurrencies
               : DEFAULT_CURRENCIES,
           templateSettings: data.templateSettings,
+          isActive: data.isActive !== false,
           isLoading: false,
         });
       })
@@ -76,6 +80,7 @@ export function useStoreConfig(): StoreConfigState {
     currency: 'USD',
     supportedCurrencies: DEFAULT_CURRENCIES,
     templateSettings: undefined,
+    isActive: true,
     isLoading: false,
   };
 }

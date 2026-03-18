@@ -826,10 +826,10 @@ esimlaunch/
 
 ## 📚 Additional Documentation
 
-- **Backend Implementation Summary**: `backend/IMPLEMENTATION_SUMMARY.md`
+- **Backend Implementation Summary**: `../backend/IMPLEMENTATION_SUMMARY.md`
 - **Missing Components**: `MISSING_COMPONENTS.md`
 - **Clerk Integration Guide**: `CLERK_INTEGRATION.md`
-- **eSIM Access API Docs**: `esimaccess docs/eSIM Access API for resellers.md`
+- **eSIM Access API Docs**: `../esimaccess docs/eSIM Access API for resellers.md`
 
 ---
 

@@ -92,43 +92,10 @@ export default function Settings() {
       ]);
     };
 
-    // Wait for user to be set (from ClerkAuthSync)
-    if (!user) {
-      // Poll for user and token
-      const checkAuth = setInterval(() => {
-        const token = localStorage.getItem('jwt_token');
-        // Check if user was set (re-read from closure)
-        const hasUser = user !== null;
-        if (token) {
-          clearInterval(checkAuth);
-          // ApiClient will automatically use token from localStorage
-          loadAllData();
-        }
-      }, 200);
-      
-      setTimeout(() => clearInterval(checkAuth), 10000);
-      return () => clearInterval(checkAuth);
-    }
+    // React to auth state changes instead of polling localStorage
+    if (!user) return;
 
-    // User exists, check for token
-    const token = localStorage.getItem('jwt_token');
-    if (!token) {
-      // Wait for token
-      const checkToken = setInterval(() => {
-        const newToken = localStorage.getItem('jwt_token');
-        if (newToken) {
-          clearInterval(checkToken);
-          // ApiClient will automatically use token from localStorage
-          loadAllData();
-        }
-      }, 200);
-      
-      setTimeout(() => clearInterval(checkToken), 10000);
-      return () => clearInterval(checkToken);
-    }
-
-    // Both user and token exist, load data
-    // ApiClient will automatically use token from localStorage
+    // Ensure ApiClient has the latest token before loading data
     loadAllData();
   }, [user]);
 

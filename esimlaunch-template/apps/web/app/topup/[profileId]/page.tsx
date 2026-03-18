@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
-import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { Plan, EsimProfile } from '@/lib/types';
 import { formatVolume } from '@/lib/types';
 import { useCurrency } from '@/hooks/useCurrency';
@@ -18,6 +18,7 @@ import { useCurrency } from '@/hooks/useCurrency';
 export default function TopUpPage() {
   const { profileId } = useParams<{ profileId: string }>();
   const { user } = useUser();
+  const { authFetch } = useAuthFetch();
   const { currency, formatProviderPrice } = useCurrency();
   const router = useRouter();
 
@@ -30,14 +31,14 @@ export default function TopUpPage() {
     const email = user?.primaryEmailAddress?.emailAddress;
     if (!email) return;
 
-    apiFetch<EsimProfile[]>('/user/esims', { userEmail: email })
+    authFetch<EsimProfile[]>('/user/esims')
       .then((profiles) => {
         const profile = profiles.find((p) => p.id === profileId);
         if (!profile) {
           setError('eSIM not found.');
           return;
         }
-        return apiFetch<Plan[]>(
+        return authFetch<Plan[]>(
           `/topup/plans?iccid=${profile.iccid ?? ''}&locationCode=${profile.order?.planId ?? ''}`,
         ).then(setPlans);
       })
@@ -50,9 +51,8 @@ export default function TopUpPage() {
     if (!email) return;
     setSelecting(plan.packageCode);
     try {
-      const res = await apiFetch<{ url: string }>('/topup/checkout', {
+      const res = await authFetch<{ url: string }>('/topup/checkout', {
         method: 'POST',
-        userEmail: email,
         body: JSON.stringify({
           profileId,
           planCode: plan.packageCode,

@@ -1,11 +1,67 @@
 import express from 'express';
 import { z } from 'zod';
+import { URL } from 'url';
+import dns from 'dns';
+import { promisify } from 'util';
 import { esimAccessService, PLATFORM_PRICE_MARKUP } from '../services/esimAccessService';
 import { authenticateSessionOrApiKey, logApiRequest, createRateLimiter } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
-import { OrderStatus, BalanceTransactionType } from '@prisma/client';
+import { OrderStatus, BalanceTransactionType, Prisma } from '@prisma/client';
+
+const dnsLookup = promisify(dns.lookup);
+
+async function isInternalUrl(urlString: string): Promise<boolean> {
+  try {
+    const parsed = new URL(urlString);
+    const hostname = parsed.hostname;
+
+    // Block obvious internal hostnames
+    if (['localhost', '127.0.0.1', '::1', '0.0.0.0'].includes(hostname)) return true;
+    if (hostname.endsWith('.local') || hostname.endsWith('.internal')) return true;
+
+    // Resolve DNS and check for private IPs
+    const { address } = await dnsLookup(hostname);
+    const parts = address.split('.').map(Number);
+
+    // Private ranges: 10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x (link-local/cloud metadata)
+    if (parts[0] === 10) return true;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+    if (parts[0] === 192 && parts[1] === 168) return true;
+    if (parts[0] === 127) return true;
+    if (parts[0] === 169 && parts[1] === 254) return true;
+    if (parts[0] === 0) return true;
+
+    return false;
+  } catch {
+    return true; // Block if we can't resolve
+  }
+}
 
 const router = express.Router();
+
+/**
+ * Map eSIM Access error codes to eSIMLaunch error codes.
+ * Prevents merchants from discovering the upstream provider.
+ */
+function mapProviderError(errorCode?: string, errorMessage?: string): { code: string; message: string } {
+  const map: Record<string, { code: string; message: string }> = {
+    '000101': { code: 'INVALID_PARAMS', message: 'Invalid order parameters' },
+    '000102': { code: 'PACKAGE_UNAVAILABLE', message: 'Package is currently unavailable' },
+    '000103': { code: 'PACKAGE_NOT_FOUND', message: 'Package not found' },
+    '000104': { code: 'ORDER_LIMIT_EXCEEDED', message: 'Order quantity limit exceeded' },
+    '000105': { code: 'PROVIDER_BALANCE_LOW', message: 'Service temporarily unavailable. Please try again later.' },
+    '000106': { code: 'DUPLICATE_ORDER', message: 'Duplicate transaction ID' },
+  };
+
+  if (errorCode && map[errorCode]) {
+    return map[errorCode];
+  }
+
+  return {
+    code: 'ORDER_FAILED',
+    message: errorMessage?.replace(/esim\s*access/gi, 'provider') || 'Order failed. Please try again.',
+  };
+}
 
 // Auth: session cookie (Prisma DB) or Bearer (JWT/API key). Rate limiting and logging.
 router.use(authenticateSessionOrApiKey);
@@ -84,7 +140,7 @@ router.get('/packages', async (req, res, next) => {
       res.status(500).json({
         success: false,
         errorCode: 'FETCH_FAILED',
-        errorMessage: error.message || 'Failed to fetch packages',
+        errorMessage: 'Service temporarily unavailable. Please try again.',
       });
     }
   }
@@ -98,6 +154,19 @@ router.post('/orders', async (req, res, next) => {
   try {
     const data = orderProfilesSchema.parse(req.body);
     const merchantId = req.merchant!.id;
+
+    // Idempotency: check if this transactionId was already processed
+    const existingOrder = await prisma.order.findFirst({
+      where: { merchantId, transactionId: data.transactionId },
+    });
+    if (existingOrder) {
+      return res.json({
+        success: true,
+        obj: { orderNo: existingOrder.esimAccessOrderNo },
+        orderId: existingOrder.id,
+        message: 'Order already exists for this transaction',
+      });
+    }
 
     // Resolve order amount and enrich packageInfoList with packageCode (eSIM Access may require it)
     let orderAmountApi = data.amount;
@@ -118,92 +187,133 @@ router.post('/orders', async (req, res, next) => {
 
     // eSIM Access expects wholesale amount (1/10000 USD). Charge merchant marked-up amount for platform margin.
     const merchantChargeCents = Math.round((Number(orderAmountApi) * PLATFORM_PRICE_MARKUP) / 100);
-    const merchant = await prisma.merchant.findUnique({
-      where: { id: merchantId },
-      select: { balance: true },
-    });
 
-    if (!merchant) {
-      return res.status(404).json({
-        success: false,
-        errorCode: 'MERCHANT_NOT_FOUND',
-        errorMessage: 'Merchant not found',
+    // Step 1: Atomically deduct balance using raw SQL to prevent race conditions.
+    // The WHERE clause ensures the deduction only happens if the merchant exists AND has sufficient balance.
+    const rowsUpdated = await prisma.$executeRaw`
+      UPDATE "Merchant"
+      SET balance = balance - ${BigInt(merchantChargeCents)}
+      WHERE id = ${merchantId} AND balance >= ${BigInt(merchantChargeCents)}
+    `;
+
+    if (rowsUpdated === 0) {
+      // Either merchant not found or insufficient balance — check which one
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { balance: true },
       });
-    }
-
-    const currentBalance = Number(merchant.balance);
-    if (currentBalance < merchantChargeCents) {
+      if (!merchant) {
+        return res.status(404).json({
+          success: false,
+          errorCode: 'MERCHANT_NOT_FOUND',
+          errorMessage: 'Merchant not found',
+        });
+      }
       return res.status(400).json({
         success: false,
         errorCode: 'INSUFFICIENT_BALANCE',
-        errorMessage: `Insufficient balance. Current balance: $${(currentBalance / 100).toFixed(2)} USD, Required: $${(merchantChargeCents / 100).toFixed(2)} USD`,
+        errorMessage: 'Insufficient balance to complete this order. Please top up your account.',
       });
     }
 
-    // Use database transaction to ensure atomicity
-    const result = await prisma.$transaction(async (tx) => {
-      // Call eSIM Access API with amount in API units (1/10000 USD) and enriched packageInfoList (includes packageCode)
+    // Step 2: Create pending order record BEFORE calling provider (idempotency)
+    const pendingOrder = await prisma.order.create({
+      data: {
+        merchantId,
+        transactionId: data.transactionId,
+        status: OrderStatus.PENDING,
+        totalAmount: BigInt(orderAmountApi),
+        packageCount: packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0),
+      },
+    });
+
+    // Step 3: Balance has been deducted, order recorded. Call eSIM Access API.
+    let esimResult: any;
+    try {
       const payload = { ...data, amount: orderAmountApi, packageInfoList };
-      const esimResult = await esimAccessService.orderProfiles(payload);
-
-      if (esimResult.success && esimResult.obj?.orderNo) {
-        // Create order in database (store amount in 1/10000 USD for Advanced orders)
-        const order = await tx.order.create({
-          data: {
-            merchantId,
-            transactionId: data.transactionId,
-            esimAccessOrderNo: esimResult.obj.orderNo,
-            status: OrderStatus.PENDING,
-            totalAmount: BigInt(orderAmountApi),
-            packageCount: packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0),
-          },
-        });
-
-        // Deduct marked-up amount from merchant (balance is in cents)
-        const updatedMerchant = await tx.merchant.update({
+      esimResult = await esimAccessService.orderProfiles(payload);
+    } catch (apiError: any) {
+      // Step 3a: API call threw an exception — mark order FAILED and refund
+      console.error('[Order] eSIM Access API call failed, refunding merchant:', {
+        merchantId,
+        merchantChargeCents,
+        error: apiError?.message,
+      });
+      await prisma.order.update({
+        where: { id: pendingOrder.id },
+        data: { status: OrderStatus.FAILED },
+      });
+      await prisma.$transaction([
+        prisma.merchant.update({
           where: { id: merchantId },
-          data: {
-            balance: {
-              decrement: BigInt(merchantChargeCents),
-            },
-          },
-        });
-
-        // Verify balance didn't go negative (shouldn't happen due to check above, but safety check)
-        if (Number(updatedMerchant.balance) < 0) {
-          throw new Error('Balance would be negative');
-        }
-
-        // Create balance transaction record for audit (amount in cents)
-        await tx.balanceTransaction.create({
+          data: { balance: { increment: BigInt(merchantChargeCents) } },
+        }),
+        prisma.balanceTransaction.create({
           data: {
             merchantId,
-            orderId: order.id,
-            amount: BigInt(-merchantChargeCents), // Negative for deduction
-            type: BalanceTransactionType.ORDER,
-            description: `Order ${esimResult.obj.orderNo} - ${packageInfoList.reduce((sum, pkg) => sum + pkg.count, 0)} package(s)`,
+            amount: BigInt(merchantChargeCents),
+            type: BalanceTransactionType.REFUND,
+            description: `Refund: eSIM provider API error — ${apiError?.message || 'unknown error'}`,
           },
-        });
+        }),
+      ]);
+      throw apiError;
+    }
 
-        // Best-effort: look up package names and pre-populate EsimProfile rows via ORDER_STATUS webhook.
-        // packageName + coverage are stored when profiles arrive via webhook or first profile query.
-        console.log(`[Order] Created order ${esimResult.obj?.orderNo} for merchant ${merchantId}`);
-
-        return { ...esimResult, orderId: order.id };
-      }
-
-      // eSIM Access API returned failure - log full response for debugging, then surface error
-      console.error('[Order] eSIM Access rejected order:', {
+    // Step 3b: API returned but may indicate failure in the response body
+    if (!esimResult.success || !esimResult.obj?.orderNo) {
+      // Mark order FAILED and refund atomically with audit trail
+      console.error('[Order] eSIM Access rejected order, refunding merchant:', {
+        merchantId,
+        merchantChargeCents,
         errorCode: esimResult.errorCode,
         errorMessage: esimResult.errorMessage,
-        payload: { amount: orderAmountApi, packageInfoList },
       });
+      await prisma.order.update({
+        where: { id: pendingOrder.id },
+        data: { status: OrderStatus.FAILED },
+      });
+      await prisma.$transaction([
+        prisma.merchant.update({
+          where: { id: merchantId },
+          data: { balance: { increment: BigInt(merchantChargeCents) } },
+        }),
+        prisma.balanceTransaction.create({
+          data: {
+            merchantId,
+            amount: BigInt(merchantChargeCents),
+            type: BalanceTransactionType.REFUND,
+            description: `Refund: eSIM provider rejected order — ${esimResult.errorCode || 'unknown'}: ${esimResult.errorMessage || 'no details'}`,
+          },
+        }),
+      ]);
       const err = new Error(esimResult.errorMessage || 'Order was rejected by the eSIM provider.') as Error & { esimErrorCode?: string };
       err.esimErrorCode = esimResult.errorCode;
       throw err;
+    }
+
+    // Step 4: API succeeded — update Order with provider order number and create BalanceTransaction
+    await prisma.order.update({
+      where: { id: pendingOrder.id },
+      data: {
+        esimAccessOrderNo: esimResult.obj.orderNo,
+        status: OrderStatus.PROCESSING,
+      },
     });
 
-    res.json(result);
+    await prisma.balanceTransaction.create({
+      data: {
+        merchantId,
+        orderId: pendingOrder.id,
+        amount: BigInt(-merchantChargeCents),
+        type: BalanceTransactionType.ORDER,
+        description: `Order ${esimResult.obj.orderNo} - ${pendingOrder.packageCount} package(s)`,
+      },
+    });
+
+    console.log(`[Order] Created order ${esimResult.obj.orderNo} for merchant ${merchantId}`);
+
+    res.json({ ...esimResult, orderId: pendingOrder.id });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       res.status(400).json({
@@ -216,22 +326,17 @@ router.post('/orders', async (req, res, next) => {
       console.error('Order creation error:', {
         message: error?.message,
         esimErrorCode: error?.esimErrorCode,
-        responseData: esimData,
+        errorCode: esimData?.errorCode,
+        errorMessage: esimData?.errorMessage,
       });
       const isProviderError = !!(error?.esimErrorCode || esimData?.errorCode);
-      const code = error?.esimErrorCode || esimData?.errorCode;
-      // 000105 = Request parameters (mandatory) are not contained — missing required fields
-      const errorMessage =
-        code === '000105'
-          ? 'Order request is missing required parameters. Please try again or contact support.'
-          : error?.message ||
-            esimData?.errorMessage ||
-            esimData?.message ||
-            'Failed to create order';
+      const rawCode = error?.esimErrorCode || esimData?.errorCode;
+      const rawMessage = error?.message || esimData?.errorMessage || esimData?.message;
+      const mapped = mapProviderError(rawCode, rawMessage);
       res.status(isProviderError ? 400 : 500).json({
         success: false,
-        errorCode: error?.esimErrorCode || esimData?.errorCode || 'ORDER_FAILED',
-        errorMessage,
+        errorCode: mapped.code,
+        errorMessage: mapped.message,
       });
     }
   }
@@ -263,12 +368,42 @@ router.get('/orders/:orderNo', async (req, res, next) => {
 
     // Query profiles from eSIM Access
     const result = await esimAccessService.queryProfiles({ orderNo });
-    res.json(result);
+
+    if (!result.success) {
+      const mapped = mapProviderError(result.errorCode, result.errorMessage);
+      return res.status(400).json({
+        success: false,
+        errorCode: mapped.code,
+        errorMessage: mapped.message,
+      });
+    }
+
+    // Strip eSIM Access identifiers from the response
+    const sanitized = {
+      success: true,
+      obj: result.obj ? {
+        ...result.obj,
+        esimList: result.obj.esimList?.map((esim: any) => {
+          const { orderNo: _orderNo, ...rest } = esim;
+          return {
+            ...rest,
+            // Sanitize any provider-specific references in string fields
+            ...(rest.errorMessage ? { errorMessage: rest.errorMessage.replace(/esim\s*access/gi, 'provider') } : {}),
+          };
+        }),
+      } : undefined,
+    };
+
+    res.json(sanitized);
   } catch (error: any) {
+    const esimData = error?.response?.data;
+    const rawCode = esimData?.errorCode;
+    const rawMessage = error?.message || esimData?.errorMessage;
+    const mapped = mapProviderError(rawCode, rawMessage);
     res.status(500).json({
       success: false,
-      errorCode: 'FETCH_FAILED',
-      errorMessage: error.message || 'Failed to fetch order',
+      errorCode: mapped.code,
+      errorMessage: mapped.message,
     });
   }
 });
@@ -364,7 +499,7 @@ router.get('/profiles', async (req, res, next) => {
       res.status(500).json({
         success: false,
         errorCode: 'FETCH_FAILED',
-        errorMessage: error.message || 'Failed to query profiles',
+        errorMessage: 'Service temporarily unavailable. Please try again.',
       });
     }
   }
@@ -415,7 +550,7 @@ router.post('/profiles/refresh', async (req, res, next) => {
     res.status(500).json({
       success: false,
       errorCode: 'REFRESH_FAILED',
-      errorMessage: error.message || 'Failed to refresh profiles',
+      errorMessage: 'Service temporarily unavailable. Please try again.',
     });
   }
 });
@@ -427,22 +562,44 @@ router.post('/profiles/refresh', async (req, res, next) => {
 router.put('/profiles/:esimTranNo/nickname', async (req, res, next) => {
   try {
     const { esimTranNo } = req.params;
-    const { nickname } = req.body;
+    const nicknameSchema = z.object({
+      nickname: z.string().min(1).max(100).trim(),
+    });
+    const { nickname } = nicknameSchema.parse(req.body);
     const merchantId = req.merchant!.id;
 
-    const profile = await prisma.esimProfile.upsert({
+    // Verify merchant owns this profile
+    const profile = await prisma.esimProfile.findFirst({
+      where: { esimTranNo, merchantId },
+    });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'PROFILE_NOT_FOUND',
+        errorMessage: 'eSIM profile not found or does not belong to your account',
+      });
+    }
+
+    const updated = await prisma.esimProfile.update({
       where: { esimTranNo },
-      create: { merchantId, esimTranNo, nickname: nickname ?? null },
-      update: { nickname: nickname ?? null },
+      data: { nickname: nickname ?? null },
     });
 
-    res.json({ success: true, data: { nickname: profile.nickname } });
+    res.json({ success: true, data: { nickname: updated.nickname } });
   } catch (error: any) {
-    res.status(500).json({
-      success: false,
-      errorCode: 'UPDATE_FAILED',
-      errorMessage: error.message || 'Failed to save nickname',
-    });
+    if (error instanceof z.ZodError) {
+      res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: error.errors[0].message,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        errorCode: 'UPDATE_FAILED',
+        errorMessage: error.message || 'Failed to save nickname',
+      });
+    }
   }
 });
 
@@ -453,6 +610,19 @@ router.put('/profiles/:esimTranNo/nickname', async (req, res, next) => {
 router.post('/profiles/:esimTranNo/cancel', async (req, res, next) => {
   try {
     const { esimTranNo } = req.params;
+
+    // Verify merchant owns this profile
+    const profile = await prisma.esimProfile.findFirst({
+      where: { esimTranNo, merchantId: req.merchant!.id },
+    });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'PROFILE_NOT_FOUND',
+        errorMessage: 'eSIM profile not found or does not belong to your account',
+      });
+    }
+
     const result = await esimAccessService.cancelProfile(esimTranNo);
     res.json(result);
   } catch (error: any) {
@@ -471,6 +641,19 @@ router.post('/profiles/:esimTranNo/cancel', async (req, res, next) => {
 router.post('/profiles/:esimTranNo/suspend', async (req, res, next) => {
   try {
     const { esimTranNo } = req.params;
+
+    // Verify merchant owns this profile
+    const profile = await prisma.esimProfile.findFirst({
+      where: { esimTranNo, merchantId: req.merchant!.id },
+    });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'PROFILE_NOT_FOUND',
+        errorMessage: 'eSIM profile not found or does not belong to your account',
+      });
+    }
+
     const result = await esimAccessService.suspendProfile(esimTranNo);
     res.json(result);
   } catch (error: any) {
@@ -489,6 +672,19 @@ router.post('/profiles/:esimTranNo/suspend', async (req, res, next) => {
 router.post('/profiles/:esimTranNo/unsuspend', async (req, res, next) => {
   try {
     const { esimTranNo } = req.params;
+
+    // Verify merchant owns this profile
+    const profile = await prisma.esimProfile.findFirst({
+      where: { esimTranNo, merchantId: req.merchant!.id },
+    });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'PROFILE_NOT_FOUND',
+        errorMessage: 'eSIM profile not found or does not belong to your account',
+      });
+    }
+
     const result = await esimAccessService.unsuspendProfile(esimTranNo);
     res.json(result);
   } catch (error: any) {
@@ -507,6 +703,19 @@ router.post('/profiles/:esimTranNo/unsuspend', async (req, res, next) => {
 router.post('/profiles/:esimTranNo/revoke', async (req, res, next) => {
   try {
     const { esimTranNo } = req.params;
+
+    // Verify merchant owns this profile
+    const profile = await prisma.esimProfile.findFirst({
+      where: { esimTranNo, merchantId: req.merchant!.id },
+    });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'PROFILE_NOT_FOUND',
+        errorMessage: 'eSIM profile not found or does not belong to your account',
+      });
+    }
+
     const result = await esimAccessService.revokeProfile(esimTranNo);
     res.json(result);
   } catch (error: any) {
@@ -525,6 +734,19 @@ router.post('/profiles/:esimTranNo/revoke', async (req, res, next) => {
 router.post('/profiles/:esimTranNo/topup', async (req, res, next) => {
   try {
     const { esimTranNo } = req.params;
+
+    // Verify merchant owns this profile
+    const profile = await prisma.esimProfile.findFirst({
+      where: { esimTranNo, merchantId: req.merchant!.id },
+    });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'PROFILE_NOT_FOUND',
+        errorMessage: 'eSIM profile not found or does not belong to your account',
+      });
+    }
+
     const data = topUpSchema.parse({ ...req.body, esimTranNo });
     const result = await esimAccessService.topUpProfile(data);
     res.json(result);
@@ -552,6 +774,19 @@ router.post('/profiles/:esimTranNo/topup', async (req, res, next) => {
 router.get('/profiles/:esimTranNo/usage', async (req, res, next) => {
   try {
     const { esimTranNo } = req.params;
+
+    // Verify merchant owns this profile
+    const profile = await prisma.esimProfile.findFirst({
+      where: { esimTranNo, merchantId: req.merchant!.id },
+    });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'PROFILE_NOT_FOUND',
+        errorMessage: 'eSIM profile not found or does not belong to your account',
+      });
+    }
+
     const result = await esimAccessService.checkUsage([esimTranNo]);
     res.json(result);
   } catch (error: any) {
@@ -570,6 +805,23 @@ router.get('/profiles/:esimTranNo/usage', async (req, res, next) => {
 router.post('/profiles/usage', async (req, res, next) => {
   try {
     const data = usageQuerySchema.parse(req.body);
+
+    // Verify ALL profiles belong to the merchant
+    const esimTranNoList = data.esimTranNoList;
+    const ownedCount = await prisma.esimProfile.count({
+      where: {
+        esimTranNo: { in: esimTranNoList },
+        merchantId: req.merchant!.id,
+      },
+    });
+    if (ownedCount !== esimTranNoList.length) {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'UNAUTHORIZED_PROFILES',
+        errorMessage: 'One or more eSIM profiles do not belong to your account',
+      });
+    }
+
     const result = await esimAccessService.checkUsage(data.esimTranNoList);
     res.json(result);
   } catch (error: any) {
@@ -643,6 +895,19 @@ router.get('/regions', async (req, res, next) => {
 router.post('/profiles/:esimTranNo/sms', async (req, res, next) => {
   try {
     const { esimTranNo } = req.params;
+
+    // Verify merchant owns this profile
+    const profile = await prisma.esimProfile.findFirst({
+      where: { esimTranNo, merchantId: req.merchant!.id },
+    });
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'PROFILE_NOT_FOUND',
+        errorMessage: 'eSIM profile not found or does not belong to your account',
+      });
+    }
+
     const data = sendSmsSchema.parse({ ...req.body, esimTranNo });
     const result = await esimAccessService.sendSms(data.esimTranNo, data.message);
     res.json(result);
@@ -778,6 +1043,15 @@ router.post('/webhooks/test', async (req, res, next) => {
       url: z.string().url('Invalid webhook URL'),
       secret: z.string().optional(),
     }).parse(req.body);
+
+    // Validate URL is not internal (SSRF protection)
+    if (await isInternalUrl(url)) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'INVALID_URL',
+        errorMessage: 'Webhook URL must be a public, external URL',
+      });
+    }
 
     // Send a test webhook
     const testPayload = {

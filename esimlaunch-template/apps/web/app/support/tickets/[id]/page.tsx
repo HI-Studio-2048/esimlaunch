@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 
 interface Reply {
   id: string;
@@ -26,6 +26,7 @@ interface TicketDetail {
 export default function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch } = useAuthFetch();
   const [ticket, setTicket] = useState<TicketDetail | null>(null);
   const [replyBody, setReplyBody] = useState('');
   const [loading, setLoading] = useState(true);
@@ -37,22 +38,22 @@ export default function TicketDetailPage() {
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !email || !id) return;
     setLoading(true);
-    apiFetch<TicketDetail>(`/support/tickets/${id}`, { userEmail: email })
+    authFetch<TicketDetail>(`/support/tickets/${id}`)
       .then(setTicket)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [isLoaded, isSignedIn, email, id]);
+  }, [isLoaded, isSignedIn, email, id, authFetch]);
 
   // Poll for new support replies every 15s when ticket is open
   useEffect(() => {
     if (!ticket || ticket.status === 'closed' || ticket.status === 'resolved' || !email || !id) return;
     const interval = setInterval(() => {
-      apiFetch<TicketDetail>(`/support/tickets/${id}`, { userEmail: email })
+      authFetch<TicketDetail>(`/support/tickets/${id}`)
         .then(setTicket)
         .catch(() => {}); // Ignore poll errors
     }, 15_000);
     return () => clearInterval(interval);
-  }, [ticket?.id, ticket?.status, id, email]);
+  }, [ticket?.id, ticket?.status, id, email, authFetch]);
 
   const handleReply = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,10 +61,9 @@ export default function TicketDetailPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const reply = await apiFetch<Reply>(`/support/tickets/${id}/replies`, {
+      const reply = await authFetch<Reply>(`/support/tickets/${id}/replies`, {
         method: 'POST',
         body: JSON.stringify({ body: replyBody.trim() }),
-        userEmail: user.primaryEmailAddress.emailAddress,
       });
       setTicket((prev) => (prev ? { ...prev, replies: [...prev.replies, reply] } : prev));
       setReplyBody('');

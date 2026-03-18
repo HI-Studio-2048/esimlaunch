@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import { CheckoutProgress } from '@/components/checkout/CheckoutProgress';
 import type { Order } from '@/lib/types';
 import { formatDisplayAmount } from '@/lib/types';
@@ -24,6 +25,7 @@ import { formatDisplayAmount } from '@/lib/types';
 export default function CheckoutPage() {
   const { orderId } = useParams<{ orderId: string }>();
   const { user } = useUser();
+  const { authFetch } = useAuthFetch();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,7 +42,10 @@ export default function CheckoutPage() {
   useEffect(() => {
     const userEmail = user?.primaryEmailAddress?.emailAddress ?? '';
     setEmail(userEmail);
-    apiFetch<Order>(`/orders/${orderId}`)
+    // Use authFetch when signed in (attaches Clerk JWT); falls back to bare fetch for guests.
+    // Pending orders are accessible without auth, so both paths work during checkout.
+    const fetchOrder = user ? authFetch<Order>(`/orders/${orderId}`) : apiFetch<Order>(`/orders/${orderId}`);
+    fetchOrder
       .then(setOrder)
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -119,9 +124,8 @@ export default function CheckoutPage() {
     setPaying(true);
     setMessage(null);
     try {
-      await apiFetch(`/orders/${orderId}/pay-vcash`, {
+      await authFetch(`/orders/${orderId}/pay-vcash`, {
         method: 'POST',
-        userEmail: user.primaryEmailAddress.emailAddress,
       });
       window.location.href = `/checkout/success?orderId=${orderId}`;
     } catch (e: any) {

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 
 interface Commission {
   id: string;
@@ -32,19 +32,18 @@ interface AffiliateData {
 
 export default function AffiliateDashboardPage() {
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch } = useAuthFetch();
   const [affiliate, setAffiliate] = useState<AffiliateData | null>(null);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!user?.primaryEmailAddress?.emailAddress) return;
-    apiFetch<AffiliateData>('/affiliate/me', {
-      userEmail: user.primaryEmailAddress.emailAddress,
-    })
+    authFetch<AffiliateData>('/affiliate/me')
       .then(setAffiliate)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [user?.primaryEmailAddress?.emailAddress]);
+  }, [user?.primaryEmailAddress?.emailAddress, authFetch]);
 
   if (!isLoaded) {
     return (

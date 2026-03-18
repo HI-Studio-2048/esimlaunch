@@ -184,6 +184,24 @@ export async function authenticateApiKey(
   }
 }
 
+const SENSITIVE_FIELDS = ['password', 'currentPassword', 'newPassword', 'smtpPass', 'smtpPassword', 'token', 'sessionToken', 'secret', 'apiKey'];
+
+function redactSensitive(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(redactSensitive);
+  const redacted: any = {};
+  for (const key of Object.keys(obj)) {
+    if (SENSITIVE_FIELDS.includes(key)) {
+      redacted[key] = '[REDACTED]';
+    } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+      redacted[key] = redactSensitive(obj[key]);
+    } else {
+      redacted[key] = obj[key];
+    }
+  }
+  return redacted;
+}
+
 /**
  * Request Logging Middleware
  * Logs all API requests for audit trail
@@ -214,7 +232,7 @@ export async function logApiRequest(
             responseTime,
             ipAddress: req.ip || req.socket.remoteAddress || undefined,
             userAgent: req.get('user-agent') || undefined,
-            requestBody: req.body && Object.keys(req.body).length > 0 ? req.body : undefined,
+            requestBody: req.body && Object.keys(req.body).length > 0 ? redactSensitive(req.body) : undefined,
             responseBody: statusCode >= 400 && body ? JSON.parse(body) : undefined,
             errorMessage: statusCode >= 400 ? body : undefined,
           },
@@ -232,37 +250,66 @@ export async function logApiRequest(
 
 /**
  * Rate Limiting Middleware Factory
- * Creates rate limiter based on merchant's API key rate limit
+ * Caches rate limiter instances per API key so counters persist across requests.
  */
+const rateLimiterCache = new Map<string, ReturnType<typeof rateLimit>>();
+const MAX_CACHE_SIZE = 10000;
+
+// Evict oldest entries when cache gets too large
+function evictIfNeeded() {
+  if (rateLimiterCache.size > MAX_CACHE_SIZE) {
+    // Map iterates in insertion order — delete the oldest 20%
+    const deleteCount = Math.floor(MAX_CACHE_SIZE * 0.2);
+    let count = 0;
+    for (const key of rateLimiterCache.keys()) {
+      if (count >= deleteCount) break;
+      rateLimiterCache.delete(key);
+      count++;
+    }
+  }
+}
+
 export function createRateLimiter() {
+  // Global fallback limiter for non-API-key requests (session users)
+  const globalLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 100,
+    message: { success: false, errorCode: 'RATE_LIMIT_EXCEEDED', errorMessage: 'Rate limit exceeded. Maximum 100 requests per minute.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.apiKey) {
-      return next();
+      // Apply global limiter for session-based users too
+      return globalLimiter(req, res, next);
     }
 
-    // Get API key rate limit from database
-    const apiKey = await prisma.apiKey.findUnique({
-      where: { id: req.apiKey.id },
-      select: { rateLimit: true },
-    });
+    const keyId = req.apiKey.id;
+    let limiter = rateLimiterCache.get(keyId);
 
-    const requestsPerMinute = apiKey?.rateLimit || 100;
+    if (!limiter) {
+      const apiKey = await prisma.apiKey.findUnique({
+        where: { id: keyId },
+        select: { rateLimit: true },
+      });
+      const requestsPerMinute = apiKey?.rateLimit || 100;
 
-    // Create rate limiter for this specific request
-    const limiter = rateLimit({
-      windowMs: 60 * 1000, // 1 minute
-      max: requestsPerMinute,
-      message: {
-        success: false,
-        errorCode: 'RATE_LIMIT_EXCEEDED',
-        errorMessage: `Rate limit exceeded. Maximum ${requestsPerMinute} requests per minute.`,
-      },
-      standardHeaders: true,
-      legacyHeaders: false,
-      keyGenerator: (req) => {
-        return req.apiKey?.id ?? req.ip ?? 'unknown';
-      },
-    });
+      limiter = rateLimit({
+        windowMs: 60 * 1000,
+        max: requestsPerMinute,
+        message: {
+          success: false,
+          errorCode: 'RATE_LIMIT_EXCEEDED',
+          errorMessage: `Rate limit exceeded. Maximum ${requestsPerMinute} requests per minute.`,
+        },
+        standardHeaders: true,
+        legacyHeaders: false,
+        keyGenerator: () => keyId,
+      });
+      rateLimiterCache.set(keyId, limiter);
+      evictIfNeeded();
+    }
 
     limiter(req, res, next);
   };
@@ -270,7 +317,9 @@ export function createRateLimiter() {
 
 /**
  * Optional authentication - doesn't fail if no API key provided
- * Useful for public endpoints that can work with or without auth
+ * Useful for public endpoints that can work with or without auth.
+ * Does NOT delegate to authenticateApiKey (which sends 401 responses on failure
+ * and would cause the request to hang instead of falling through).
  */
 export async function optionalAuth(
   req: Request,
@@ -278,19 +327,31 @@ export async function optionalAuth(
   next: NextFunction
 ): Promise<void> {
   const authHeader = req.headers.authorization;
-
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next(); // Continue without authentication
+    return next();
   }
 
-  // Try to authenticate, but don't fail if it doesn't work
+  // Try to authenticate silently — don't fail if it doesn't work
   try {
-    await authenticateApiKey(req, res, () => {
-      next(); // Continue if auth succeeds
-    });
-  } catch (error) {
-    next(); // Continue even if auth fails
+    const token = authHeader.substring(7);
+    const isJWT = token.includes('.') && token.split('.').length === 3;
+
+    if (isJWT) {
+      const { authService } = await import('../services/authService');
+      const decoded = await authService.verifyToken(token);
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: decoded.merchantId },
+        select: { id: true, email: true, serviceType: true, role: true, isActive: true },
+      });
+      if (merchant && merchant.isActive) {
+        req.merchant = { id: merchant.id, email: merchant.email, serviceType: merchant.serviceType, role: merchant.role };
+      }
+    }
+  } catch {
+    // Silently ignore — optional auth
   }
+
+  next();
 }
 
 

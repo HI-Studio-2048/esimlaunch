@@ -5,26 +5,25 @@ import { useUser } from '@clerk/nextjs';
 import { redirect, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { apiFetch, apiFetchBlob } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { Order } from '@/lib/types';
 import { formatDisplayAmount } from '@/lib/types';
 
 export default function AccountOrderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch, authFetchBlob } = useAuthFetch();
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.primaryEmailAddress?.emailAddress || !id) return;
-    apiFetch<Order>(`/orders/${id}`, {
-      userEmail: user.primaryEmailAddress.emailAddress,
-    })
+    authFetch<Order>(`/orders/${id}`)
       .then(setOrder)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [user?.primaryEmailAddress?.emailAddress, id]);
+  }, [user?.primaryEmailAddress?.emailAddress, id, authFetch]);
 
   if (!isLoaded) {
     return (
@@ -57,7 +56,6 @@ export default function AccountOrderDetailPage() {
     );
   }
 
-  const email = user.primaryEmailAddress!.emailAddress;
   const profile = order.esimProfile;
   const displayAmount = formatDisplayAmount(order.displayAmountCents ?? order.amountCents, order.displayCurrency ?? 'USD');
 
@@ -96,8 +94,8 @@ export default function AccountOrderDetailPage() {
 
       {/* Actions */}
       <div className="mt-6 flex flex-wrap gap-3">
-        <ReceiptDownloadButton orderId={order.id} userEmail={email} />
-        <ResendReceiptButton orderId={order.id} userEmail={email} />
+        <ReceiptDownloadButton orderId={order.id} authFetchBlob={authFetchBlob} />
+        <ResendReceiptButton orderId={order.id} authFetch={authFetch} />
         {profile && (
           <Link
             href="/my-esims"
@@ -144,12 +142,12 @@ export default function AccountOrderDetailPage() {
   );
 }
 
-function ReceiptDownloadButton({ orderId, userEmail }: { orderId: string; userEmail: string }) {
+function ReceiptDownloadButton({ orderId, authFetchBlob }: { orderId: string; authFetchBlob: (path: string, options?: RequestInit) => Promise<Blob> }) {
   const [loading, setLoading] = useState(false);
   const handleClick = async () => {
     setLoading(true);
     try {
-      const blob = await apiFetchBlob(`/orders/${orderId}/receipt`, { userEmail });
+      const blob = await authFetchBlob(`/orders/${orderId}/receipt`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -173,16 +171,15 @@ function ReceiptDownloadButton({ orderId, userEmail }: { orderId: string; userEm
   );
 }
 
-function ResendReceiptButton({ orderId, userEmail }: { orderId: string; userEmail: string }) {
+function ResendReceiptButton({ orderId, authFetch }: { orderId: string; authFetch: <T = unknown>(path: string, options?: RequestInit) => Promise<T> }) {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const handleClick = async () => {
     setLoading(true);
     setSent(false);
     try {
-      await apiFetch(`/orders/${orderId}/resend-receipt`, {
+      await authFetch(`/orders/${orderId}/resend-receipt`, {
         method: 'POST',
-        userEmail,
       });
       setSent(true);
     } catch (e) {

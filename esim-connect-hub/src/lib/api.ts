@@ -202,11 +202,14 @@ class ApiClient {
   }
 
   async login(email: string, password: string) {
-    const result = await this.request<{ merchant: any; token: string }>('/api/auth/login', {
+    const result = await this.request<{ merchant: any; token: string; requires2FA?: boolean }>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    this.setJwtToken(result.token);
+    // Don't set JWT if 2FA is required — token is limited-scope pre-2FA token
+    if (!result.requires2FA) {
+      this.setJwtToken(result.token);
+    }
     return result;
   }
 
@@ -293,11 +296,11 @@ class ApiClient {
     });
   }
 
-  async clerkSync(clerkUserId: string) {
+  async clerkSync(sessionToken: string) {
     try {
       const result = await this.request<{ merchant: any; token: string }>('/api/auth/clerk-sync', {
         method: 'POST',
-        body: JSON.stringify({ clerkUserId }),
+        body: JSON.stringify({ sessionToken }),
       });
       // Store token immediately after sync
       if (result.token) {
@@ -310,7 +313,7 @@ class ApiClient {
         message: error?.message,
         errorCode: error?.errorCode,
         status: error?.status,
-        clerkUserId
+        sessionToken: sessionToken.substring(0, 20) + '...',
       });
       throw error;
     }
@@ -351,11 +354,27 @@ class ApiClient {
     return this.request<{ enabled: boolean }>('/api/auth/2fa/status');
   }
 
-  async verify2FALogin(token: string) {
-    return this.request<{ message: string }>('/api/auth/2fa/login', {
-      method: 'POST',
-      body: JSON.stringify({ token }),
-    });
+  async verify2FALogin(code: string, preAuthToken?: string) {
+    // Temporarily set the pre-2FA token so the request is authenticated
+    const previousToken = this.jwtToken;
+    if (preAuthToken) {
+      this.setJwtToken(preAuthToken);
+    }
+    try {
+      const result = await this.request<{ message: string; merchant?: any; token?: string }>('/api/auth/2fa/login', {
+        method: 'POST',
+        body: JSON.stringify({ token: code }),
+      });
+      // Set the full token returned after successful 2FA verification
+      if (result.token) {
+        this.setJwtToken(result.token);
+      }
+      return result;
+    } catch (err) {
+      // Restore previous token state on failure
+      this.setJwtToken(previousToken);
+      throw err;
+    }
   }
 
   async getSessions() {
@@ -938,22 +957,20 @@ class ApiClient {
   }
 
   // Customer order endpoints
-  async getCustomerOrder(orderId: string) {
-    return this.request<any>(`/api/customer-orders/${orderId}`);
-  }
-
-  async getCustomerOrdersByEmail(email: string) {
-    return this.request<any[]>(`/api/customer-orders?email=${encodeURIComponent(email)}`);
+  async getCustomerOrder(orderId: string, token?: string, customerJwt?: string) {
+    const url = token
+      ? `/api/customer-orders/${orderId}?token=${encodeURIComponent(token)}`
+      : `/api/customer-orders/${orderId}`;
+    const headers: Record<string, string> = {};
+    // When a customer JWT is provided (from logged-in dashboard), send it as Bearer auth
+    if (customerJwt && !token) {
+      headers['Authorization'] = `Bearer ${customerJwt}`;
+    }
+    return this.request<any>(url, { headers });
   }
 
   async getCustomerOrderByPaymentIntent(paymentIntentId: string) {
     return this.request<any>(`/api/customer-orders/payment-intent/${paymentIntentId}`);
-  }
-
-  async resendESIMEmail(orderId: string) {
-    return this.request<{ message: string }>(`/api/customer-orders/${orderId}/resend-email`, {
-      method: 'POST',
-    });
   }
 
   // Currency endpoints

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useUser } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
-import { apiFetch, apiFetchBlob } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { EsimProfile } from '@/lib/types';
 import { formatVolume } from '@/lib/types';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -15,11 +15,12 @@ import { Wifi } from 'lucide-react';
 /**
  * My eSIMs — authenticated users only.
  *
- * Calls GET /api/user/esims with x-user-email header.
+ * Calls GET /api/user/esims with Authorization Bearer token.
  * Shows each eSIM profile with QR, ICCID, status, usage, and top-up link.
  */
 export default function MyEsimsPage() {
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch, authFetchBlob, getToken } = useAuthFetch();
   const [profiles, setProfiles] = useState<EsimProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -35,11 +36,11 @@ export default function MyEsimsPage() {
     const email = user?.primaryEmailAddress?.emailAddress;
     if (!email) return;
 
-    apiFetch<EsimProfile[]>('/user/esims', { userEmail: email })
+    authFetch<EsimProfile[]>('/user/esims')
       .then(setProfiles)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [isLoaded, isSignedIn, user]);
+  }, [isLoaded, isSignedIn, user, authFetch]);
 
   const filteredProfiles = useMemo(() => {
     let list = profiles;
@@ -156,7 +157,9 @@ export default function MyEsimsPage() {
               <EsimCard
                 key={profile.id}
                 profile={profile}
-                userEmail={user!.primaryEmailAddress!.emailAddress}
+                getToken={getToken}
+                authFetch={authFetch}
+                authFetchBlob={authFetchBlob}
                 selected={selectedIds.has(profile.id)}
                 onToggleSelect={() => toggleSelect(profile.id)}
               />
@@ -170,12 +173,16 @@ export default function MyEsimsPage() {
 
 function EsimCard({
   profile,
-  userEmail,
+  getToken,
+  authFetch,
+  authFetchBlob,
   selected,
   onToggleSelect,
 }: {
   profile: EsimProfile;
-  userEmail: string;
+  getToken: () => Promise<string | null>;
+  authFetch: <T = unknown>(path: string, options?: RequestInit) => Promise<T>;
+  authFetchBlob: (path: string, options?: RequestInit) => Promise<Blob>;
   selected?: boolean;
   onToggleSelect?: () => void;
 }) {
@@ -262,7 +269,7 @@ function EsimCard({
           <ExpiryCountdown
             expiry={profile.expiredTime}
             iccid={profile.iccid}
-            userEmail={userEmail}
+            getToken={getToken}
             className="font-medium"
           />
         </div>
@@ -286,8 +293,8 @@ function EsimCard({
         )}
         {profile.orderId && (
           <>
-            <ReceiptDownloadButton orderId={profile.orderId} userEmail={userEmail} />
-            <ResendReceiptButton orderId={profile.orderId} userEmail={userEmail} />
+            <ReceiptDownloadButton orderId={profile.orderId} authFetchBlob={authFetchBlob} />
+            <ResendReceiptButton orderId={profile.orderId} authFetch={authFetch} />
           </>
         )}
       </div>
@@ -307,12 +314,12 @@ function EsimCard({
   );
 }
 
-function ReceiptDownloadButton({ orderId, userEmail }: { orderId: string; userEmail: string }) {
+function ReceiptDownloadButton({ orderId, authFetchBlob }: { orderId: string; authFetchBlob: (path: string, options?: RequestInit) => Promise<Blob> }) {
   const [loading, setLoading] = useState(false);
   const handleClick = async () => {
     setLoading(true);
     try {
-      const blob = await apiFetchBlob(`/orders/${orderId}/receipt`, { userEmail });
+      const blob = await authFetchBlob(`/orders/${orderId}/receipt`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -451,14 +458,14 @@ function BulkShare({ profiles }: { profiles: EsimProfile[] }) {
   );
 }
 
-function ResendReceiptButton({ orderId, userEmail }: { orderId: string; userEmail: string }) {
+function ResendReceiptButton({ orderId, authFetch }: { orderId: string; authFetch: <T = unknown>(path: string, options?: RequestInit) => Promise<T> }) {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const handleClick = async () => {
     setLoading(true);
     setSent(false);
     try {
-      await apiFetch(`/orders/${orderId}/resend-receipt`, { method: 'POST', userEmail });
+      await authFetch(`/orders/${orderId}/resend-receipt`, { method: 'POST' });
       setSent(true);
     } catch (e) {
       console.error(e);

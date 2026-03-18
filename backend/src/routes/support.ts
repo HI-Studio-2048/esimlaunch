@@ -1,5 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { authenticateCustomer } from '../middleware/customerAuth';
 import { optionalSupportAuth } from '../middleware/optionalSupportAuth';
@@ -7,6 +8,14 @@ import { supportService } from '../services/supportService';
 import { prisma } from '../lib/prisma';
 
 const router = express.Router();
+
+const supportLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { success: false, errorCode: 'RATE_LIMIT', errorMessage: 'Too many requests. Please wait.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Validation schemas
 const createTicketSchema = z.object({
@@ -40,7 +49,7 @@ const updatePrioritySchema = z.object({
  * POST /api/support/tickets
  * Create a new support ticket (public endpoint)
  */
-router.post('/tickets', async (req, res, next) => {
+router.post('/tickets', supportLimiter, async (req, res, next) => {
   try {
     const data = createTicketSchema.parse(req.body);
     
@@ -127,8 +136,20 @@ router.get('/tickets', authenticateSessionOrJWT, async (req, res, next) => {
  * Get ticket by ticket number (public, for email links)
  * MUST be defined before /tickets/:ticketId to avoid route shadowing
  */
-router.get('/tickets/number/:ticketNumber', async (req, res, next) => {
+router.get('/tickets/number/:ticketNumber', optionalSupportAuth, async (req, res, next) => {
   try {
+    const customer = (req as any).customer;
+    const merchant = (req as any).merchant;
+
+    // Require authentication — either merchant or customer
+    if (!customer && !merchant) {
+      return res.status(401).json({
+        success: false,
+        errorCode: 'UNAUTHORIZED',
+        errorMessage: 'Authentication required to view ticket details',
+      });
+    }
+
     const ticketNumber = req.params.ticketNumber;
     const ticket = await supportService.getTicketByNumber(ticketNumber);
 
@@ -137,6 +158,23 @@ router.get('/tickets/number/:ticketNumber', async (req, res, next) => {
         success: false,
         errorCode: 'TICKET_NOT_FOUND',
         errorMessage: 'Ticket not found',
+      });
+    }
+
+    // Verify the authenticated user has access to this ticket
+    if (customer && ticket.customerEmail !== customer.email) {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'FORBIDDEN',
+        errorMessage: 'You do not have access to this ticket',
+      });
+    }
+
+    if (merchant && ticket.merchantId !== merchant.id) {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'FORBIDDEN',
+        errorMessage: 'You do not have access to this ticket',
       });
     }
 
@@ -247,9 +285,12 @@ router.post('/tickets/:ticketId/messages', optionalSupportAuth, async (req, res,
       senderEmail = merchant.email;
       senderName = merchant.name || undefined;
     } else {
-      // Public reply (must match ticket email)
-      senderType = 'customer';
-      senderEmail = ticket.customerEmail;
+      // No authentication — reject
+      return res.status(401).json({
+        success: false,
+        errorCode: 'UNAUTHORIZED',
+        errorMessage: 'Authentication required to post messages',
+      });
     }
 
     // Check authorization

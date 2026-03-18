@@ -1,38 +1,23 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma.service';
+import { verifyClerkToken } from './clerk-verify';
 
-/**
- * Requires the x-user-email header. Looks up (or creates) the User in DB.
- * Attaches req.userId and req.userEmail.
- *
- * This follows the Voyage auth pattern: the backend does NOT validate Clerk
- * JWTs. It trusts the email passed from the authenticated frontend.
- */
 @Injectable()
 export class ClerkEmailGuard implements CanActivate {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private config: ConfigService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest();
-    const rawEmail: string | undefined = req.headers['x-user-email'];
-    if (!rawEmail) {
-      throw new UnauthorizedException('x-user-email header is required');
+    try {
+      const result = await verifyClerkToken(req.headers['authorization'], this.config, this.prisma);
+      if (!result) throw new UnauthorizedException('Valid Authorization header required');
+      req.userId = result.userId;
+      req.userEmail = result.userEmail;
+      return true;
+    } catch (error: any) {
+      if (error instanceof UnauthorizedException) throw error;
+      throw new UnauthorizedException('Authentication failed: ' + (error.message || 'Invalid token'));
     }
-
-    const email = rawEmail.trim().toLowerCase();
-
-    let user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      user = await this.prisma.user.create({ data: { email } });
-    }
-
-    req.userId = user.id;
-    req.userEmail = email;
-    return true;
   }
 }

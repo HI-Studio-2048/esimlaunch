@@ -30,6 +30,12 @@ export function CustomerAuthProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  // SECURITY NOTE: Customer JWT in localStorage is an XSS risk.
+  // TODO: Migrate to httpOnly session cookies (same pattern as merchant auth).
+
+  // TODO: Add 401 response handling to automatically clear customer state
+  // and redirect to customer login when the token expires.
+
   // Load customer from localStorage on mount
   useEffect(() => {
     const loadCustomer = async () => {

@@ -28,7 +28,20 @@ class SessionService {
   async getSession(token: string) {
     const session = await prisma.session.findUnique({
       where: { token },
-      include: { merchant: true },
+      include: {
+        merchant: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            serviceType: true,
+            isActive: true,
+            twoFactorEnabled: true,
+            createdAt: true,
+          },
+        },
+      },
     });
 
     if (!session) {
@@ -68,6 +81,14 @@ class SessionService {
       where: {
         merchantId,
         expiresAt: { gte: now },
+      },
+      select: {
+        id: true,
+        ipAddress: true,
+        userAgent: true,
+        createdAt: true,
+        lastUsedAt: true,
+        expiresAt: true,
       },
       orderBy: { lastUsedAt: 'desc' },
     });
@@ -121,6 +142,44 @@ class SessionService {
       where: { id: session.id },
       data: { expiresAt: newExpiresAt },
     });
+  }
+
+  /**
+   * Clean up expired sessions, used password reset tokens, and expired API keys.
+   * Call this periodically (e.g., daily cron or on server start).
+   */
+  async cleanupExpired() {
+    const now = new Date();
+
+    // Delete expired sessions
+    const deletedSessions = await prisma.session.deleteMany({
+      where: { expiresAt: { lt: now } },
+    });
+
+    // Clear used/expired email verification tokens
+    const clearedVerifications = await prisma.merchant.updateMany({
+      where: {
+        emailVerificationExpires: { lt: now },
+        emailVerificationToken: { not: null },
+      },
+      data: {
+        emailVerificationToken: null,
+        emailVerificationExpires: null,
+      },
+    });
+
+    // Delete used or expired password reset tokens
+    const clearedResets = await prisma.passwordResetToken.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: now } },
+          { used: true },
+        ],
+      },
+    });
+
+    console.log(`[Cleanup] Deleted ${deletedSessions.count} expired sessions, cleared ${clearedVerifications.count} verification tokens, ${clearedResets.count} reset tokens`);
+    return { deletedSessions: deletedSessions.count, clearedVerifications: clearedVerifications.count, clearedResets: clearedResets.count };
   }
 }
 

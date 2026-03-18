@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useUser, useClerk } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
-import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 
 /**
  * Account settings.
@@ -14,6 +14,7 @@ import { apiFetch } from '@/lib/apiClient';
 export default function AccountSettingsPage() {
   const { user, isLoaded, isSignedIn } = useUser();
   const { signOut } = useClerk();
+  const { authFetch } = useAuthFetch();
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,9 +36,8 @@ export default function AccountSettingsPage() {
     setDeleting(true);
     setError(null);
     try {
-      await apiFetch('/user/delete-account', {
+      await authFetch('/user/delete-account', {
         method: 'POST',
-        userEmail: user.primaryEmailAddress?.emailAddress,
         body: JSON.stringify({ clerkUserId: user.id }),
       });
       await signOut();

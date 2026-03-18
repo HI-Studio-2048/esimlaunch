@@ -1,8 +1,29 @@
 import { prisma } from '../lib/prisma';
 import { BalanceTransactionType, OrderStatus } from '@prisma/client';
-import { esimAccessService } from './esimAccessService';
+import { esimAccessService, PLATFORM_PRICE_MARKUP } from './esimAccessService';
 import { emailService } from './emailService';
 import { qrCodeService } from './qrCodeService';
+import jwt from 'jsonwebtoken';
+import { env } from '../config/env';
+
+const ORDER_TOKEN_SECRET = env.jwtSecret;
+const ORDER_TOKEN_EXPIRY = '7d';
+
+export function generateOrderToken(orderId: string, email: string): string {
+  return jwt.sign({ orderId, email, type: 'order_access' }, ORDER_TOKEN_SECRET, {
+    expiresIn: ORDER_TOKEN_EXPIRY,
+  });
+}
+
+export function verifyOrderToken(token: string): { orderId: string; email: string } | null {
+  try {
+    const decoded = jwt.verify(token, ORDER_TOKEN_SECRET) as any;
+    if (decoded.type !== 'order_access') return null;
+    return { orderId: decoded.orderId, email: decoded.email };
+  } catch {
+    return null;
+  }
+}
 
 export interface CreateCustomerOrderParams {
   customerEmail: string;
@@ -70,49 +91,114 @@ export const customerOrderService = {
     try {
       const transactionId = `customer_${customerOrder.id}_${Date.now()}`;
 
-      const result = await prisma.$transaction(async (tx) => {
-        // Check merchant balance (stored in cents)
-        const merchant = await tx.merchant.findUnique({
-          where: { id: merchantId },
-          select: { balance: true },
+      // Resolve wholesale amount (1/10000 USD) and enrich packageInfoList from eSIM Access catalog.
+      // totalAmount is the customer-facing price in cents; eSIM Access expects the wholesale price.
+      const resolved = await esimAccessService.resolveOrderFromPackages(packageInfoList);
+      const wholesaleAmount = resolved.amount; // 1/10000 USD
+      const enrichedPackageInfoList = resolved.enrichedPackageInfoList;
+
+      // Merchant is charged the marked-up wholesale price (same formula as Advanced Way in api.ts)
+      const merchantChargeCents = Math.round((Number(wholesaleAmount) * PLATFORM_PRICE_MARKUP) / 100);
+
+      // Step 1: Atomic balance deduction (same pattern as Advanced Way in api.ts)
+      // The WHERE clause ensures deduction only happens if merchant has sufficient balance.
+      let deducted = false;
+      try {
+        const result = await prisma.$executeRaw`
+          UPDATE "Merchant"
+          SET balance = balance - ${BigInt(merchantChargeCents)}
+          WHERE id = ${merchantId}
+            AND balance >= ${BigInt(merchantChargeCents)}
+        `;
+        deducted = result > 0;
+      } catch (err) {
+        console.error('[CustomerOrder] Balance deduction failed:', err);
+      }
+
+      if (!deducted) {
+        await prisma.customerOrder.update({
+          where: { id: customerOrder.id },
+          data: { status: OrderStatus.FAILED },
         });
+        const err: any = new Error('Insufficient balance');
+        err.code = 'INSUFFICIENT_BALANCE';
+        throw err;
+      }
 
-        if (!merchant) {
-          throw new Error('MERCHANT_NOT_FOUND');
-        }
-
-        const currentBalance = Number(merchant.balance || 0n);
-        if (currentBalance < totalAmount) {
-          const err: any = new Error('Insufficient balance');
-          err.code = 'INSUFFICIENT_BALANCE';
-          throw err;
-        }
-
-        // Call eSIM Access API (method is orderProfiles, not createOrder)
-        const orderResult = await esimAccessService.orderProfiles({
+      // Step 2: Call eSIM Access API with wholesale amount (1/10000 USD)
+      let orderResult: any;
+      try {
+        orderResult = await esimAccessService.orderProfiles({
           transactionId,
-          amount: totalAmount,
-          packageInfoList: packageInfoList.map((pkg) => ({
+          amount: wholesaleAmount,
+          packageInfoList: enrichedPackageInfoList.map((pkg) => ({
             packageCode: pkg.packageCode,
             slug: pkg.slug,
             count: pkg.count,
             price: pkg.price,
           })),
         });
+      } catch (apiError: any) {
+        // API call threw — refund merchant balance with audit trail
+        console.error('[CustomerOrder] eSIM Access API call failed, refunding merchant:', {
+          merchantId,
+          merchantChargeCents,
+          error: apiError?.message,
+        });
+        await prisma.$transaction([
+          prisma.merchant.update({
+            where: { id: merchantId },
+            data: { balance: { increment: BigInt(merchantChargeCents) } },
+          }),
+          prisma.balanceTransaction.create({
+            data: {
+              merchantId,
+              amount: BigInt(merchantChargeCents),
+              type: BalanceTransactionType.REFUND,
+              description: `Refund: eSIM provider API error — ${apiError?.message || 'unknown error'}`,
+            },
+          }),
+        ]);
+        throw apiError;
+      }
 
-        if (!orderResult.success || !orderResult.obj?.orderNo) {
-          const errMessage = orderResult.errorMessage || 'Failed to create eSIM order';
-          throw new Error(errMessage);
-        }
+      if (!orderResult.success || !orderResult.obj?.orderNo) {
+        // API returned failure — refund merchant balance with audit trail
+        const errMessage = orderResult.errorMessage || 'Failed to create eSIM order';
+        console.error('[CustomerOrder] eSIM Access rejected order, refunding merchant:', {
+          merchantId,
+          merchantChargeCents,
+          errorCode: orderResult.errorCode,
+          errorMessage: errMessage,
+        });
+        await prisma.$transaction([
+          prisma.merchant.update({
+            where: { id: merchantId },
+            data: { balance: { increment: BigInt(merchantChargeCents) } },
+          }),
+          prisma.balanceTransaction.create({
+            data: {
+              merchantId,
+              amount: BigInt(merchantChargeCents),
+              type: BalanceTransactionType.REFUND,
+              description: `Refund: eSIM provider rejected order — ${orderResult.errorCode || 'unknown'}: ${errMessage}`,
+            },
+          }),
+        ]);
+        throw new Error(errMessage);
+      }
 
+      // Step 3: Create records in a transaction (balance already deducted)
+      const { merchantOrder } = await prisma.$transaction(async (tx) => {
         // Create merchant order record
+        // Store totalAmount in 1/10000 USD (wholesale) for consistency with Advanced Way orders
         const merchantOrder = await tx.order.create({
           data: {
             merchantId,
             transactionId,
             esimAccessOrderNo: orderResult.obj.orderNo,
             status: OrderStatus.PROCESSING,
-            totalAmount: BigInt(totalAmount), // cents
+            totalAmount: BigInt(wholesaleAmount), // 1/10000 USD (wholesale), consistent with Advanced Way
             packageCount,
             customerOrderId: customerOrder.id,
           },
@@ -128,30 +214,19 @@ export const customerOrderService = {
           },
         });
 
-        // Deduct balance and record transaction
-        await tx.merchant.update({
-          where: { id: merchantId },
-          data: {
-            balance: {
-              decrement: BigInt(totalAmount),
-            },
-          },
-        });
-
+        // Record balance transaction (balance already deducted atomically above)
         await tx.balanceTransaction.create({
           data: {
             merchantId,
             orderId: merchantOrder.id,
-            amount: BigInt(-totalAmount),
+            amount: BigInt(-merchantChargeCents),
             type: BalanceTransactionType.ORDER,
             description: `Customer store order ${orderResult.obj.orderNo} - ${packageCount} package(s)`,
           },
         });
 
-        return { orderResult, merchantOrder };
+        return { merchantOrder };
       });
-
-      const { orderResult, merchantOrder } = result;
 
         // Send order confirmation email
         try {

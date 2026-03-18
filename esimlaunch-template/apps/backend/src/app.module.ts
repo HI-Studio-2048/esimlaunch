@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma.module';
@@ -15,6 +16,7 @@ import { EmailModule } from './modules/email/email.module';
 import { CronModule } from './modules/cron/cron.module';
 import { SupportModule } from './modules/support/support.module';
 import { DeviceModule } from './modules/device/device.module';
+import { RateLimitGuard } from './common/guards/rate-limit.guard';
 
 @Module({
   imports: [
@@ -34,6 +36,9 @@ import { DeviceModule } from './modules/device/device.module';
     CronModule,
     SupportModule,
     DeviceModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: RateLimitGuard },
   ],
 })
 export class AppModule {}

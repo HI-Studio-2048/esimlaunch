@@ -1,5 +1,6 @@
 import express from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { prisma } from '../lib/prisma';
 import { ServiceType } from '@prisma/client';
@@ -9,6 +10,14 @@ import { emailService } from '../services/emailService';
 import { env } from '../config/env';
 
 const router = express.Router();
+
+const publicApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30, // 30 requests per minute per IP
+  message: { success: false, errorCode: 'RATE_LIMIT', errorMessage: 'Too many requests. Please wait.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Helper: extract numeric value from dashboard markup entry (supports { type, value } or plain number)
 function getMarkupValue(entry: any): { type: 'percentage' | 'fixed'; value: number } {
@@ -212,7 +221,7 @@ async function buildStorePublicResponse(store: any) {
  * Public endpoint — no authentication required.
  * Returns store branding and packages with markup applied.
  */
-router.get('/:storeId/public', async (req, res) => {
+router.get('/:storeId/public', publicApiLimiter, async (req, res) => {
   try {
     const { storeId } = req.params;
 
@@ -261,7 +270,7 @@ router.get('/:storeId/public', async (req, res) => {
  * Public endpoint — no authentication required.
  * Looks up a store by its subdomain and returns the same shape as /:storeId/public.
  */
-router.get('/by-subdomain/:subdomain', async (req, res) => {
+router.get('/by-subdomain/:subdomain', publicApiLimiter, async (req, res) => {
   try {
     const { subdomain } = req.params;
 
@@ -518,6 +527,15 @@ router.get('/:storeId', async (req, res, next) => {
  */
 router.put('/:storeId', async (req, res, next) => {
   try {
+    // Only Easy Way merchants can manage stores
+    if (req.merchant?.serviceType !== ServiceType.EASY) {
+      return res.status(403).json({
+        success: false,
+        errorCode: 'EASY_WAY_ONLY',
+        errorMessage: 'Store management is only available for Easy Way merchants',
+      });
+    }
+
     // Verify store belongs to merchant
     const existingStore = await prisma.store.findFirst({
       where: {
@@ -615,13 +633,31 @@ router.delete('/:storeId', async (req, res, next) => {
       });
     }
 
-    await prisma.store.delete({
+    // Check for pending/processing orders before deletion
+    const activeOrders = await prisma.customerOrder.count({
+      where: {
+        storeId: req.params.storeId,
+        status: { in: ['PENDING', 'PROCESSING'] },
+      },
+    });
+
+    if (activeOrders > 0) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'STORE_HAS_ACTIVE_ORDERS',
+        errorMessage: `Store has ${activeOrders} pending or processing order(s). Please resolve them before deleting.`,
+      });
+    }
+
+    // Soft delete: deactivate instead of hard delete to preserve order history
+    await prisma.store.update({
       where: { id: req.params.storeId },
+      data: { isActive: false, adminStatus: 'rejected' },
     });
 
     res.json({
       success: true,
-      message: 'Store deleted successfully',
+      message: 'Store deactivated successfully',
     });
   } catch (error: any) {
     res.status(500).json({

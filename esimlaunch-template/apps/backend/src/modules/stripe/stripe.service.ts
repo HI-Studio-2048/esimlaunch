@@ -8,7 +8,7 @@ export class StripeService {
 
   constructor(private config: ConfigService) {
     this.client = new Stripe(this.config.getOrThrow<string>('STRIPE_SECRET_KEY'), {
-      apiVersion: '2024-06-20',
+      apiVersion: '2024-12-18.acacia' as any,
     });
   }
 

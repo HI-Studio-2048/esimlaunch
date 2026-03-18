@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma.service';
 import { EsimService } from '../esim/esim.service';
@@ -39,7 +39,24 @@ export class TopUpService {
     });
     if (!profile) throw new NotFoundException('eSIM profile not found');
 
-    const amountCents = Math.round(input.amountUsd * 100);
+    // Ownership check: profile must belong to the requesting user
+    const profileOwnerId = profile.userId ?? profile.order?.userId;
+    if (!profileOwnerId || profileOwnerId !== input.userId) {
+      throw new ForbiddenException('This eSIM profile does not belong to your account');
+    }
+
+    // Server-side price verification: look up actual plan price instead of trusting client
+    let amountCents = Math.round(input.amountUsd * 100);
+    const topupPlan = await this.esimService.getPlanByCode(input.planCode);
+    if (topupPlan?.price != null) {
+      const serverAmountCents = Math.round(topupPlan.price);
+      if (serverAmountCents !== amountCents) {
+        this.logger.warn(
+          `Top-up price mismatch for ${input.planCode}: client=${amountCents}, server=${serverAmountCents}. Using server price.`,
+        );
+        amountCents = serverAmountCents;
+      }
+    }
     const currency = input.displayCurrency ?? 'USD';
     const displayAmountCents = await this.currencyService.convertUsdCents(amountCents, currency);
     const webUrl = this.config.get<string>('WEB_APP_URL', 'http://localhost:3000');
@@ -50,6 +67,8 @@ export class TopUpService {
         profileId: input.profileId,
         planCode: input.planCode,
         amountCents,
+        displayCurrency: currency !== 'USD' ? currency : null,
+        displayAmountCents: currency !== 'USD' ? displayAmountCents : null,
         status: 'pending',
       },
     });
@@ -113,8 +132,37 @@ export class TopUpService {
       if (res.success && res.obj?.orderNo) {
         await this.prisma.topUp.update({
           where: { id: topUp.id },
-          data: { status: 'completed', rechargeOrderNo: res.obj.orderNo },
+          data: { status: 'paid', rechargeOrderNo: res.obj.orderNo },
         });
+
+        // Verify the top-up was applied by polling for volume increase
+        const verified = await this.verifyTopUp(profile.esimTranNo, profile.totalVolume);
+        if (verified) {
+          await this.prisma.topUp.update({
+            where: { id: topUp.id },
+            data: { status: 'completed' },
+          });
+
+          // Add affiliate commission for referred users
+          this.addTopUpCommission(topUp).catch((err) =>
+            this.logger.warn('Failed to add topup commission', err),
+          );
+
+          // Send confirmation email
+          const user = profile.user ?? profile.order?.user;
+          if (user?.email && !user.email.startsWith('guest-')) {
+            const webUrl = this.config.get<string>('WEB_APP_URL', 'http://localhost:3000');
+            this.emailService.sendTopupConfirmation({
+              to: user.email,
+              planCode: topUp.planCode,
+              iccid: profile.iccid ?? '',
+              amount: `$${(topUp.amountCents / 100).toFixed(2)}`,
+              myEsimsUrl: `${webUrl}/my-esims`,
+            }).catch((err) => this.logger.warn('Failed to send topup confirmation email', err));
+          }
+        } else {
+          this.logger.warn(`Top-up ${topUp.id}: provider accepted but volume not yet increased — cron will retry verification`);
+        }
 
         // Sync to main backend when linked so top-up appears in merchant dashboard
         this.syncTopUpToHub({ topUp, profile, session }).catch((err) =>
@@ -127,6 +175,68 @@ export class TopUpService {
       this.logger.error(`Top-up failed for ${topUpId}`, err);
       await this.prisma.topUp.update({ where: { id: topUp.id }, data: { status: 'failed' } });
     }
+  }
+
+  /**
+   * Add 10% affiliate commission when a referred user completes a top-up.
+   */
+  private async addTopUpCommission(topUp: { id: string; userId: string; amountCents: number }) {
+    const referral = await this.prisma.referral.findFirst({
+      where: { referredUserId: topUp.userId },
+    });
+    if (!referral) return;
+
+    const commissionCents = Math.round(topUp.amountCents * 0.1);
+    if (commissionCents <= 0) return;
+
+    await this.prisma.commission.create({
+      data: {
+        affiliateId: referral.affiliateId,
+        // orderId left null — this is a top-up commission, not an order commission
+        orderType: 'stripe',
+        amountCents: commissionCents,
+        status: 'pending',
+        availableAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14-day hold
+      },
+    });
+    this.logger.log(`Topup commission created: ${commissionCents} cents for affiliate ${referral.affiliateId}`);
+  }
+
+  /**
+   * Poll provider to verify the top-up was applied (volume increased).
+   * Returns true if volume increased, false if still pending after retries.
+   */
+  private async verifyTopUp(
+    esimTranNo: string,
+    previousVolume: bigint | null,
+  ): Promise<boolean> {
+    const maxAttempts = 5;
+    const delayMs = 3000;
+
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, delayMs));
+      try {
+        const usage = await this.esimService.getClient().queryUsage([esimTranNo]);
+        const usageItem = usage?.obj?.usageList?.find((u) => u.esimTranNo === esimTranNo);
+        if (usageItem?.totalVolume != null) {
+          const newVolume = BigInt(usageItem.totalVolume);
+          if (!previousVolume || newVolume > previousVolume) {
+            // Volume increased — update the local profile
+            await this.prisma.esimProfile.updateMany({
+              where: { esimTranNo },
+              data: {
+                totalVolume: newVolume,
+                orderUsage: usageItem.orderUsage != null ? BigInt(usageItem.orderUsage) : undefined,
+              },
+            });
+            return true;
+          }
+        }
+      } catch (err) {
+        this.logger.debug(`Top-up verify attempt ${i + 1}/${maxAttempts} failed: ${err}`);
+      }
+    }
+    return false;
   }
 
   /**

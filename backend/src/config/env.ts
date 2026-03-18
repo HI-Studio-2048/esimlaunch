@@ -18,6 +18,7 @@ interface EnvConfig {
   resendFromEmail: string;
   frontendUrl: string;
   clerkSecretKey: string;
+  clerkWebhookSecret: string;
   stripeSecretKey: string;
   stripePublishableKey: string;
   stripeWebhookSecret: string;
@@ -53,11 +54,12 @@ export const env: EnvConfig = {
   esimAccessAccessCode: getEnvVar('ESIM_ACCESS_ACCESS_CODE'),
   esimAccessSecretKey: getEnvVar('ESIM_ACCESS_SECRET_KEY'),
   redisUrl: getEnvVar('REDIS_URL', 'redis://localhost:6379'),
-  corsOrigin: getEnvVar('CORS_ORIGIN', 'http://localhost:8080,http://localhost:5173,http://localhost:3001,http://localhost:3002,https://unsynchronous-theresia-indefinite.ngrok-free.dev'),
+  corsOrigin: getEnvVar('CORS_ORIGIN', 'http://localhost:8080,http://localhost:5173,http://localhost:3001,http://localhost:3002'),
   resendApiKey: getEnvVar('RESEND_API_KEY', ''),
   resendFromEmail: getEnvVar('RESEND_FROM_EMAIL', 'noreply@esimlaunch.com'),
   frontendUrl: getEnvVar('FRONTEND_URL', 'http://localhost:5173'),
   clerkSecretKey: getEnvVar('CLERK_SECRET_KEY', ''),
+  clerkWebhookSecret: process.env.CLERK_WEBHOOK_SECRET || '',
   stripeSecretKey: getEnvVar('STRIPE_SECRET_KEY', ''),
   stripePublishableKey: getEnvVar('STRIPE_PUBLISHABLE_KEY', ''),
   stripeWebhookSecret: getEnvVar('STRIPE_WEBHOOK_SECRET', ''),
@@ -74,3 +76,16 @@ export const env: EnvConfig = {
   adminEmail: getEnvVar('ADMIN_EMAIL', 'admin@esimlaunch.com'),
 };
 
+// Warn on startup if critical secrets are missing in production
+if (env.nodeEnv === 'production') {
+  const criticalSecrets: Array<[string, string]> = [
+    ['STRIPE_SECRET_KEY', env.stripeSecretKey],
+    ['STRIPE_WEBHOOK_SECRET', env.stripeWebhookSecret],
+    ['RESEND_API_KEY', env.resendApiKey],
+  ];
+  for (const [name, value] of criticalSecrets) {
+    if (!value) {
+      console.warn(`⚠️  WARNING: ${name} is not set. Related features will not work in production.`);
+    }
+  }
+}

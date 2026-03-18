@@ -1,6 +1,15 @@
 import express from 'express';
+import { timingSafeEqual } from 'crypto';
 import { prisma } from '../lib/prisma';
 import { supportService } from '../services/supportService';
+import { emailTemplateService } from '../services/emailTemplateService';
+
+function isValidSecret(provided: string | string[] | undefined, secret: string): boolean {
+  if (!provided || typeof provided !== 'string' || !secret || provided.length !== secret.length) {
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(provided), Buffer.from(secret));
+}
 
 const router = express.Router();
 
@@ -20,7 +29,7 @@ router.post('/template-order', async (req, res) => {
   }
 
   const provided = req.headers['x-template-sync-secret'];
-  if (provided !== secret) {
+  if (!isValidSecret(provided, secret)) {
     return res.status(401).json({
       success: false,
       errorCode: 'UNAUTHORIZED',
@@ -99,7 +108,7 @@ router.post('/topup', async (req, res) => {
   }
 
   const provided = req.headers['x-template-sync-secret'];
-  if (provided !== secret) {
+  if (!isValidSecret(provided, secret)) {
     return res.status(401).json({
       success: false,
       errorCode: 'UNAUTHORIZED',
@@ -160,6 +169,283 @@ router.post('/topup', async (req, res) => {
   }
 });
 
+/**
+ * PATCH /api/integration/template-order
+ * Update status of a previously synced template order.
+ * Auth: x-template-sync-secret header must match TEMPLATE_ORDER_SYNC_SECRET.
+ */
+router.patch('/template-order', async (req, res) => {
+  const secret = process.env.TEMPLATE_ORDER_SYNC_SECRET;
+  if (!secret) {
+    return res.status(501).json({
+      success: false,
+      errorCode: 'NOT_CONFIGURED',
+      errorMessage: 'Template order sync is not configured',
+    });
+  }
+
+  const provided = req.headers['x-template-sync-secret'];
+  if (!isValidSecret(provided, secret)) {
+    return res.status(401).json({
+      success: false,
+      errorCode: 'UNAUTHORIZED',
+      errorMessage: 'Invalid sync secret',
+    });
+  }
+
+  const { storeId, templateOrderId, status } = req.body || {};
+
+  if (!storeId || !templateOrderId || !status) {
+    return res.status(400).json({
+      success: false,
+      errorCode: 'INVALID_PAYLOAD',
+      errorMessage: 'storeId, templateOrderId, status required',
+    });
+  }
+
+  try {
+    const dedupeId = `template_${storeId}_${templateOrderId}`;
+    const existing = await prisma.customerOrder.findFirst({
+      where: { paymentIntentId: dedupeId },
+    });
+    if (!existing) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'ORDER_NOT_FOUND',
+        errorMessage: 'Template order not found',
+      });
+    }
+
+    const mappedStatus = status === 'COMPLETED' ? 'COMPLETED'
+      : status === 'FAILED' || status === 'esim_order_failed' ? 'FAILED'
+      : status === 'CANCELLED' ? 'CANCELLED'
+      : status === 'PROCESSING' || status === 'provisioning' ? 'PROCESSING'
+      : existing.status; // keep current if unknown
+
+    await prisma.customerOrder.update({
+      where: { id: existing.id },
+      data: { status: mappedStatus },
+    });
+
+    return res.json({ success: true, orderId: existing.id, status: mappedStatus });
+  } catch (err: any) {
+    console.error('Template order status update failed:', err);
+    return res.status(500).json({
+      success: false,
+      errorCode: 'UPDATE_FAILED',
+      errorMessage: err?.message || 'Failed to update order status',
+    });
+  }
+});
+
+/**
+ * POST /api/integration/esim-profile
+ * Sync an eSIM profile from a linked template site so it appears in the dashboard.
+ * Auth: x-template-sync-secret header must match TEMPLATE_ORDER_SYNC_SECRET.
+ */
+router.post('/esim-profile', async (req, res) => {
+  const secret = process.env.TEMPLATE_ORDER_SYNC_SECRET;
+  if (!secret) {
+    return res.status(501).json({
+      success: false,
+      errorCode: 'NOT_CONFIGURED',
+      errorMessage: 'Template sync is not configured',
+    });
+  }
+
+  const provided = req.headers['x-template-sync-secret'];
+  if (!isValidSecret(provided, secret)) {
+    return res.status(401).json({
+      success: false,
+      errorCode: 'UNAUTHORIZED',
+      errorMessage: 'Invalid sync secret',
+    });
+  }
+
+  const {
+    storeId, templateOrderId, esimTranNo, iccid, qrCodeUrl, ac,
+    smdpStatus, esimStatus, packageCode, packageName, locationCode,
+    totalVolume, expiredTime,
+  } = req.body || {};
+
+  if (!storeId || !esimTranNo) {
+    return res.status(400).json({
+      success: false,
+      errorCode: 'INVALID_PAYLOAD',
+      errorMessage: 'storeId, esimTranNo required',
+    });
+  }
+
+  try {
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { merchantId: true },
+    });
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'STORE_NOT_FOUND',
+        errorMessage: 'Store not found',
+      });
+    }
+
+    // Find the linked CustomerOrder to get orderId bridge
+    let linkedOrderId: string | undefined;
+    if (templateOrderId) {
+      const dedupeId = `template_${storeId}_${templateOrderId}`;
+      const customerOrder = await prisma.customerOrder.findFirst({
+        where: { paymentIntentId: dedupeId },
+        select: { orderId: true },
+      });
+      linkedOrderId = customerOrder?.orderId ?? undefined;
+    }
+
+    const profile = await prisma.esimProfile.upsert({
+      where: { esimTranNo },
+      create: {
+        merchantId: store.merchantId,
+        esimTranNo,
+        iccid: iccid || null,
+        orderId: linkedOrderId || null,
+        packageCode: packageCode || null,
+        packageName: packageName || null,
+        locationCode: locationCode || null,
+        ac: ac || null,
+        qrCodeUrl: qrCodeUrl || null,
+        smdpStatus: smdpStatus || null,
+        esimStatus: esimStatus || null,
+        orderedAt: new Date(),
+      },
+      update: {
+        iccid: iccid || undefined,
+        ac: ac || undefined,
+        qrCodeUrl: qrCodeUrl || undefined,
+        smdpStatus: smdpStatus || undefined,
+        esimStatus: esimStatus || undefined,
+        packageCode: packageCode || undefined,
+        packageName: packageName || undefined,
+        locationCode: locationCode || undefined,
+      },
+    });
+
+    return res.json({ success: true, profileId: profile.id });
+  } catch (err: any) {
+    console.error('eSIM profile sync failed:', err);
+    return res.status(500).json({
+      success: false,
+      errorCode: 'SYNC_FAILED',
+      errorMessage: err?.message || 'Failed to sync eSIM profile',
+    });
+  }
+});
+
+/**
+ * GET /api/integration/email-templates?storeId=...
+ * Fetch merchant-customized email templates for a linked template site.
+ * Auth: x-template-sync-secret header must match TEMPLATE_ORDER_SYNC_SECRET.
+ */
+router.get('/email-templates', async (req, res) => {
+  const secret = process.env.TEMPLATE_ORDER_SYNC_SECRET;
+  if (!secret || !isValidSecret(req.headers['x-template-sync-secret'], secret)) {
+    return res.status(401).json({
+      success: false,
+      errorCode: 'UNAUTHORIZED',
+      errorMessage: 'Invalid sync secret',
+    });
+  }
+
+  const storeId = req.query.storeId as string;
+  if (!storeId) {
+    return res.status(400).json({
+      success: false,
+      errorCode: 'INVALID_PAYLOAD',
+      errorMessage: 'storeId required',
+    });
+  }
+
+  try {
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { merchantId: true },
+    });
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'STORE_NOT_FOUND',
+        errorMessage: 'Store not found',
+      });
+    }
+
+    const templates = await emailTemplateService.getTemplates(store.merchantId);
+    return res.json({ success: true, data: templates });
+  } catch (err: any) {
+    console.error('Email template fetch failed:', err);
+    return res.status(500).json({
+      success: false,
+      errorCode: 'FETCH_FAILED',
+      errorMessage: err?.message || 'Failed to fetch email templates',
+    });
+  }
+});
+
+/**
+ * POST /api/integration/support/tickets
+ * Create a support ticket from a linked template site.
+ * Auth: x-template-sync-secret header must match TEMPLATE_ORDER_SYNC_SECRET.
+ */
+router.post('/support/tickets', async (req, res) => {
+  const secret = process.env.TEMPLATE_ORDER_SYNC_SECRET;
+  if (!secret || !isValidSecret(req.headers['x-template-sync-secret'], secret)) {
+    return res.status(401).json({
+      success: false,
+      errorCode: 'UNAUTHORIZED',
+      errorMessage: 'Invalid sync secret',
+    });
+  }
+
+  const { storeId, customerEmail, customerName, subject, description, category, priority } = req.body || {};
+  if (!storeId || !customerEmail || !subject || !description) {
+    return res.status(400).json({
+      success: false,
+      errorCode: 'INVALID_PAYLOAD',
+      errorMessage: 'storeId, customerEmail, subject, description required',
+    });
+  }
+
+  try {
+    const store = await prisma.store.findUnique({
+      where: { id: storeId },
+      select: { merchantId: true },
+    });
+    if (!store) {
+      return res.status(404).json({
+        success: false,
+        errorCode: 'STORE_NOT_FOUND',
+        errorMessage: 'Store not found',
+      });
+    }
+
+    const ticket = await supportService.createTicket({
+      customerEmail,
+      customerName: customerName || undefined,
+      merchantId: store.merchantId,
+      subject,
+      description,
+      category: category || 'general',
+      priority: priority || 'medium',
+    });
+
+    return res.json({ success: true, data: ticket });
+  } catch (err: any) {
+    console.error('Integration ticket creation failed:', err);
+    return res.status(500).json({
+      success: false,
+      errorCode: 'CREATION_FAILED',
+      errorMessage: err?.message || 'Failed to create ticket',
+    });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Support ticket integration (template ↔ dashboard bidirectional)
 // When template is linked, it uses esimlaunch as single source of truth so
@@ -172,7 +458,7 @@ router.post('/topup', async (req, res) => {
  */
 router.get('/support/tickets', async (req, res) => {
   const secret = process.env.TEMPLATE_ORDER_SYNC_SECRET;
-  if (!secret || req.headers['x-template-sync-secret'] !== secret) {
+  if (!secret || !isValidSecret(req.headers['x-template-sync-secret'], secret)) {
     return res.status(401).json({
       success: false,
       errorCode: 'UNAUTHORIZED',
@@ -234,7 +520,7 @@ router.get('/support/tickets', async (req, res) => {
  */
 router.get('/support/tickets/:ticketId', async (req, res) => {
   const secret = process.env.TEMPLATE_ORDER_SYNC_SECRET;
-  if (!secret || req.headers['x-template-sync-secret'] !== secret) {
+  if (!secret || !isValidSecret(req.headers['x-template-sync-secret'], secret)) {
     return res.status(401).json({
       success: false,
       errorCode: 'UNAUTHORIZED',
@@ -331,7 +617,7 @@ router.get('/support/tickets/:ticketId', async (req, res) => {
  */
 router.post('/support/tickets/:ticketId/messages', async (req, res) => {
   const secret = process.env.TEMPLATE_ORDER_SYNC_SECRET;
-  if (!secret || req.headers['x-template-sync-secret'] !== secret) {
+  if (!secret || !isValidSecret(req.headers['x-template-sync-secret'], secret)) {
     return res.status(401).json({
       success: false,
       errorCode: 'UNAUTHORIZED',

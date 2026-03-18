@@ -38,6 +38,7 @@ const Signup = () => {
   const { register, setUser, isLoading, error, isAuthenticated, clearError } = useAuth();
   const [oauthLoading, setOauthLoading] = useState(false);
   const { signUp, setActive, isLoaded: isClerkLoaded } = useSignUp();
+  const clerk = useClerk();
 
   // Redirect if already authenticated: new → onboarding, returning → dashboard
   useEffect(() => {
@@ -86,7 +87,8 @@ const Signup = () => {
 
         if (updated.status === "complete" && updated.createdSessionId && updated.createdUserId) {
           await setActive({ session: updated.createdSessionId });
-          const result = await apiClient.clerkSync(updated.createdUserId);
+          const token = await clerk?.session?.getToken();
+          const result = await apiClient.clerkSync(token!);
           if (result?.merchant) {
             setUser(result.merchant);
             if (result.token) apiClient.setJwtToken(result.token);
@@ -162,7 +164,8 @@ const Signup = () => {
         // If Clerk does not require additional steps, sign in immediately.
         if (created.status === "complete" && created.createdSessionId && created.createdUserId) {
           await setActive({ session: created.createdSessionId });
-          const result = await apiClient.clerkSync(created.createdUserId);
+          const token = await clerk?.session?.getToken();
+          const result = await apiClient.clerkSync(token!);
           if (result?.merchant) {
             setUser(result.merchant);
             if (result.token) apiClient.setJwtToken(result.token);

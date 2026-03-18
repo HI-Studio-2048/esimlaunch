@@ -8,8 +8,17 @@ import { preferencesService } from '../services/preferencesService';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { env } from '../config/env';
 import Stripe from 'stripe';
+import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
+
+const storeCheckoutLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20, // 20 payment intents per minute per IP
+  message: { success: false, errorCode: 'RATE_LIMIT', errorMessage: 'Too many payment attempts. Please wait.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Validation schemas
 const createPaymentIntentSchema = z.object({
@@ -46,7 +55,7 @@ const refundPaymentSchema = z.object({
 router.get('/methods', authenticateSessionOrJWT, async (req, res) => {
   try {
     const merchantId = (req as any).merchant!.id;
-    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2024-11-20.acacia' as any });
+    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2026-01-28.clover' as any });
     const { prisma } = await import('../lib/prisma');
     const sub = await prisma.subscription.findUnique({
       where: { merchantId },
@@ -91,7 +100,7 @@ router.delete('/methods/:methodId', authenticateSessionOrJWT, async (req, res) =
       });
     }
 
-    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2024-11-20.acacia' as any });
+    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2026-01-28.clover' as any });
     const { prisma } = await import('../lib/prisma');
     const sub = await prisma.subscription.findUnique({
       where: { merchantId },
@@ -139,7 +148,7 @@ router.delete('/methods/:methodId', authenticateSessionOrJWT, async (req, res) =
 router.post('/setup-intent', authenticateSessionOrJWT, async (req, res) => {
   try {
     const merchantId = (req as any).merchant!.id;
-    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2024-11-20.acacia' as any });
+    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2026-01-28.clover' as any });
     const { prisma } = await import('../lib/prisma');
 
     // Get or create Stripe customer
@@ -200,12 +209,34 @@ router.post('/setup-intent', authenticateSessionOrJWT, async (req, res) => {
  * Create a payment intent
  * Can be called with JWT (merchant) or without (public store checkout)
  */
-router.post('/create-intent', async (req, res, next) => {
+router.post('/create-intent', storeCheckoutLimiter, async (req, res, next) => {
   try {
     const data = createPaymentIntentSchema.parse(req.body);
-    
-    // If JWT is present, use merchant ID, otherwise allow public (store checkout)
+
+    // Require storeId for public (unauthenticated) checkout
     const merchantId = (req as any).merchant?.id;
+    if (!merchantId && !data.storeId) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'STORE_REQUIRED',
+        errorMessage: 'storeId is required for store checkout',
+      });
+    }
+
+    // Validate store exists and is active
+    if (data.storeId) {
+      const store = await prisma.store.findUnique({
+        where: { id: data.storeId },
+        select: { isActive: true, adminStatus: true },
+      });
+      if (!store || !store.isActive || !['in_progress', 'completed'].includes(store.adminStatus)) {
+        return res.status(404).json({
+          success: false,
+          errorCode: 'STORE_NOT_FOUND',
+          errorMessage: 'Store not found or inactive',
+        });
+      }
+    }
     const storeId = data.storeId;
 
     const paymentIntent = await paymentService.createPaymentIntent({
@@ -247,10 +278,24 @@ router.post('/create-intent', async (req, res, next) => {
  * POST /api/payments/confirm
  * Confirm a payment (called after Stripe Elements confirms payment)
  */
-router.post('/confirm', async (req, res, next) => {
+router.post('/confirm', storeCheckoutLimiter, async (req, res, next) => {
   try {
     const data = confirmPaymentSchema.parse(req.body);
-    
+
+    if (data.storeId) {
+      const store = await prisma.store.findUnique({
+        where: { id: data.storeId },
+        select: { isActive: true },
+      });
+      if (!store || !store.isActive) {
+        return res.status(404).json({
+          success: false,
+          errorCode: 'STORE_NOT_FOUND',
+          errorMessage: 'Store not found or inactive',
+        });
+      }
+    }
+
     // Update payment intent metadata with customer info for webhook backup
     const updatedMetadata: Record<string, string> = {
       ...data.metadata,
@@ -319,8 +364,14 @@ router.post('/confirm', async (req, res, next) => {
         }
 
         console.error('Error creating customer order:', orderError);
-        // Payment succeeded but order creation failed - still return success for payment
-        // The order can be created manually later
+        // Payment succeeded but order creation failed — return 500 so frontend knows to retry
+        // Stripe webhook will also attempt to create the order as a backup
+        return res.status(500).json({
+          success: false,
+          errorCode: 'ORDER_CREATION_FAILED',
+          errorMessage: 'Payment was successful but order processing failed. Your order will be fulfilled shortly. If not, please contact support.',
+          paymentIntentId: data.paymentIntentId,
+        });
       }
     }
 
@@ -354,7 +405,7 @@ router.post('/confirm', async (req, res, next) => {
  * POST /api/payments/webhook
  * Stripe webhook endpoint (no auth, but verifies Stripe signature)
  */
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res, next) => {
+router.post('/webhook', async (req, res, next) => {
   const sig = req.headers['stripe-signature'];
 
   if (!sig) {
@@ -377,8 +428,12 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   let event: Stripe.Event;
 
   try {
+    const rawBody = (req as any).rawBody;
+    if (!rawBody) {
+      return res.status(400).json({ success: false, errorCode: 'MISSING_BODY', errorMessage: 'Missing raw request body' });
+    }
     event = Stripe.webhooks.constructEvent(
-      req.body,
+      rawBody,
       sig,
       env.stripeWebhookSecret
     );

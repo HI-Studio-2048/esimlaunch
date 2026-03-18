@@ -1,6 +1,8 @@
 import express from 'express';
 import { z } from 'zod';
-import { authService } from '../services/authService';
+import rateLimit from 'express-rate-limit';
+import jwt from 'jsonwebtoken';
+import { authService, decryptSmtpPassword } from '../services/authService';
 import { authenticateJWT, authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { sessionService } from '../services/sessionService';
 import { SESSION_COOKIE_NAME } from '../middleware/sessionAuth';
@@ -8,6 +10,22 @@ import { emailService } from '../services/emailService';
 import { env } from '../config/env';
 
 const router = express.Router();
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // 10 attempts per 15 minutes per IP
+  message: { success: false, errorCode: 'RATE_LIMIT', errorMessage: 'Too many attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const twoFactorLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 5, // 5 attempts per 5 minutes per IP
+  message: { success: false, errorCode: 'RATE_LIMIT', errorMessage: 'Too many 2FA attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 const SESSION_DAYS = 7;
 function setSessionCookie(res: express.Response, token: string) {
@@ -42,7 +60,7 @@ const loginSchema = z.object({
  * POST /api/auth/register
  * Register a new merchant. Creates DB session and sets httpOnly cookie.
  */
-router.post('/register', async (req, res, next) => {
+router.post('/register', authLimiter, async (req, res, next) => {
   try {
     const data = registerSchema.parse(req.body);
     const result = await authService.register(data);
@@ -102,10 +120,30 @@ router.post('/register', async (req, res, next) => {
  * POST /api/auth/login
  * Login merchant. Creates DB session and sets httpOnly cookie so auth works across devices (no localStorage).
  */
-router.post('/login', async (req, res, next) => {
+router.post('/login', authLimiter, async (req, res, next) => {
   try {
     const data = loginSchema.parse(req.body);
     const result = await authService.login(data);
+
+    // Check if 2FA is enabled
+    if (result.merchant.twoFactorEnabled) {
+      // Return a limited-scope token that only allows 2FA verification
+      const limitedToken = jwt.sign(
+        { merchantId: result.merchant.id, scope: 'pre_2fa' },
+        env.jwtSecret,
+        { expiresIn: '5m' }
+      );
+      // Don't create a session yet — wait for 2FA verification
+      return res.json({
+        success: true,
+        data: {
+          requires2FA: true,
+          token: limitedToken,
+          merchant: { id: result.merchant.id, email: result.merchant.email },
+        },
+      });
+    }
+
     const session = await sessionService.createSession(
       result.merchant.id,
       req.ip,
@@ -162,7 +200,7 @@ const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email address'),
 });
 
-router.post('/forgot-password', async (req, res, next) => {
+router.post('/forgot-password', authLimiter, async (req, res, next) => {
   try {
     const data = forgotPasswordSchema.parse(req.body);
     await authService.requestPasswordReset(data.email);
@@ -380,15 +418,18 @@ router.delete('/account', authenticateSessionOrJWT, async (req, res, next) => {
  * Sync Clerk user to merchant account and get JWT token
  */
 const clerkSyncSchema = z.object({
-  clerkUserId: z.string().min(1, 'Clerk user ID is required'),
+  sessionToken: z.string().min(1, 'Clerk session token is required'),
 });
 
 router.post('/clerk-sync', async (req, res, next) => {
   try {
     const data = clerkSyncSchema.parse(req.body);
     const { clerkService } = await import('../services/clerkService');
-    
-    const merchant = await clerkService.getOrCreateMerchantFromClerk(data.clerkUserId);
+
+    // Verify the session token to get the real Clerk user ID
+    const clerkUserId = await clerkService.verifySessionToken(data.sessionToken);
+
+    const merchant = await clerkService.getOrCreateMerchantFromClerk(clerkUserId);
     const token = authService.generateToken(merchant.id);
     
     // Create DB session and set cookie (same as login — no localStorage)
@@ -415,7 +456,7 @@ router.post('/clerk-sync', async (req, res, next) => {
         errorMessage: error.errors[0].message,
       });
     } else {
-      res.status(400).json({
+      res.status(401).json({
         success: false,
         errorCode: 'CLERK_SYNC_FAILED',
         errorMessage: error.message || 'Failed to sync Clerk user',
@@ -430,31 +471,51 @@ router.post('/clerk-sync', async (req, res, next) => {
  */
 router.post('/clerk-webhook', async (req, res, next) => {
   try {
-    // TODO: Verify webhook signature from Clerk
-    const { type, data } = req.body;
-    
+    const { Webhook } = await import('svix');
+
+    if (!env.clerkWebhookSecret) {
+      console.error('CLERK_WEBHOOK_SECRET not configured');
+      return res.status(500).json({ success: false, errorCode: 'CONFIG_ERROR', errorMessage: 'Webhook secret not configured' });
+    }
+
+    const rawBody = (req as any).rawBody;
+    if (!rawBody) {
+      return res.status(400).json({ success: false, errorCode: 'MISSING_BODY', errorMessage: 'Missing raw request body' });
+    }
+
+    const wh = new Webhook(env.clerkWebhookSecret);
+    const headers = {
+      'svix-id': req.headers['svix-id'] as string,
+      'svix-timestamp': req.headers['svix-timestamp'] as string,
+      'svix-signature': req.headers['svix-signature'] as string,
+    };
+
+    let event: any;
+    try {
+      event = wh.verify(rawBody.toString(), headers);
+    } catch (err) {
+      console.error('Clerk webhook signature verification failed');
+      return res.status(401).json({ success: false, errorCode: 'INVALID_SIGNATURE', errorMessage: 'Webhook signature verification failed' });
+    }
+
     const { clerkService } = await import('../services/clerkService');
-    
-    if (type === 'user.created' || type === 'user.updated') {
-      const clerkUserId = data.id;
-      const email = data.email_addresses?.[0]?.email_address;
-      const firstName = data.first_name;
-      const lastName = data.last_name;
+
+    if (event.type === 'user.created' || event.type === 'user.updated') {
+      const clerkUserId = event.data.id;
+      const email = event.data.email_addresses?.[0]?.email_address;
+      const firstName = event.data.first_name;
+      const lastName = event.data.last_name;
       const name = firstName && lastName ? `${firstName} ${lastName}` : firstName || lastName;
-      
+
       if (email) {
         await clerkService.syncClerkUser(clerkUserId, email, name);
       }
     }
-    
+
     res.json({ success: true });
   } catch (error: any) {
-    console.error('Clerk webhook error:', error);
-    res.status(400).json({
-      success: false,
-      errorCode: 'WEBHOOK_FAILED',
-      errorMessage: error.message || 'Failed to process webhook',
-    });
+    console.error('Clerk webhook error:', error?.message);
+    res.status(400).json({ success: false, errorCode: 'WEBHOOK_FAILED', errorMessage: error.message || 'Failed to process webhook' });
   }
 });
 
@@ -617,12 +678,12 @@ const verify2FALoginSchema = z.object({
   token: z.string().length(6, 'Token must be 6 digits'),
 });
 
-router.post('/2fa/login', authenticateSessionOrJWT, async (req, res, next) => {
+router.post('/2fa/login', twoFactorLimiter, authenticateSessionOrJWT, async (req, res, next) => {
   try {
     const data = verify2FALoginSchema.parse(req.body);
     const { twoFactorService } = await import('../services/twoFactorService');
     const isValid = await twoFactorService.verifyToken(req.merchant!.id, data.token);
-    
+
     if (!isValid) {
       return res.status(401).json({
         success: false,
@@ -631,9 +692,24 @@ router.post('/2fa/login', authenticateSessionOrJWT, async (req, res, next) => {
       });
     }
 
+    // 2FA verified — now create session and return full merchant data
+    const merchant = await authService.getMerchantById(req.merchant!.id);
+    const fullToken = authService.generateToken(req.merchant!.id);
+    const session = await sessionService.createSession(
+      req.merchant!.id,
+      req.ip,
+      req.get('user-agent'),
+      SESSION_DAYS
+    );
+    setSessionCookie(res, session.token);
+
     res.json({
       success: true,
       message: '2FA verified successfully',
+      data: {
+        merchant,
+        token: fullToken,
+      },
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -755,11 +831,12 @@ router.post('/test-email', authenticateSessionOrJWT, async (req, res, next) => {
     let sent = false;
 
     if (smtp?.smtpHost && smtp.smtpUser && smtp.smtpPass) {
+      const decryptedPass = decryptSmtpPassword(smtp.smtpPass);
       const transport = nodemailer.default.createTransport({
         host: smtp.smtpHost,
         port: smtp.smtpPort || 587,
         secure: (smtp.smtpPort || 587) === 465,
-        auth: { user: smtp.smtpUser, pass: smtp.smtpPass },
+        auth: { user: smtp.smtpUser, pass: decryptedPass },
       });
       await transport.sendMail({
         from: `"${smtp?.smtpFromName || 'eSIM Launch'}" <${smtp?.smtpFromEmail || smtp?.smtpUser}>`,

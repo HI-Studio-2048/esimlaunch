@@ -65,4 +65,11 @@ coverage/
 # Nested git repositories (esim-connect-hub has its own repo)
 esim-connect-hub/.git/
 
+# Cloned/scratch site (never push to git)
+CLONED SITE/
+
+# Large media (exceeds GitHub 100MB limit)
+*.mov
+esim-connect-hub/public/*.mov
+
 

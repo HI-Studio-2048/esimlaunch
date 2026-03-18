@@ -19,6 +19,31 @@ export interface ForwardedWebhook {
 }
 
 class WebhookService {
+  private readonly MAX_RETRIES = 3;
+  private readonly RETRY_DELAYS = [5000, 15000, 45000]; // 5s, 15s, 45s
+
+  /**
+   * Forward webhook with exponential backoff retry
+   */
+  private async forwardWithRetry(
+    url: string,
+    payload: any,
+    headers: Record<string, string | undefined>,
+    retryCount = 0,
+  ): Promise<void> {
+    try {
+      await axios.post(url, payload, { headers, timeout: 10000 });
+    } catch (error: any) {
+      if (retryCount < this.MAX_RETRIES) {
+        const delay = this.RETRY_DELAYS[retryCount] || 45000;
+        console.warn(`Webhook delivery failed (attempt ${retryCount + 1}/${this.MAX_RETRIES}), retrying in ${delay}ms: ${error.message}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return this.forwardWithRetry(url, payload, headers, retryCount + 1);
+      }
+      throw error;
+    }
+  }
+
   /**
    * Forward webhook to merchant's configured webhook URL
    */
@@ -51,36 +76,27 @@ class WebhookService {
     };
 
     try {
-      // Forward webhook to merchant's URL
-      const response = await axios.post(
+      await this.forwardWithRetry(
         webhookConfig.url,
         forwardedWebhook,
         {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Webhook-Signature': webhookConfig.secret
-              ? this.generateSignature(JSON.stringify(forwardedWebhook), webhookConfig.secret)
-              : undefined,
-          },
-          timeout: 10000, // 10 seconds
-        }
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature': webhookConfig.secret
+            ? this.generateSignature(JSON.stringify(forwardedWebhook), webhookConfig.secret)
+            : undefined,
+        },
       );
 
       console.log(`Webhook forwarded successfully to ${webhookConfig.url}`, {
         merchantId,
         event: eventType,
-        status: response.status,
       });
     } catch (error: any) {
-      console.error(`Failed to forward webhook to ${webhookConfig.url}:`, {
+      console.error(`Failed to forward webhook after ${this.MAX_RETRIES} retries to ${webhookConfig.url}:`, {
         merchantId,
         event: eventType,
         error: error.message,
-        status: error.response?.status,
       });
-
-      // In production, you might want to queue failed webhooks for retry
-      // For now, we just log the error
     }
   }
 
@@ -166,8 +182,17 @@ class WebhookService {
           const newStatus = this.mapOrderStatus(webhook.content.orderStatus);
           const oldStatus = order.status;
 
-          // Update order status
-          if (newStatus && newStatus !== oldStatus) {
+          // Valid state transitions — terminal states (COMPLETED, FAILED, CANCELLED) cannot transition
+          const VALID_TRANSITIONS: Record<string, string[]> = {
+            PENDING: ['PROCESSING', 'COMPLETED', 'FAILED', 'CANCELLED'],
+            PROCESSING: ['COMPLETED', 'FAILED', 'CANCELLED'],
+            COMPLETED: [], // terminal
+            FAILED: [],    // terminal
+            CANCELLED: [], // terminal
+          };
+
+          // Update order status (only if transition is valid)
+          if (newStatus && newStatus !== oldStatus && (VALID_TRANSITIONS[oldStatus] ?? []).includes(newStatus)) {
             await prisma.$transaction(async (tx) => {
               // Update order status
               await tx.order.update({
@@ -189,12 +214,14 @@ class WebhookService {
 
               // Refund balance if order failed or was cancelled
               // Only refund if order was previously PENDING or PROCESSING (balance was deducted)
-              // Order.totalAmount is in 1/10000 USD (Advanced); balance is in cents
               if (
                 (newStatus === OrderStatus.FAILED || newStatus === OrderStatus.CANCELLED) &&
                 (oldStatus === OrderStatus.PENDING || oldStatus === OrderStatus.PROCESSING) &&
                 order.totalAmount
               ) {
+                // Order.totalAmount is in 1/10000 USD for both Advanced and Easy Way orders.
+                // (Easy Way was fixed to store wholesale amount in 1/10000 USD, matching Advanced Way.)
+                // Merchant balance is stored in cents, so convert: 1/10000 USD / 100 = cents.
                 const refundCents = Math.round(Number(order.totalAmount) / 100);
 
                 // Refund balance to merchant (cents)

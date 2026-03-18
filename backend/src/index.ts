@@ -4,6 +4,9 @@ import { env } from './config/env';
 
 const app = express();
 
+// Trust first proxy (Railway, Vercel, etc.) so req.ip returns the real client IP
+app.set('trust proxy', 1);
+
 // Middleware
 const allowedOrigins = env.corsOrigin.split(',').map(o => o.trim());
 
@@ -14,7 +17,7 @@ app.use(cors({
     
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
-    } else if (origin.endsWith('.vercel.app')) {
+    } else if (origin.endsWith('.vercel.app') && origin.includes('esimlaunch')) {
       // Allow Vercel preview deployments (e.g. esimlaunch-xxx-ezza-wans-projects.vercel.app)
       callback(null, true);
     } else {
@@ -28,7 +31,13 @@ app.use(cors({
   exposedHeaders: ['Content-Type', 'Authorization'],
 }));
 // Note: Webhook routes need raw body, so they're handled in the route itself
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({
+  limit: '10mb',
+  verify: (req: any, _res, buf) => {
+    // Preserve raw body for webhook signature verification (Stripe, Clerk)
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Store router middleware (detects domain/subdomain and loads store)
@@ -118,10 +127,29 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 const PORT = env.port;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📚 Environment: ${env.nodeEnv}`);
   console.log(`🌐 API Base URL: ${env.apiBaseUrl}`);
   console.log(`🔒 CORS Allowed Origins: ${allowedOrigins.join(', ')}`);
+
+  // Run cleanup on startup and every 24 hours
+  const { sessionService } = await import('./services/sessionService');
+  sessionService.cleanupExpired().catch(err => console.error('Initial cleanup failed:', err));
+  const cleanupInterval = setInterval(() => {
+    sessionService.cleanupExpired().catch(err => console.error('Scheduled cleanup failed:', err));
+  }, 24 * 60 * 60 * 1000);
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Shutting down gracefully...');
+    clearInterval(cleanupInterval);
+    process.exit(0);
+  });
+  process.on('SIGINT', () => {
+    console.log('SIGINT received. Shutting down gracefully...');
+    clearInterval(cleanupInterval);
+    process.exit(0);
+  });
 });
 

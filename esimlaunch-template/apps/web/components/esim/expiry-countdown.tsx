@@ -24,7 +24,7 @@ interface ExpiryCountdownProps {
   className?: string;
   iccid?: string;
   onExpired?: () => void;
-  userEmail?: string;
+  getToken?: () => Promise<string | null>;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
@@ -34,7 +34,7 @@ export function ExpiryCountdown({
   className,
   iccid,
   onExpired,
-  userEmail,
+  getToken,
 }: ExpiryCountdownProps) {
   const [now, setNow] = useState(Date.now());
   const [time, setTime] = useState<TimeRemaining | null>(null);
@@ -83,17 +83,18 @@ export function ExpiryCountdown({
   const handleSync = async () => {
     if (!iccid || isSyncing) return;
 
-    if (!userEmail) {
+    if (!getToken) {
       return;
     }
 
     setIsSyncing(true);
     try {
+      const token = await getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       await safeFetch(`${API_BASE}/esim/${iccid}/sync`, {
         method: 'POST',
-        headers: {
-          'x-user-email': userEmail,
-        },
+        headers,
         showToast: false,
       });
 

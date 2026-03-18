@@ -129,16 +129,49 @@ router.post('/payout-request', async (req, res, next) => {
       });
     }
 
-    // Mark all pending commissions as paid
+    // Calculate total payout amount
     const { prisma } = await import('../lib/prisma');
-    await prisma.affiliateCommission.updateMany({
+    const pendingCommissions = await prisma.affiliateCommission.findMany({
       where: { affiliateId: merchantId, status: 'pending' },
-      data: { status: 'paid', paidAt: new Date() },
+      select: { id: true, amount: true },
+    });
+    const totalPayoutCents = pendingCommissions.reduce((sum, c) => sum + Number(c.amount), 0);
+
+    if (totalPayoutCents <= 0) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'NO_PAYOUT_AMOUNT',
+        errorMessage: 'No payout amount to process',
+      });
+    }
+
+    // Credit merchant balance and mark commissions as paid atomically
+    await prisma.$transaction(async (tx) => {
+      await tx.affiliateCommission.updateMany({
+        where: { affiliateId: merchantId, status: 'pending' },
+        data: { status: 'paid', paidAt: new Date() },
+      });
+
+      await tx.merchant.update({
+        where: { id: merchantId },
+        data: { balance: { increment: BigInt(totalPayoutCents) } },
+      });
+
+      const { BalanceTransactionType } = await import('@prisma/client');
+      await tx.balanceTransaction.create({
+        data: {
+          merchantId,
+          amount: BigInt(totalPayoutCents),
+          type: BalanceTransactionType.ADJUSTMENT,
+          description: `Affiliate commission payout ($${(totalPayoutCents / 100).toFixed(2)})`,
+        },
+      });
     });
 
     res.json({
       success: true,
-      message: 'Payout request submitted. Your commissions have been marked for payout.',
+      message: `$${(totalPayoutCents / 100).toFixed(2)} in commissions credited to your balance.`,
+      payoutAmountCents: totalPayoutCents,
     });
   } catch (error: any) {
     res.status(500).json({

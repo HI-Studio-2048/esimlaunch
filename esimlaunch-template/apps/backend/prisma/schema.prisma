@@ -81,6 +81,11 @@ model Order {
   esimProfile  EsimProfile?
   commission   Commission?
   topUp        TopUp?
+
+  @@index([status])
+  @@index([userId])
+  @@index([paymentRef])
+  @@index([createdAt])
 }
 
 // ---------------------------------------------------------------
@@ -106,6 +111,8 @@ model EsimProfile {
 
   usageHistory EsimUsageHistory[]
   topUps       TopUp[]
+
+  @@index([userId])
 }
 
 // ---------------------------------------------------------------
@@ -117,6 +124,8 @@ model EsimUsageHistory {
   profile    EsimProfile @relation(fields: [profileId], references: [id])
   usedBytes  BigInt
   recordedAt DateTime    @default(now())
+
+  @@index([profileId, recordedAt])
 }
 
 // ---------------------------------------------------------------
@@ -169,6 +178,10 @@ model Commission {
   status      CommissionStatus @default(pending)
   availableAt DateTime?
   createdAt   DateTime         @default(now())
+
+  @@index([affiliateId])
+  @@index([affiliateId, status])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------
@@ -182,20 +195,22 @@ enum TopUpStatus {
 }
 
 model TopUp {
-  id             String      @id @default(cuid())
-  userId         String
-  user           User        @relation(fields: [userId], references: [id])
-  profileId      String
-  profile        EsimProfile @relation(fields: [profileId], references: [id])
-  orderId        String?     @unique
-  order          Order?      @relation(fields: [orderId], references: [id])
-  planCode       String
-  amountCents    Int         // USD cents
-  status         TopUpStatus @default(pending)
-  paymentRef     String?
-  rechargeOrderNo String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  id                 String      @id @default(cuid())
+  userId             String
+  user               User        @relation(fields: [userId], references: [id])
+  profileId          String
+  profile            EsimProfile @relation(fields: [profileId], references: [id])
+  orderId            String?     @unique
+  order              Order?      @relation(fields: [orderId], references: [id])
+  planCode           String
+  amountCents        Int         // USD cents
+  displayCurrency    String?     // e.g. "EUR"
+  displayAmountCents Int?
+  status             TopUpStatus @default(pending)
+  paymentRef         String?
+  rechargeOrderNo    String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
 }
 
 // ---------------------------------------------------------------
@@ -222,6 +237,9 @@ model VCashTransaction {
   reason      String?
   metadata    Json?
   createdAt   DateTime     @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId])
 }
 
 // ---------------------------------------------------------------
@@ -274,6 +292,10 @@ model SupportTicket {
   createdAt DateTime @default(now())
 
   replies SupportTicketReply[]
+
+  @@index([userId])
+  @@index([email])
+  @@index([createdAt])
 }
 
 model SupportTicketReply {

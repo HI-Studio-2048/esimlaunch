@@ -184,7 +184,7 @@ export default function Features() {
               Ready to explore all features?
             </h2>
             <p className="text-primary-foreground/80 mb-8 max-w-2xl mx-auto">
-              Start your 14-day free trial and see how eSIMLaunch can transform your business.
+              Start your 7-day free trial and see how eSIMLaunch can transform your business.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button size="xl" className="bg-background text-foreground hover:bg-background/90" asChild>

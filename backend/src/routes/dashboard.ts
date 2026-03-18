@@ -33,10 +33,16 @@ router.get('/stats', async (req, res, next) => {
     const merchantId = req.merchant!.id;
 
     // Order statistics: include both Order (Advanced API) and CustomerOrder (Easy Way store)
-    const [advOrders, advCompleted, advPending, advRevenue, easyTotal, easyCompleted, easyPending, easyRevenue] = await Promise.all([
+    const [
+      advOrders, advCompleted, advPending, advCancelled, advRevenue,
+      easyTotal, easyCompleted, easyPending, easyCancelled, easyRevenue,
+      // Top-up order counts (Order rows linked to a customerOrder are top-up-originated)
+      advBaseOrders, advTopupOrders,
+    ] = await Promise.all([
       prisma.order.count({ where: { merchantId } }),
       prisma.order.count({ where: { merchantId, status: 'COMPLETED' } }),
       prisma.order.count({ where: { merchantId, status: { in: ['PENDING', 'PROCESSING'] } } }),
+      prisma.order.count({ where: { merchantId, status: { in: ['CANCELLED', 'FAILED'] } } }),
       prisma.order.aggregate({
         where: { merchantId, status: 'COMPLETED', totalAmount: { not: null } },
         _sum: { totalAmount: true },
@@ -44,17 +50,26 @@ router.get('/stats', async (req, res, next) => {
       prisma.customerOrder.count({ where: { merchantId } }),
       prisma.customerOrder.count({ where: { merchantId, status: 'COMPLETED' } }),
       prisma.customerOrder.count({ where: { merchantId, status: { in: ['PENDING', 'PROCESSING'] } } }),
+      prisma.customerOrder.count({ where: { merchantId, status: { in: ['CANCELLED', 'FAILED'] } } }),
       prisma.customerOrder.aggregate({
         where: { merchantId, status: 'COMPLETED' },
         _sum: { totalAmount: true },
       }),
+      // Base orders = Order rows NOT linked to a CustomerOrder
+      prisma.order.count({ where: { merchantId, customerOrderId: null } }),
+      // Top-up orders via CustomerTopUp
+      prisma.customerTopUp.count({ where: { merchantId } }),
     ]);
 
     const totalOrders = advOrders + easyTotal;
     const completedOrders = advCompleted + easyCompleted;
     const pendingOrders = advPending + easyPending;
+    const cancelledOrders = advCancelled + easyCancelled;
     // Order.totalAmount is in 1/10000 USD; CustomerOrder.totalAmount is in cents
-    const advRevenueDollars = advRevenue._sum.totalAmount ? Number(advRevenue._sum.totalAmount) / 10000 : 0;
+    // Apply PLATFORM_PRICE_MARKUP to Advanced revenue (merchant pays marked-up wholesale)
+    const advRevenueDollars = advRevenue._sum.totalAmount
+      ? (Number(advRevenue._sum.totalAmount) * PLATFORM_PRICE_MARKUP) / 10000
+      : 0;
     const easyRevenueDollars = easyRevenue._sum.totalAmount ? Number(easyRevenue._sum.totalAmount) / 100 : 0;
     const totalRevenueDollars = advRevenueDollars + easyRevenueDollars;
 
@@ -80,6 +95,9 @@ router.get('/stats', async (req, res, next) => {
           total: totalOrders,
           completed: completedOrders,
           pending: pendingOrders,
+          cancelled: cancelledOrders,
+          base: advBaseOrders,
+          topup: advTopupOrders,
         },
         revenue: {
           total: totalRevenueDollars,
@@ -443,7 +461,7 @@ router.get('/customers/:email', requireEasyWay, async (req, res) => {
           packageCount: o.packageCount,
           createdAt: o.createdAt,
           storeName: o.store.businessName || o.store.name,
-          esimAccessOrderNo: o.esimAccessOrderNo,
+          // esimAccessOrderNo intentionally excluded — merchants should not see upstream provider IDs
         })),
         profiles,
         totalOrders: orders.length,
@@ -462,17 +480,33 @@ router.get('/customers/:email', requireEasyWay, async (req, res) => {
 
 /**
  * POST /api/dashboard/orders/:orderId/retry
- * Retry provisioning for a merchant Order (triggers deliverESIMs)
+ * Retry provisioning for a merchant Order (triggers deliverESIMs).
+ * Also handles CustomerOrder IDs by resolving to linked Order.
  */
 router.post('/orders/:orderId/retry', async (req, res) => {
   try {
     const merchantId = req.merchant!.id;
     const { orderId } = req.params;
 
-    const order = await prisma.order.findFirst({
+    // Try direct Order lookup first
+    let order = await prisma.order.findFirst({
       where: { id: orderId, merchantId },
       include: { customerOrder: true },
     });
+
+    // If not found, check if orderId is a CustomerOrder ID (template-synced orders)
+    if (!order) {
+      const customerOrder = await prisma.customerOrder.findFirst({
+        where: { id: orderId, merchantId },
+        select: { orderId: true },
+      });
+      if (customerOrder?.orderId) {
+        order = await prisma.order.findFirst({
+          where: { id: customerOrder.orderId, merchantId },
+          include: { customerOrder: true },
+        });
+      }
+    }
 
     if (!order) {
       return res.status(404).json({
@@ -507,16 +541,30 @@ router.post('/orders/:orderId/retry', async (req, res) => {
 
 /**
  * POST /api/dashboard/orders/:orderId/sync
- * Sync eSIM profiles from provider for this order
+ * Sync eSIM profiles from provider for this order.
+ * Also handles CustomerOrder IDs by resolving to linked Order.
  */
 router.post('/orders/:orderId/sync', async (req, res) => {
   try {
     const merchantId = req.merchant!.id;
     const { orderId } = req.params;
 
-    const order = await prisma.order.findFirst({
+    let order = await prisma.order.findFirst({
       where: { id: orderId, merchantId },
     });
+
+    // Fallback: check if orderId is a CustomerOrder ID
+    if (!order) {
+      const customerOrder = await prisma.customerOrder.findFirst({
+        where: { id: orderId, merchantId },
+        select: { orderId: true },
+      });
+      if (customerOrder?.orderId) {
+        order = await prisma.order.findFirst({
+          where: { id: customerOrder.orderId, merchantId },
+        });
+      }
+    }
 
     if (!order?.esimAccessOrderNo) {
       return res.status(404).json({

@@ -123,7 +123,7 @@ Plan prices from the provider are in **1/10000 USD** units. Divide by 10000 to g
 ## Auth model (Voyage pattern)
 
 - **Frontend auth:** Clerk handles sign-in/sign-up (email, Google, Apple).
-- **Backend auth:** Does **not** validate Clerk JWTs. Protected routes require `x-user-email` header (the current user's email from Clerk session).
+- **Backend auth:** Protected routes require a valid Clerk JWT in the `Authorization: Bearer <token>` header. The backend verifies the JWT server-side using `@clerk/clerk-sdk-node`.
 - **Guests:** Can buy eSIMs without an account. A guest user row is created by email. After payment, a signed guest-access token (7 days) lets them view the order without logging in.
 - **Account linking:** When a guest signs up, all their guest orders are reassigned to their real user (via Clerk `user.created` webhook).
 

@@ -5,7 +5,7 @@ import { useUser } from '@clerk/nextjs';
 import { redirect, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { apiFetch, apiFetchBlob } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import type { EsimProfile } from '@/lib/types';
 import { formatVolume } from '@/lib/types';
 import { ExpiryCountdown } from '@/components/esim/expiry-countdown';
@@ -65,6 +65,7 @@ export default function EsimDetailPage({
 }) {
   const { iccid } = params;
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch, authFetchBlob, getToken } = useAuthFetch();
   const [profile, setProfile] = useState<EsimProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -77,7 +78,7 @@ export default function EsimDetailPage({
     const email = user?.primaryEmailAddress?.emailAddress;
     if (!email) return;
 
-    apiFetch<EsimProfile[]>('/user/esims', { userEmail: email })
+    authFetch<EsimProfile[]>('/user/esims')
       .then((profiles) => {
         const match = profiles.find(
           (p) => p.iccid?.toLowerCase() === iccid?.toLowerCase()
@@ -86,13 +87,13 @@ export default function EsimDetailPage({
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [iccid, isLoaded, isSignedIn, user]);
+  }, [iccid, isLoaded, isSignedIn, user, authFetch]);
 
   const fetchData = () => {
     const email = user?.primaryEmailAddress?.emailAddress;
     if (!email) return;
     setLoading(true);
-    apiFetch<EsimProfile[]>('/user/esims', { userEmail: email })
+    authFetch<EsimProfile[]>('/user/esims')
       .then((profiles) => {
         const match = profiles.find(
           (p) => p.iccid?.toLowerCase() === iccid?.toLowerCase()
@@ -132,7 +133,6 @@ export default function EsimDetailPage({
   const totalBytes = profile.totalVolume ? parseInt(profile.totalVolume, 10) : 0;
   const sizeGB = formatBytes(profile.totalVolume);
   const statusDisplay = getStatusDisplay(profile.esimStatus);
-  const userEmail = user?.primaryEmailAddress?.emailAddress;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">
@@ -192,7 +192,7 @@ export default function EsimDetailPage({
               iccid={profile.iccid}
               onExpired={fetchData}
               className="text-xl font-bold"
-              userEmail={userEmail}
+              getToken={getToken}
             />
           </div>
           <div className="rounded-xl border border-slate-200 bg-white p-5 text-center">
@@ -245,12 +245,9 @@ export default function EsimDetailPage({
             <Button
               variant="outline"
               onClick={async () => {
-                const email = user?.primaryEmailAddress?.emailAddress;
-                if (!email) return;
                 try {
-                  const blob = await apiFetchBlob(
-                    `/orders/${profile.orderId}/receipt`,
-                    { userEmail: email }
+                  const blob = await authFetchBlob(
+                    `/orders/${profile.orderId}/receipt`
                   );
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');

@@ -5,19 +5,20 @@ import Link from 'next/link';
 import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton, useUser } from '@clerk/nextjs';
 import { SearchDropdown } from '@/components/SearchDropdown';
 import { CurrencySelector } from '@/components/CurrencySelector';
-import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import { useStoreConfig } from '@/contexts/StoreConfigContext';
 
 function EsimCountBadge() {
   const { user } = useUser();
+  const { authFetch } = useAuthFetch();
   const [count, setCount] = useState<number | null>(null);
   useEffect(() => {
     const email = user?.primaryEmailAddress?.emailAddress;
     if (!email) return;
-    apiFetch<{ id: string }[]>('/user/esims', { userEmail: email })
+    authFetch<{ id: string }[]>('/user/esims')
       .then((arr) => setCount(arr.length))
       .catch(() => {});
-  }, [user?.primaryEmailAddress?.emailAddress]);
+  }, [user?.primaryEmailAddress?.emailAddress, authFetch]);
   if (count === null || count === 0) return null;
   return <span className="ml-1 rounded-full bg-violet-100 px-1.5 py-0.5 text-xs font-medium text-violet-700">{count}</span>;
 }

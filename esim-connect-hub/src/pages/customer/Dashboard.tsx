@@ -176,7 +176,12 @@ export default function CustomerDashboard() {
                       key={order.id}
                       whileHover={{ scale: 1.01 }}
                       className="border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => navigate(`/order-tracking?orderId=${order.id}`)}
+                      onClick={() => {
+                        const customerToken = localStorage.getItem('customer_token');
+                        navigate(`/order-tracking?orderId=${order.id}`, {
+                          state: { customerToken },
+                        });
+                      }}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">

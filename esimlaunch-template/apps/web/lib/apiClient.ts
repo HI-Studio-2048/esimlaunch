@@ -5,7 +5,7 @@
  *
  * - Reads NEXT_PUBLIC_API_BASE_URL from env.
  * - Attaches x-csrf-token on state-changing requests (POST/PUT/PATCH/DELETE).
- * - Attaches x-user-email when the caller supplies it.
+ * - Attaches Authorization: Bearer <token> when the caller supplies a token.
  * - Throws ApiError on non-2xx responses.
  */
 
@@ -22,6 +22,10 @@ export class ApiError extends Error {
   }
 }
 
+// NOTE: CSRF token is no longer validated by the backend (guard is a no-op).
+// Protection is provided by SameSite cookies + CORS + Clerk JWT auth.
+// This code is kept for backward compatibility but has no security effect.
+
 // Generate and cache a CSRF token per browser session
 let csrfToken: string | null = null;
 
@@ -37,9 +41,9 @@ function getCsrfToken(): string {
 
 export async function apiFetch<T = unknown>(
   path: string,
-  options: RequestInit & { userEmail?: string } = {},
+  options: RequestInit & { token?: string } = {},
 ): Promise<T> {
-  const { userEmail, ...fetchOptions } = options;
+  const { token, ...fetchOptions } = options;
   const method = (fetchOptions.method ?? 'GET').toUpperCase();
 
   const headers: Record<string, string> = {
@@ -52,9 +56,9 @@ export async function apiFetch<T = unknown>(
     headers['x-csrf-token'] = getCsrfToken();
   }
 
-  // Attach user email for authenticated requests
-  if (userEmail) {
-    headers['x-user-email'] = userEmail;
+  // Attach Bearer token for authenticated requests
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
 
   const res = await fetch(`${API_BASE}${path}`, {
@@ -79,13 +83,13 @@ export async function apiFetch<T = unknown>(
 /** Fetch binary (e.g. PDF) with auth. Returns blob. */
 export async function apiFetchBlob(
   path: string,
-  options: RequestInit & { userEmail?: string } = {},
+  options: RequestInit & { token?: string } = {},
 ): Promise<Blob> {
-  const { userEmail, ...fetchOptions } = options;
+  const { token, ...fetchOptions } = options;
   const headers: Record<string, string> = {
     ...(fetchOptions.headers as Record<string, string> | undefined),
   };
-  if (userEmail) headers['x-user-email'] = userEmail;
+  if (token) headers['Authorization'] = `Bearer ${token}`;
 
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
   const res = await fetch(`${API_BASE}${path}`, { ...fetchOptions, headers });

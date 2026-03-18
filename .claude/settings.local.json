@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(head -50 /c/Users/Ezza/esimlaunch/backend/src/routes/*.ts)",
+      "Bash(find /c/Users/Ezza/esimlaunch/esimlaunch-template -maxdepth 2 -type f -name *.json -o -name *.md)",
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(node -e \"const c = require\\(''''@clerk/clerk-sdk-node''''\\); const cl = c.createClerkClient\\({secretKey:''''test''''}\\); console.log\\(typeof cl, Object.keys\\(cl\\).slice\\(0,20\\)\\)\")",
+      "Bash(node -e \"const c = require\\(''''@clerk/clerk-sdk-node''''\\); console.log\\(''''ClerkClient'''' in c\\)\")",
+      "Bash(find /c/Users/Ezza/esimlaunch/esimlaunch-template/libs -type f -name *.ts -o -name *.tsx)"
+    ]
+  }
+}

@@ -367,9 +367,11 @@ export default function EmailTemplates() {
                 </div>
                 <div>
                   <Label>HTML Preview</Label>
-                  <div
-                    className="border rounded-lg p-4 bg-muted"
-                    dangerouslySetInnerHTML={{ __html: preview.htmlBody }}
+                  <iframe
+                    srcDoc={preview.htmlBody}
+                    sandbox=""
+                    title="Email Preview"
+                    className="w-full h-96 border rounded"
                   />
                 </div>
               </div>

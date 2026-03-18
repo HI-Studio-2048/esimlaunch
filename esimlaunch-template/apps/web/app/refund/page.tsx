@@ -1,16 +1,17 @@
-import type { Metadata } from 'next';
-import Link from 'next/link';
+'use client';
 
-export const metadata: Metadata = {
-  title: 'Refund Policy',
-  description: 'Our refund and cancellation policy for eSIM plans.',
-};
+import Link from 'next/link';
+import { useStoreConfig } from '@/contexts/StoreConfigContext';
 
 export default function RefundPage() {
+  const { templateSettings } = useStoreConfig();
+  const ts = templateSettings as { legalLastUpdated?: string } | undefined;
+  const lastUpdated = ts?.legalLastUpdated || 'March 2025';
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 sm:py-24">
       <h1 className="text-3xl font-bold text-slate-900">Refund Policy</h1>
-      <p className="mt-4 text-sm text-slate-500">Last updated: March 2025</p>
+      <p className="mt-4 text-sm text-slate-500">Last updated: {lastUpdated}</p>
 
       <section className="mt-12 space-y-6 text-slate-700">
         <h2 className="text-xl font-semibold text-slate-900">1. Before Activation</h2>

@@ -20,10 +20,11 @@ const Login = () => {
   const [rememberMe, setRememberMe] = useState(false);
   const [requires2FA, setRequires2FA] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [twoFactorToken, setTwoFactorToken] = useState<string | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { login, isLoading, error, isAuthenticated, clearError } = useAuth();
+  const { login, isLoading, error, isAuthenticated, clearError, setUser } = useAuth();
   const [oauthLoading, setOauthLoading] = useState(false);
   const { signIn, isLoaded: isClerkLoaded } = useSignIn();
 
@@ -46,7 +47,7 @@ const Login = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
-    
+
     try {
       // If 2FA is required, verify the code
       if (requires2FA) {
@@ -60,8 +61,12 @@ const Login = () => {
         }
 
         try {
-          await apiClient.verify2FALogin(twoFactorCode);
-          await login(email, password, rememberMe);
+          // Send 2FA code with the limited pre-auth token; backend returns full merchant + token
+          const verifyResult = await apiClient.verify2FALogin(twoFactorCode, twoFactorToken ?? undefined);
+          // verify2FALogin already sets the full JWT token internally
+          if (verifyResult.merchant) {
+            setUser(verifyResult.merchant);
+          }
           toast({ title: "Welcome back!", description: "You have successfully logged in." });
           const from = (location.state as any)?.from?.pathname;
           const target = from && from !== "/" && from !== "/login" ? from : await getPostAuthRedirectPath();
@@ -76,33 +81,21 @@ const Login = () => {
         return;
       }
 
-      // Regular login attempt - first try to login
-      try {
-        await login(email, password, rememberMe);
-        
-        // After successful login, check if 2FA is enabled
-        try {
-          const twoFAStatus = await apiClient.get2FAStatus();
-          if (twoFAStatus.enabled) {
-            // User has 2FA enabled, require verification
-            // Clear the token since we need 2FA verification
-            apiClient.setJwtToken(null);
-            localStorage.removeItem('jwt_token');
-            setRequires2FA(true);
-            return;
-          }
-        } catch (err) {
-          // If we can't check 2FA status, continue with normal login
-          console.warn('Could not check 2FA status:', err);
-        }
+      // Regular login attempt
+      const result = await login(email, password, rememberMe);
 
-        toast({ title: "Welcome back!", description: "You have successfully logged in." });
-        const from = (location.state as any)?.from?.pathname;
-        const target = from && from !== "/" && from !== "/login" ? from : await getPostAuthRedirectPath();
-        navigate(target, { replace: true });
-      } catch (err) {
-        throw err;
+      // Backend returns requires2FA when 2FA is enabled — don't authenticate yet
+      if (result?.requires2FA) {
+        setRequires2FA(true);
+        setTwoFactorToken(result.token); // Store limited-scope pre-2FA token
+        // Do NOT set user or navigate — wait for 2FA verification
+        return;
       }
+
+      toast({ title: "Welcome back!", description: "You have successfully logged in." });
+      const from = (location.state as any)?.from?.pathname;
+      const target = from && from !== "/" && from !== "/login" ? from : await getPostAuthRedirectPath();
+      navigate(target, { replace: true });
     } catch (err) {
       toast({
         title: "Login failed",

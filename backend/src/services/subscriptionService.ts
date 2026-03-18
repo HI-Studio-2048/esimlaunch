@@ -170,7 +170,7 @@ export const subscriptionService = {
     const subscription = await stripe.subscriptions.create({
       customer: stripeCustomerId,
       items: [{ price: priceId }],
-      trial_period_days: 14, // 14-day free trial
+      trial_period_days: 7, // 7-day free trial
       metadata: {
         merchantId,
         plan,

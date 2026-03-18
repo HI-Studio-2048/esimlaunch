@@ -1,10 +1,19 @@
 import express from 'express';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import { customerAuthService } from '../services/customerAuthService';
 import { customerOrderService } from '../services/customerOrderService';
 import { authenticateCustomer } from '../middleware/customerAuth';
 
 const router = express.Router();
+
+const customerAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,
+  message: { success: false, errorCode: 'RATE_LIMIT', errorMessage: 'Too many attempts. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // Validation schemas
 const registerSchema = z.object({
@@ -33,7 +42,7 @@ const changePasswordSchema = z.object({
  * POST /api/customers/register
  * Register a new customer
  */
-router.post('/register', async (req, res, next) => {
+router.post('/register', customerAuthLimiter, async (req, res, next) => {
   try {
     const data = registerSchema.parse(req.body);
     const result = await customerAuthService.register(data);
@@ -66,7 +75,7 @@ router.post('/register', async (req, res, next) => {
  * POST /api/customers/login
  * Customer login
  */
-router.post('/login', async (req, res, next) => {
+router.post('/login', customerAuthLimiter, async (req, res, next) => {
   try {
     const data = loginSchema.parse(req.body);
     const result = await customerAuthService.login(data);

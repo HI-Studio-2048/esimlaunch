@@ -18,7 +18,7 @@ import { OptionalClerkEmailGuard } from '../../common/guards/optional-clerk-emai
 export class SupportController {
   constructor(private readonly supportService: SupportService) {}
 
-  /** POST /support/tickets — create ticket (email from body for guests, or x-user-email for signed-in) */
+  /** POST /support/tickets — create ticket (email from body for guests, or Authorization Bearer token for signed-in) */
   @Post('tickets')
   async createTicket(
     @Body() body: { subject: string; body: string; email?: string },
@@ -34,31 +34,31 @@ export class SupportController {
     });
   }
 
-  /** GET /support/tickets — list user's tickets (requires x-user-email) */
+  /** GET /support/tickets — list user's tickets (requires Authorization Bearer token) */
   @Get('tickets')
   async listTickets(@Req() req: { userEmail?: string }) {
-    if (!req.userEmail) throw new UnauthorizedException('x-user-email header is required');
+    if (!req.userEmail) throw new UnauthorizedException('Authorization header is required');
     return this.supportService.listTickets(req.userEmail);
   }
 
-  /** GET /support/tickets/:id — get ticket with replies (requires x-user-email) */
+  /** GET /support/tickets/:id — get ticket with replies (requires Authorization Bearer token) */
   @Get('tickets/:id')
   async getTicket(
     @Param('id') id: string,
     @Req() req: { userEmail?: string; userId?: string },
   ) {
-    if (!req.userEmail && !req.userId) throw new UnauthorizedException('x-user-email header is required');
+    if (!req.userEmail && !req.userId) throw new UnauthorizedException('Authorization header is required');
     return this.supportService.getTicket(id, req.userEmail, req.userId);
   }
 
-  /** POST /support/tickets/:id/replies — add reply (requires x-user-email) */
+  /** POST /support/tickets/:id/replies — add reply (requires Authorization Bearer token) */
   @Post('tickets/:id/replies')
   async addReply(
     @Param('id') id: string,
     @Body() body: { body: string },
     @Req() req: { userEmail?: string; userId?: string },
   ) {
-    if (!req.userEmail && !req.userId) throw new UnauthorizedException('x-user-email header is required');
+    if (!req.userEmail && !req.userId) throw new UnauthorizedException('Authorization header is required');
     return this.supportService.addReply(id, body.body, req.userEmail, req.userId);
   }
 }

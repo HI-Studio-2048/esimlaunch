@@ -37,15 +37,22 @@ router.get('/transactions', async (req, res, next) => {
       prisma.balanceTransaction.count({ where: { merchantId } }),
     ]);
 
-    // Compute running balance (newest first): balance after each tx = running, then go backwards
+    // Compute running balance (newest first).
+    // Start at current balance, then walk backwards: undo each transaction's effect.
+    // Incoming (TOPUP, REFUND, ADJUSTMENT with +amount) added to balance, so to reverse we subtract.
+    // Outgoing (ORDER) subtracted from balance, so to reverse we add back.
     const currentBalanceCents = merchant?.balance ? Number(merchant.balance) : 0;
     let runningCents = currentBalanceCents;
     const transactionsWithBalance = transactions.map((tx) => {
       const amount = Number(tx.amount);
-      const isIncoming = tx.type === 'TOPUP' || tx.type === 'REFUND';
-      const effect = isIncoming ? amount : -amount;
+      // The balance shown is what it was AFTER this transaction
       const balanceAfterUsd = runningCents / 100;
-      runningCents -= effect;
+      // Undo this transaction to get what the balance was BEFORE it:
+      // TOPUP/REFUND increased the balance, so subtract to reverse
+      // ORDER decreased the balance (amount stored as negative or as positive with ORDER type)
+      const isIncoming = tx.type === 'TOPUP' || tx.type === 'REFUND' || tx.type === 'ADJUSTMENT';
+      // Balance transactions store amount as absolute value; sign is implied by type
+      runningCents -= isIncoming ? amount : -amount;
       return {
         id: tx.id,
         amount,

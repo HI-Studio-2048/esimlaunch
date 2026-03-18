@@ -4,6 +4,7 @@ import { env } from '../config/env';
 import { qrCodeService } from './qrCodeService';
 import { emailTemplateService } from './emailTemplateService';
 import { prisma } from '../lib/prisma';
+import { decryptSmtpPassword } from './authService';
 
 const resend = new Resend(env.resendApiKey);
 
@@ -36,11 +37,18 @@ async function sendEmail(params: {
   const { to, subject, html, merchantSmtp } = params;
 
   if (merchantSmtp?.smtpHost && merchantSmtp.smtpUser && merchantSmtp.smtpPass) {
+    let smtpPassword: string;
+    try {
+      smtpPassword = decryptSmtpPassword(merchantSmtp.smtpPass);
+    } catch {
+      // Fallback: treat as plaintext for backward compatibility with unencrypted passwords
+      smtpPassword = merchantSmtp.smtpPass;
+    }
     const transport = nodemailer.createTransport({
       host: merchantSmtp.smtpHost,
       port: merchantSmtp.smtpPort || 587,
       secure: (merchantSmtp.smtpPort || 587) === 465,
-      auth: { user: merchantSmtp.smtpUser, pass: merchantSmtp.smtpPass },
+      auth: { user: merchantSmtp.smtpUser, pass: smtpPassword },
     });
     const fromName = merchantSmtp.smtpFromName || 'eSIM Launch';
     const fromEmail = merchantSmtp.smtpFromEmail || merchantSmtp.smtpUser;
@@ -403,12 +411,13 @@ export const emailService = {
   },
 
   /**
-   * Resend eSIM delivery email
+   * Resend eSIM delivery email by re-triggering deliverESIMs via webhookService.
+   * This is a convenience wrapper — the actual send logic lives in deliverESIMs.
    */
   async resendESIMEmail(orderId: string): Promise<void> {
-    // This will be implemented to fetch order data and resend the email
-    // For now, it's a placeholder
-    throw new Error('Resend eSIM email not yet implemented');
+    // Import lazily to avoid circular dependency
+    const { webhookService } = await import('./webhookService');
+    await webhookService.deliverESIMs(orderId);
   },
 
   /**

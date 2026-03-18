@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 
 interface Ticket {
   id: string;
@@ -14,6 +14,7 @@ interface Ticket {
 
 export default function SupportTicketsPage() {
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch } = useAuthFetch();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -21,11 +22,11 @@ export default function SupportTicketsPage() {
     if (!isLoaded || !isSignedIn) return;
     const email = user?.primaryEmailAddress?.emailAddress;
     if (!email) return;
-    apiFetch<Ticket[]>('/support/tickets', { userEmail: email })
+    authFetch<Ticket[]>('/support/tickets')
       .then(setTickets)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [isLoaded, isSignedIn, user]);
+  }, [isLoaded, isSignedIn, user, authFetch]);
 
   if (!isLoaded) {
     return (

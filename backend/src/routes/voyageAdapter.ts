@@ -5,17 +5,27 @@
  * Mount at /api/voyage - set Voyage NEXT_PUBLIC_API_URL to <esimlaunch>/api/voyage
  */
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 import { esimAccessService } from '../services/esimAccessService';
 import { prisma } from '../lib/prisma';
+import { authenticateSessionOrApiKey } from '../middleware/auth';
 
 const router = express.Router();
+
+const publicApiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30, // 30 requests per minute per IP
+  message: { success: false, errorCode: 'RATE_LIMIT', errorMessage: 'Too many requests. Please wait.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * GET /api/voyage/countries
  * Returns location list (countries + regions) in Voyage shape.
  * Voyage expects array or { locationList: [...] } with { code, name, type }.
  */
-router.get('/countries', async (_req, res) => {
+router.get('/countries', publicApiLimiter, async (_req, res) => {
   try {
     const result = await esimAccessService.getRegions();
     if (!result.success || !result.obj) {
@@ -40,7 +50,7 @@ router.get('/countries', async (_req, res) => {
  * Returns package list for a country/region in Voyage plan shape.
  * Price is converted from 1/10000 USD to USD for display.
  */
-router.get('/countries/:code/plans', async (req, res) => {
+router.get('/countries/:code/plans', publicApiLimiter, async (req, res) => {
   try {
     const { code } = req.params;
     const result = await esimAccessService.getPackages({ locationCode: code, type: 'BASE' });
@@ -74,11 +84,11 @@ router.get('/countries/:code/plans', async (req, res) => {
  * Returns eSIM profile by ICCID for QR/display. Used by Voyage my-esims and QR image proxy.
  * Looks up in our EsimProfile table (any merchant) for testing.
  */
-router.get('/esim/:iccid', async (req, res) => {
+router.get('/esim/:iccid', authenticateSessionOrApiKey, async (req, res) => {
   try {
     const { iccid } = req.params;
     const profile = await prisma.esimProfile.findFirst({
-      where: { iccid: iccid || undefined },
+      where: { iccid: iccid || undefined, merchantId: req.merchant!.id },
       select: {
         id: true,
         esimTranNo: true,
@@ -114,7 +124,7 @@ router.get('/esim/:iccid', async (req, res) => {
  * GET /api/voyage/plans/:id
  * Single plan by packageCode or slug (Voyage plan detail page).
  */
-router.get('/plans/:id', async (req, res) => {
+router.get('/plans/:id', publicApiLimiter, async (req, res) => {
   try {
     const { id } = req.params;
     const result = await esimAccessService.getPackages({ type: 'BASE', packageCode: id, slug: id });
@@ -147,7 +157,7 @@ router.get('/plans/:id', async (req, res) => {
  * GET /api/voyage/search?q=...
  * Voyage global search - returns { countries, plans }.
  */
-router.get('/search', async (req, res) => {
+router.get('/search', publicApiLimiter, async (req, res) => {
   try {
     const q = (req.query.q as string)?.trim();
     if (!q || q.length < 2) {

@@ -1,15 +1,16 @@
-import type { Metadata } from 'next';
+'use client';
 
-export const metadata: Metadata = {
-  title: 'Terms of Service',
-  description: 'Terms of service for our eSIM platform.',
-};
+import { useStoreConfig } from '@/contexts/StoreConfigContext';
 
 export default function TermsPage() {
+  const { templateSettings, branding } = useStoreConfig();
+  const ts = templateSettings as { legalCompanyName?: string; legalLastUpdated?: string } | undefined;
+  const lastUpdated = ts?.legalLastUpdated || 'March 2025';
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-16 sm:py-24">
       <h1 className="text-3xl font-bold text-slate-900">Terms of Service</h1>
-      <p className="mt-4 text-sm text-slate-500">Last updated: March 2025</p>
+      <p className="mt-4 text-sm text-slate-500">Last updated: {lastUpdated}</p>
 
       <section className="mt-12 space-y-6 text-slate-700">
         <h2 className="text-xl font-semibold text-slate-900">1. Acceptance</h2>

@@ -109,6 +109,22 @@ class ClerkService {
   /**
    * Generate JWT token for Clerk-authenticated user
    */
+  /**
+   * Verify a Clerk session token and return the user ID.
+   * This proves the caller actually owns the Clerk session.
+   */
+  async verifySessionToken(sessionToken: string): Promise<string> {
+    try {
+      const session = await clerkClient.verifyToken(sessionToken);
+      if (!session?.sub) {
+        throw new Error('Invalid session token');
+      }
+      return session.sub; // This is the Clerk user ID
+    } catch (error) {
+      throw new Error('Invalid or expired Clerk session token');
+    }
+  }
+
   async generateTokenForClerkUser(clerkUserId: string) {
     const merchant = await prisma.merchant.findUnique({
       where: { clerkUserId },

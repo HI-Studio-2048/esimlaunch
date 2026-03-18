@@ -5,10 +5,12 @@ import { useUser } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 
 export default function NewTicketPage() {
   const router = useRouter();
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch } = useAuthFetch();
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [email, setEmail] = useState('');
@@ -26,14 +28,14 @@ export default function NewTicketPage() {
     setLoading(true);
     setError(null);
     try {
-      const ticket = await apiFetch<{ id: string }>('/support/tickets', {
+      const fetchFn = isSignedIn ? authFetch : apiFetch;
+      const ticket = await fetchFn<{ id: string }>('/support/tickets', {
         method: 'POST',
         body: JSON.stringify({
           subject: subject.trim(),
           body: body.trim(),
           ...(isSignedIn ? {} : { email: email.trim() }),
         }),
-        userEmail: isSignedIn ? userEmail : undefined,
       });
       router.push(`/support/tickets/${ticket.id}`);
     } catch (e: any) {

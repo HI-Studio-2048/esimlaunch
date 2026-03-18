@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
-import { 
-  Zap, Globe, Shield, Code2, Palette, Users, 
+import {
+  Zap, Globe, Shield, Code2, Palette, Users,
   Building2, Plane, UserCircle, Rocket, TrendingUp,
   ArrowRight, CheckCircle2, Star, ChevronRight,
   BarChart3, CreditCard, Settings, Package, Calculator
@@ -96,6 +96,61 @@ const stats = [
   { value: 99.9, suffix: "%", label: "Uptime" },
 ];
 
+function HeroVideo() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: 50 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.7, delay: 0.3 }}
+      className="relative lg:col-span-1 lg:scale-110 lg:origin-center"
+    >
+      {/* Glow effect behind the video */}
+      <div className="absolute -inset-4 rounded-[2rem] gradient-bg opacity-20 blur-2xl" />
+
+      <div className="relative">
+        <div className="relative bg-card rounded-3xl shadow-2xl border border-border/50 overflow-hidden">
+          {/* Browser-style header */}
+          <div className="bg-muted/50 px-4 py-3 flex items-center gap-2 border-b border-border/50">
+            <div className="flex gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-destructive/60" />
+              <div className="w-3 h-3 rounded-full bg-yellow-400/60" />
+              <div className="w-3 h-3 rounded-full bg-green-400/60" />
+            </div>
+            <div className="flex-1 mx-4 h-6 rounded-lg bg-muted flex items-center justify-center">
+              <span className="text-[10px] text-muted-foreground font-medium tracking-wide">
+                Watch How It Works
+              </span>
+            </div>
+          </div>
+
+          {/* Video with native controls */}
+          <video
+            className="w-full aspect-video object-cover"
+            src="/Final Final Esim Launch main page .mov"
+            controls
+            playsInline
+            preload="metadata"
+          />
+        </div>
+
+        {/* Floating badge — "See it in action" */}
+        <motion.div
+          className="absolute -top-3 -right-3 bg-card rounded-2xl shadow-lg px-4 py-2.5 border border-border/50 z-10"
+          animate={{ y: [0, -5, 0], rotate: [0, 2, 0] }}
+          transition={{ duration: 4, repeat: Infinity }}
+        >
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg gradient-bg flex items-center justify-center">
+              <Rocket className="w-4 h-4 text-primary-foreground" />
+            </div>
+            <div className="text-sm font-semibold">See it in action</div>
+          </div>
+        </motion.div>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function Index() {
   return (
     <div className="relative overflow-hidden">
@@ -136,7 +191,7 @@ export default function Index() {
 
               <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
                 Build Your
-                <span className="gradient-text"> eSIM Empire </span>
+                <span className="gradient-text"> Store </span>
                 Today
               </h1>
 
@@ -186,94 +241,39 @@ export default function Index() {
               </div>
             </motion.div>
 
-            {/* Hero Visual - Dashboard Mockup */}
-            <motion.div
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.7, delay: 0.3 }}
-              className="relative"
-            >
-              <div className="relative">
-                {/* Main Dashboard Card */}
-                <motion.div
-                  className="bg-card rounded-3xl shadow-2xl border border-border/50 overflow-hidden"
-                  animate={{ y: [0, -10, 0] }}
-                  transition={{ duration: 6, repeat: Infinity }}
-                >
-                  {/* Browser Header */}
-                  <div className="bg-muted/50 px-4 py-3 flex items-center gap-2 border-b border-border/50">
-                    <div className="flex gap-1.5">
-                      <div className="w-3 h-3 rounded-full bg-destructive/60" />
-                      <div className="w-3 h-3 rounded-full bg-yellow-400/60" />
-                      <div className="w-3 h-3 rounded-full bg-green-400/60" />
-                    </div>
-                    <div className="flex-1 mx-4 h-6 rounded-lg bg-muted" />
-                  </div>
-                  {/* Dashboard Content */}
-                  <div className="p-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold">Dashboard Overview</div>
-                      <div className="h-8 w-24 gradient-bg rounded-lg flex items-center justify-center text-xs text-primary-foreground font-medium">+ New Plan</div>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      {[
-                        { label: "Revenue", value: "$12,450" },
-                        { label: "Orders", value: "384" },
-                        { label: "Active Users", value: "1,247" },
-                      ].map((stat) => (
-                        <div key={stat.label} className="p-4 bg-muted/50 rounded-xl">
-                          <div className="text-xs text-muted-foreground mb-1">{stat.label}</div>
-                          <div className="text-sm font-bold">{stat.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="h-32 bg-muted/30 rounded-xl flex items-end p-4 gap-2">
-                      {[40, 65, 45, 80, 55, 70, 60, 85, 50, 75, 65, 90].map((h, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 gradient-bg rounded-t-sm opacity-80"
-                          style={{ height: `${h}%` }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </motion.div>
-
-                {/* Floating Elements */}
-                <motion.div
-                  className="absolute -top-4 -right-4 bg-card rounded-2xl shadow-lg p-4 border border-border/50"
-                  animate={{ y: [0, -5, 0], rotate: [0, 2, 0] }}
-                  transition={{ duration: 4, repeat: Infinity }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl gradient-bg flex items-center justify-center">
-                      <TrendingUp className="w-5 h-5 text-primary-foreground" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">Revenue</div>
-                      <div className="text-lg font-bold gradient-text">+24.5%</div>
-                    </div>
-                  </div>
-                </motion.div>
-
-                <motion.div
-                  className="absolute -bottom-4 -left-4 bg-card rounded-2xl shadow-lg p-4 border border-border/50"
-                  animate={{ y: [0, 5, 0], rotate: [0, -2, 0] }}
-                  transition={{ duration: 5, repeat: Infinity, delay: 1 }}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-                      <Globe className="w-5 h-5 text-accent" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium">Active Countries</div>
-                      <div className="text-lg font-bold">42</div>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-            </motion.div>
+            {/* Hero Visual - Tutorial Video */}
+            <HeroVideo />
           </div>
+        </div>
+      </section>
+
+      {/* ROI Calculator Section */}
+      <section id="roi-calculator" className="section-padding bg-muted/30 scroll-mt-24">
+        <div className="container-custom">
+          <div className="flex justify-center mb-6">
+            <Button variant="outline" size="lg" asChild>
+              <Link to="/current-prices">
+                View wholesale price list
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
+            </Button>
+          </div>
+
+          <SectionHeader
+            badge="ROI Calculator"
+            title="See your eSIM business potential"
+            description="Estimate your revenue, margins, and annual profit based on your wholesale cost, markup, and expected sales volume."
+          />
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.5 }}
+            className="mt-12"
+          >
+            <ROICalculator />
+          </motion.div>
         </div>
       </section>
 
@@ -397,36 +397,6 @@ export default function Index() {
               </Link>
             </Button>
           </div>
-        </div>
-      </section>
-
-      {/* ROI Calculator Section */}
-      <section id="roi-calculator" className="section-padding bg-muted/30 scroll-mt-24">
-        <div className="container-custom">
-          <div className="flex justify-center mb-6">
-            <Button variant="outline" size="lg" asChild>
-              <Link to="/roi-calculator">
-                View wholesale price list
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Link>
-            </Button>
-          </div>
-
-          <SectionHeader
-            badge="ROI Calculator"
-            title="See your eSIM business potential"
-            description="Estimate your revenue, margins, and annual profit based on your wholesale cost, markup, and expected sales volume."
-          />
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
-            className="mt-12"
-          >
-            <ROICalculator />
-          </motion.div>
         </div>
       </section>
 

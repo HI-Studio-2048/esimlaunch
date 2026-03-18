@@ -113,7 +113,7 @@ export default function Pricing() {
           <SectionHeader
             badge="Pricing"
             title="Simple, transparent pricing"
-            description="Choose the plan that fits your business. All plans include a 14-day free trial."
+            description="Choose the plan that fits your business. All plans include a 7-day free trial."
           />
           <p className="text-sm text-muted-foreground text-center mt-2 max-w-xl mx-auto">
             You won&apos;t be billed during your free trial—billing starts only after the trial ends.

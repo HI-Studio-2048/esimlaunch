@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Top-up Confirmed</title></head>
+<body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+  {{#if logoUrl}}<img src="{{logoUrl}}" alt="{{#if businessName}}{{businessName}}{{else}}Logo{{/if}}" style="max-height: 48px; margin-bottom: 16px;" />{{/if}}
+  {{#if businessName}}<p style="color: #666; font-size: 14px;">{{businessName}}</p>{{/if}}
+  <h2>Your Top-up is Confirmed!</h2>
+  <p>Your data top-up has been successfully applied to your eSIM.</p>
+  <p><strong>Plan:</strong> {{planCode}}</p>
+  <p><strong>ICCID:</strong> {{iccid}}</p>
+  {{#if amount}}<p><strong>Amount:</strong> {{amount}}</p>{{/if}}
+  <p>Your additional data is now available. You can check your updated balance in your account.</p>
+  {{#if myEsimsUrl}}
+  <p><a href="{{myEsimsUrl}}" style="display: inline-block; padding: 10px 20px; background: #6366f1; color: #fff; text-decoration: none; border-radius: 6px;">View My eSIMs</a></p>
+  {{/if}}
+  <p style="color: #999; font-size: 12px; margin-top: 24px;">If you have any questions, please contact our support team.</p>
+</body>
+</html>

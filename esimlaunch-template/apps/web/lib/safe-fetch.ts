@@ -1,14 +1,14 @@
 'use client';
 
 /**
- * Safe fetch wrapper that automatically handles errors and shows toast notifications.
- * Uses NEXT_PUBLIC_API_BASE_URL for relative paths. Supports full URLs for external calls.
+ * Safe fetch wrapper with automatic toast notifications on errors.
+ *
+ * Delegates to the central apiClient (apiFetch) for actual HTTP calls,
+ * then adds toast-based error reporting on top.
  */
 
 import { toast } from '@/components/ui/use-toast';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
-const CSRF_TOKEN_HEADER = 'x-csrf-token';
+import { apiFetch, ApiError } from '@/lib/apiClient';
 
 export class AppError extends Error {
   constructor(
@@ -26,127 +26,43 @@ interface SafeFetchOptions extends RequestInit {
   showToast?: boolean;
   errorMessage?: string;
   skipCsrf?: boolean;
-  userEmail?: string;
-}
-
-let csrfTokenCache: string | null = null;
-
-function getCsrfToken(): string {
-  if (csrfTokenCache) return csrfTokenCache;
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
-  csrfTokenCache = Array.from(array)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-  return csrfTokenCache;
-}
-
-function resolveUrl(url: string): string {
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
-  const path = url.startsWith('/') ? url : `/${url}`;
-  return `${API_BASE.replace(/\/$/, '')}${path}`;
+  token?: string;
 }
 
 export async function safeFetch<T = unknown>(
   url: string,
   options: SafeFetchOptions = {}
 ): Promise<T> {
-  const { showToast = true, errorMessage, skipCsrf = false, userEmail, ...fetchOptions } = options;
-  const fullUrl = resolveUrl(url);
-
-  const method = (fetchOptions.method ?? 'GET').toUpperCase();
-  const isStateChanging = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(method);
-  const isInternalApi =
-    fullUrl.includes(API_BASE) && !fullUrl.includes('/api/webhooks/');
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(fetchOptions.headers as Record<string, string> | undefined),
-  };
-
-  if (!skipCsrf && isStateChanging && isInternalApi) {
-    headers[CSRF_TOKEN_HEADER] = getCsrfToken();
-  }
-  if (userEmail) {
-    headers['x-user-email'] = userEmail;
-  }
+  const { showToast = true, errorMessage, skipCsrf: _skipCsrf, ...rest } = options;
 
   try {
-    const response = await fetch(fullUrl, { ...fetchOptions, headers });
-
-    const contentType = response.headers.get('content-type');
-    const isJson = contentType?.includes('application/json');
-
-    let data: unknown;
-    if (isJson) {
-      data = await response.json();
-    } else {
-      const text = await response.text();
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = { message: text || response.statusText || 'An error occurred' };
-      }
-    }
-
-    if (!response.ok) {
-      const dataObj = data as Record<string, unknown>;
-      const message =
-        (errorMessage as string) ||
-        (dataObj?.message as string) ||
-        (dataObj?.error as string) ||
-        `Request failed: ${response.statusText}`;
-      const errorCode =
-        (dataObj?.errorCode as string) ||
-        (dataObj?.code as string) ||
-        `ERR_${response.status}`;
-
-      const appError = new AppError(message, response.status, errorCode, data);
-
-      if (showToast) {
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: message,
-        });
-      }
-
-      throw appError;
-    }
-
-    return data as T;
+    return await apiFetch<T>(url, rest);
   } catch (error) {
-    if (error instanceof AppError) {
-      throw error;
+    let message: string;
+    let status = 0;
+    let code: string | undefined;
+
+    if (error instanceof ApiError) {
+      message = errorMessage ?? error.message;
+      status = error.status;
+      code = error.code;
+    } else if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      message = errorMessage ?? 'Network error. Please check your connection.';
+      code = 'NETWORK_ERROR';
+    } else {
+      message =
+        errorMessage ??
+        (error instanceof Error ? error.message : 'An unexpected error occurred');
+      code = 'UNKNOWN_ERROR';
     }
 
-    if (error instanceof TypeError && error.message === 'Failed to fetch') {
-      const message =
-        (errorMessage as string) || 'Network error. Please check your connection.';
-      const appError = new AppError(message, 0, 'NETWORK_ERROR', error);
-
-      if (showToast) {
-        toast({
-          variant: 'destructive',
-          title: 'Connection Error',
-          description: message,
-        });
-      }
-
-      throw appError;
-    }
-
-    const message =
-      (errorMessage as string) ||
-      (error instanceof Error ? error.message : 'An unexpected error occurred');
-    const appError = new AppError(message, 0, 'UNKNOWN_ERROR', error);
+    const appError = new AppError(message, status, code, error);
 
     if (showToast) {
+      const title = code === 'NETWORK_ERROR' ? 'Connection Error' : 'Error';
       toast({
         variant: 'destructive',
-        title: 'Error',
+        title,
         description: message,
       });
     }

@@ -17,7 +17,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
-  login: (email: string, password: string, rememberMe?: boolean) => Promise<void>;
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<{ merchant: any; token: string; requires2FA?: boolean }>;
   logout: () => void;
   register: (email: string, password: string, name?: string, serviceType?: 'EASY' | 'ADVANCED', referralCode?: string) => Promise<void>;
   refreshToken: () => Promise<void>;
@@ -88,12 +88,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const result = await apiClient.login(email, password);
+      // Don't set user or full auth if 2FA is required — token is limited-scope
+      if (result.requires2FA) {
+        return result;
+      }
       setUser(result.merchant);
       // Server sets httpOnly session cookie (DB). No localStorage — works on any device.
-      apiClient.setJwtToken(result.token); // in-memory fallback for legacy paths
+      // apiClient.login() already sets the JWT token for non-2FA logins
+      return result;
     } catch (err) {
-      const errorMessage = err instanceof ApiError 
-        ? err.message 
+      const errorMessage = err instanceof ApiError
+        ? err.message
         : 'Login failed. Please check your credentials.';
       setError(errorMessage);
       throw err;

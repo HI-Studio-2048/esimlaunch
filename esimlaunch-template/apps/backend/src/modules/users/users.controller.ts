@@ -2,9 +2,8 @@ import {
   Controller,
   Get,
   Post,
-  Body,
   UseGuards,
-  BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ClerkEmailGuard } from '../../common/guards/clerk-email.guard';
 import { CsrfGuard } from '../../common/guards/csrf.guard';
@@ -76,19 +75,22 @@ export class UsersController {
   @UseGuards(ClerkEmailGuard, CsrfGuard)
   async deleteAccount(
     @CurrentUserId() userId: string,
-    @Body() body: { clerkUserId: string },
   ) {
-    if (!body.clerkUserId) throw new BadRequestException('clerkUserId is required');
+    // Look up user and their Clerk ID from the database — never trust client input
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
 
-    // Delete in Clerk first
-    const clerkSecret = this.config.get<string>('CLERK_SECRET_KEY');
-    if (clerkSecret) {
-      try {
-        const clerk = createClerkClient({ secretKey: clerkSecret });
-        await clerk.users.deleteUser(body.clerkUserId);
-      } catch (e: any) {
-        // Log but continue with DB deletion
-        console.warn('Clerk delete failed:', e.message);
+    // Delete from Clerk if they have a Clerk ID
+    if (user.clerkId) {
+      const clerkSecret = this.config.get<string>('CLERK_SECRET_KEY');
+      if (clerkSecret) {
+        try {
+          const clerk = createClerkClient({ secretKey: clerkSecret });
+          await clerk.users.deleteUser(user.clerkId);
+        } catch (e: any) {
+          // Log but continue with DB deletion
+          console.warn('Clerk delete failed:', e.message);
+        }
       }
     }
 

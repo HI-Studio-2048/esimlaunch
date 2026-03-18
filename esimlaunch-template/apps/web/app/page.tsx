@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { apiFetch } from '@/lib/apiClient';
+import { useStoreConfig } from '@/contexts/StoreConfigContext';
 import type { Location } from '@/lib/types';
 import { getRegionForCountry } from '@/lib/regions';
 import { getCountryName } from '@/lib/country-slugs';
@@ -23,9 +24,29 @@ import {
  * Homepage — Browse locations.
  * Inspired by clean eSIM platform layouts: central hero search, uniform country cards, education section.
  */
+interface HeroSettings {
+  heroHeadline?: string;
+  heroSubheadline?: string;
+  faqs?: { question: string; answer: string }[];
+}
+
+const DEFAULT_FAQS = [
+  { question: 'What is an eSIM?', answer: 'An eSIM is a digital SIM that lets you connect to a cellular network without a physical SIM card. You install it by scanning a QR code or entering an activation code.' },
+  { question: 'Is my phone compatible with eSIM?', answer: 'Most newer iPhones (iPhone XS and later) and many Android phones (Google Pixel, Samsung Galaxy S20+) support eSIM.' },
+  { question: 'When do I get my eSIM?', answer: 'You receive your QR code and activation instructions by email immediately after payment. You can also find it in My eSIMs once signed in.' },
+  { question: 'Can I keep my regular SIM?', answer: 'Yes. eSIM works alongside your physical SIM. Your WhatsApp number stays the same. Use apps like WhatsApp or FaceTime for calls and messages.' },
+  { question: 'What if I don\'t use all my data?', answer: 'Unused data does not roll over. Use your data before the plan expires. Some plans support top-ups if you need more.' },
+  { question: 'What\'s your refund policy?', answer: 'Full refunds are available within 14 days if you haven\'t activated. After activation, refunds are generally not available.' },
+];
+
 export default function HomePage() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
+  const { templateSettings, isActive } = useStoreConfig();
+  const ts = templateSettings as HeroSettings | undefined;
+  const heroHeadline = ts?.heroHeadline || "Don't Get Stuck Offline Abroad!";
+  const heroSubheadline = ts?.heroSubheadline || 'Connect instantly with eSIM in 190+ countries. No SIM card, no hassle.';
+  const faqs = ts?.faqs?.length ? ts.faqs : DEFAULT_FAQS;
 
   useEffect(() => {
     apiFetch<Location[]>('/esim/locations')
@@ -45,11 +66,7 @@ export default function HomePage() {
       const nameB = b.name?.length > 3 ? b.name : getCountryName(b.code);
       return nameA.localeCompare(nameB);
     };
-    const isIsrael = (l: Location) =>
-      l.name.toLowerCase() === 'israel' || l.code.toUpperCase() === 'IL';
-    const rest = countries.filter((l) => !isIsrael(l)).sort(sortByName);
-    const israelList = countries.filter(isIsrael);
-    return [...rest, ...israelList];
+    return [...countries].sort(sortByName);
   }, [countries]);
 
   const countriesByRegion = useMemo(() => {
@@ -83,16 +100,23 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-white">
+      {/* Store deactivated banner */}
+      {!isActive && (
+        <div className="bg-red-600 px-4 py-3 text-center text-sm font-medium text-white">
+          This store is currently unavailable. Please check back later.
+        </div>
+      )}
+
       {/* Hero — central search, value badges */}
       <section className="relative overflow-hidden bg-[#4c1d95]">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_50%_0%,rgba(168,85,247,0.3),transparent)]" />
         <div className="relative mx-auto max-w-4xl px-4 pt-16 pb-20 sm:pt-24 sm:pb-28">
           <div className="text-center">
             <h1 className="text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-5xl">
-              Don&apos;t Get Stuck Offline Abroad!
+              {heroHeadline}
             </h1>
             <p className="mt-4 text-lg text-purple-200 sm:text-xl">
-              Connect instantly with eSIM in 190+ countries. No SIM card, no hassle.
+              {heroSubheadline}
             </p>
           </div>
 
@@ -195,7 +219,7 @@ export default function HomePage() {
             )}
           </section>
 
-          {/* FAQ */}
+          {/* FAQ — uses merchant-configured FAQs from templateSettings, with defaults */}
           <section className="border-b border-slate-200 bg-white py-16">
             <div className="mx-auto max-w-3xl px-4 lg:px-8">
               <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">
@@ -205,62 +229,16 @@ export default function HomePage() {
                 Quick answers about eSIMs and our service.
               </p>
               <Accordion type="single" collapsible className="mt-8">
-                <AccordionItem value="what-is-esim">
-                  <AccordionTrigger className="text-left">
-                    What is an eSIM?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    An eSIM is a digital SIM that lets you connect to a cellular network without a physical SIM card. You install it by scanning a QR code or entering an activation code.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="device-support">
-                  <AccordionTrigger className="text-left">
-                    Is my phone compatible with eSIM?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Most newer iPhones (iPhone XS and later) and many Android phones (Google Pixel, Samsung Galaxy S20+) support eSIM.{' '}
-                    <Link href="/support/device-check" className="text-violet-600 hover:underline">
-                      Check your device compatibility
-                    </Link>
-                    .
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="delivery">
-                  <AccordionTrigger className="text-left">
-                    When do I get my eSIM?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    You receive your QR code and activation instructions by email immediately after payment. You can also find it in My eSIMs once signed in.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="dual-sim">
-                  <AccordionTrigger className="text-left">
-                    Can I keep my regular SIM?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Yes. eSIM works alongside your physical SIM. Your WhatsApp number stays the same. Use apps like WhatsApp or FaceTime for calls and messages.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="unused-data">
-                  <AccordionTrigger className="text-left">
-                    What if I don&apos;t use all my data?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Unused data does not roll over. Use your data before the plan expires. Some plans support top-ups if you need more.
-                  </AccordionContent>
-                </AccordionItem>
-                <AccordionItem value="refunds">
-                  <AccordionTrigger className="text-left">
-                    What&apos;s your refund policy?
-                  </AccordionTrigger>
-                  <AccordionContent>
-                    Full refunds are available within 14 days if you haven&apos;t activated. After activation, refunds are generally not available. See our{' '}
-                    <Link href="/refund" className="text-violet-600 hover:underline">
-                      Refund Policy
-                    </Link>
-                    .
-                  </AccordionContent>
-                </AccordionItem>
+                {faqs.map((faq, i) => (
+                  <AccordionItem key={i} value={`faq-${i}`}>
+                    <AccordionTrigger className="text-left">
+                      {faq.question}
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      {faq.answer}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
               </Accordion>
             </div>
           </section>

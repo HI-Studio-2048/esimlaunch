@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { apiFetch, apiFetchBlob } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import { formatDisplayAmount } from '@/lib/types';
 
 interface OrderItem {
@@ -21,18 +21,17 @@ interface OrderItem {
 
 export default function OrderHistoryPage() {
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch, authFetchBlob } = useAuthFetch();
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.primaryEmailAddress?.emailAddress) return;
-    apiFetch<OrderItem[]>('/user/orders', {
-      userEmail: user.primaryEmailAddress.emailAddress,
-    })
+    authFetch<OrderItem[]>('/user/orders')
       .then(setOrders)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [user?.primaryEmailAddress?.emailAddress]);
+  }, [user?.primaryEmailAddress?.emailAddress, authFetch]);
 
   if (!isLoaded) {
     return (
@@ -126,7 +125,7 @@ export default function OrderHistoryPage() {
                         View
                       </Link>
                       <span className="text-slate-300">|</span>
-                      <ReceiptButton orderId={order.id} userEmail={user.primaryEmailAddress!.emailAddress} />
+                      <ReceiptButton orderId={order.id} authFetchBlob={authFetchBlob} />
                       {order.hasEsim && (
                         <>
                           <span className="text-slate-300">|</span>
@@ -150,12 +149,12 @@ export default function OrderHistoryPage() {
   );
 }
 
-function ReceiptButton({ orderId, userEmail }: { orderId: string; userEmail: string }) {
+function ReceiptButton({ orderId, authFetchBlob }: { orderId: string; authFetchBlob: (path: string, options?: RequestInit) => Promise<Blob> }) {
   const [loading, setLoading] = useState(false);
   const handleDownload = async () => {
     setLoading(true);
     try {
-      const blob = await apiFetchBlob(`/orders/${orderId}/receipt`, { userEmail });
+      const blob = await authFetchBlob(`/orders/${orderId}/receipt`);
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;

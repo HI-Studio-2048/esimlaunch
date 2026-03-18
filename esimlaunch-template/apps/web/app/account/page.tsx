@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useUser } from '@clerk/nextjs';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 
 interface OrderSummary {
   id: string;
@@ -16,6 +16,7 @@ interface OrderSummary {
 
 export default function AccountDashboardPage() {
   const { user, isLoaded, isSignedIn } = useUser();
+  const { authFetch } = useAuthFetch();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [esimCount, setEsimCount] = useState(0);
   const [balanceCents, setBalanceCents] = useState(0);
@@ -23,11 +24,10 @@ export default function AccountDashboardPage() {
 
   useEffect(() => {
     if (!user?.primaryEmailAddress?.emailAddress) return;
-    const email = user.primaryEmailAddress.emailAddress;
     Promise.all([
-      apiFetch<OrderSummary[]>('/user/orders', { userEmail: email }),
-      apiFetch<{ id: string }[]>('/user/esims', { userEmail: email }),
-      apiFetch<{ balanceCents: number }>('/vcash/balance', { userEmail: email }),
+      authFetch<OrderSummary[]>('/user/orders'),
+      authFetch<{ id: string }[]>('/user/esims'),
+      authFetch<{ balanceCents: number }>('/vcash/balance'),
     ])
       .then(([ords, esims, bal]) => {
         setOrders(ords);
@@ -36,7 +36,7 @@ export default function AccountDashboardPage() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [user?.primaryEmailAddress?.emailAddress]);
+  }, [user?.primaryEmailAddress?.emailAddress, authFetch]);
 
   if (!isLoaded) {
     return (

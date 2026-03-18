@@ -64,14 +64,18 @@ export class SupportService {
     description: string,
   ) {
     const baseUrl = this.config.get<string>('ESIMLAUNCH_HUB_API_URL');
+    const syncSecret = this.config.get<string>('TEMPLATE_ORDER_SYNC_SECRET');
     const config = await this.storeConfig.getConfig();
-    if (!baseUrl || !config?.storeId) {
+    if (!baseUrl || !syncSecret || !config?.storeId) {
       throw new BadRequestException('Store not linked');
     }
 
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/support/tickets`, {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/integration/support/tickets`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-template-sync-secret': syncSecret,
+      },
       body: JSON.stringify({
         storeId: config.storeId,
         customerEmail,

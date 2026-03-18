@@ -83,7 +83,7 @@ export default function Subscribe() {
       });
       toast({
         title: "Subscription Started",
-        description: "Your 14-day free trial has begun. You won't be charged until it ends.",
+        description: "Your 7-day free trial has begun. You won't be charged until it ends.",
       });
       navigate("/settings/billing", { replace: true });
     } catch (err: any) {
@@ -128,7 +128,7 @@ export default function Subscribe() {
             <div>
               <h1 className="text-2xl font-bold">Choose your plan</h1>
               <p className="text-muted-foreground text-sm">
-                Add or change your subscription. All paid plans include a 14-day free trial.
+                Add or change your subscription. All paid plans include a 7-day free trial.
               </p>
             </div>
           </div>
@@ -281,7 +281,7 @@ function PaidPlanForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold">
-        14-day free trial · No charges until it ends
+        7-day free trial · No charges until it ends
       </div>
 
       <div className="flex items-center justify-center gap-4">

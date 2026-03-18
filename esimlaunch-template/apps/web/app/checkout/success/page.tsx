@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useUser } from '@clerk/nextjs';
 import { apiFetch } from '@/lib/apiClient';
+import { useAuthFetch } from '@/hooks/useAuthFetch';
 import { CheckoutProgress } from '@/components/checkout/CheckoutProgress';
 import type { Order } from '@/lib/types';
 
@@ -12,34 +14,45 @@ import type { Order } from '@/lib/types';
  *
  * Reads session_id from URL, calls GET /api/orders/by-session/:sessionId,
  * and shows order status + CTA.
+ *
+ * Uses authFetch when signed in (attaches Clerk JWT) and bare apiFetch for guests.
+ * The by-session endpoint is accessible without auth (session ID acts as secret).
+ * The by-id endpoint allows pending orders without auth; paid orders need auth or guest token.
  */
 export default function SuccessPage() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get('session_id');
   const orderId = searchParams.get('orderId');
+  const { user } = useUser();
+  const { authFetch } = useAuthFetch();
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (orderId) {
-      apiFetch<Order>(`/orders/${orderId}`)
+    // Prefer by-session lookup (no auth needed, session ID is secret).
+    // Fall back to by-id with authFetch for signed-in users, bare apiFetch for guests.
+    if (sessionId) {
+      apiFetch<Order>(`/orders/by-session/${sessionId}`)
         .then(setOrder)
         .catch(() => setError('Could not load your order. Please check My eSIMs.'))
         .finally(() => setLoading(false));
       return;
     }
-    if (!sessionId) {
-      setError('No session ID found.');
-      setLoading(false);
+    if (orderId) {
+      const fetchOrder = user
+        ? authFetch<Order>(`/orders/${orderId}`)
+        : apiFetch<Order>(`/orders/${orderId}`);
+      fetchOrder
+        .then(setOrder)
+        .catch(() => setError('Could not load your order. Please check My eSIMs.'))
+        .finally(() => setLoading(false));
       return;
     }
-    apiFetch<Order>(`/orders/by-session/${sessionId}`)
-      .then(setOrder)
-      .catch(() => setError('Could not load your order. Please check My eSIMs.'))
-      .finally(() => setLoading(false));
-  }, [sessionId, orderId]);
+    setError('No session ID found.');
+    setLoading(false);
+  }, [sessionId, orderId, user]);
 
   if (loading) {
     return (

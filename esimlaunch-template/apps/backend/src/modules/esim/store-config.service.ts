@@ -5,6 +5,7 @@ import { LocationItem, PackageItem } from '@esimlaunch-template/sdk';
 /** Store config from main backend (esim-connect-hub). Used when STORE_ID or STORE_SUBDOMAIN is set. */
 export interface StoreConfig {
   storeId: string;
+  isActive: boolean;
   branding: {
     businessName?: string;
     primaryColor?: string;
@@ -84,7 +85,15 @@ export class StoreConfigService {
           `Store config fetch failed: ${res.status} ${res.statusText}. ` +
             (body?.slice(0, 200) || ''),
         );
-        if (this.cached) return this.cached.config; // stale fallback
+        // Store deactivated or not found — mark as inactive
+        if (res.status === 404) {
+          if (this.cached) {
+            this.cached.config.isActive = false;
+            return this.cached.config;
+          }
+          return null;
+        }
+        if (this.cached) return this.cached.config; // stale fallback for transient errors
         return null;
       }
       const json = (await res.json()) as { success?: boolean; data?: unknown };
@@ -98,6 +107,7 @@ export class StoreConfigService {
       const supportedCurrencies = data.supportedCurrencies as string[] | undefined;
       const config: StoreConfig = {
         storeId: String(data.storeId ?? ''),
+        isActive: true, // If backend returned data, store is accessible
         branding: (data.branding as StoreConfig['branding']) ?? {},
         supportedCurrencies: Array.isArray(supportedCurrencies) && supportedCurrencies.length > 0
           ? supportedCurrencies.filter((c): c is string => typeof c === 'string')
@@ -159,6 +169,13 @@ export class StoreConfigService {
       (p) => p.packageCode === packageCode || p.slug === packageCode
     );
     return pkg ?? null;
+  }
+
+  /** Check if the linked store is currently active. Returns true if not linked. */
+  async isStoreActive(): Promise<boolean> {
+    if (!this.isLinked()) return true;
+    const config = await this.getConfig();
+    return config?.isActive !== false;
   }
 
   /** Invalidate cache (e.g. for testing or forced refresh). */

@@ -203,14 +203,7 @@ const MainShell = () => {
                 <Route path="/customer/signup" element={<CustomerSignup />} />
                 <Route path="/support/create" element={<CreateSupportTicket />} />
                 <Route path="/support/tickets/:ticketId" element={<SupportTicket />} />
-                <Route 
-                  path="/customer/dashboard" 
-                  element={
-                    <ProtectedRoute>
-                      <CustomerDashboard />
-                    </ProtectedRoute>
-                  } 
-                />
+                <Route path="/customer/dashboard" element={<CustomerDashboard />} />
                 <Route path="/verify-email" element={<VerifyEmail />} />
                 <Route 
                   path="/2fa/setup" 
