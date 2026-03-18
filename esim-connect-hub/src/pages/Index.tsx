@@ -126,7 +126,7 @@ function HeroVideo() {
           {/* Video with native controls */}
           <video
             className="w-full aspect-video object-cover"
-            src="/Final Final Esim Launch main page .mov"
+            src="/Final Final Esim Launch main page .mp4"
             controls
             playsInline
             preload="metadata"
