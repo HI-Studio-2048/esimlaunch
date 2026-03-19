@@ -212,7 +212,7 @@ export default function Index() {
                   </Link>
                 </Button>
                 <Button variant="hero-outline" size="xl" asChild>
-                  <Link to="/demo-store">View Demo</Link>
+                  <Link to="/templates">View Templates</Link>
                 </Button>
                 <Button
                   variant="link"
