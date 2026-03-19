@@ -449,15 +449,7 @@ export default function Dashboard() {
           </motion.div>
         )}
 
-        {/* Live Globe View - real-time eSIM activity visualization */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="mb-8"
-        >
-          <LiveGlobeView />
-        </motion.div>
+
 
         {/* Setup Checklist */}
         {setupSteps.length > 0 && (
@@ -751,6 +743,11 @@ export default function Dashboard() {
             </div>
           </motion.div>
         )}
+
+        {/* Network Globe — collapsed by default, below stats/actions */}
+        <div className="mb-8">
+          <LiveGlobeView />
+        </div>
 
 {/* Recent Orders */}
         <motion.div
