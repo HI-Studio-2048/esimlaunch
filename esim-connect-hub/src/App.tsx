@@ -108,7 +108,6 @@ const isDashboardPath = (pathname: string) =>
   pathname.startsWith("/settings") ||
   pathname === "/package-selector" ||
   pathname === "/pricing-config" ||
-  pathname === "/templates" ||
   pathname === "/store-preview" ||
   pathname === "/admin" ||
   pathname.startsWith("/admin/") ||
@@ -134,6 +133,7 @@ const MainShell = () => {
             {/* All main app routes */}
                 <Route path="/" element={<Index />} />
                 <Route path="/pricing" element={<Pricing />} />
+                <Route path="/templates" element={<TemplateGallery />} />
                 <Route path="/features" element={<Features />} />
                 <Route 
                   path="/dashboard" 
@@ -201,7 +201,6 @@ const MainShell = () => {
                 <Route path="/order-tracking" element={<OrderTracking />} />
                 <Route path="/package-selector" element={<PackageSelector />} />
                 <Route path="/pricing-config" element={<PricingConfig />} />
-                <Route path="/templates" element={<TemplateGallery />} />
                 <Route path="/customer/login" element={<CustomerLogin />} />
                 <Route path="/customer/signup" element={<CustomerSignup />} />
                 <Route path="/support/create" element={<CreateSupportTicket />} />
