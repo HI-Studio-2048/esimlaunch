@@ -1,50 +1,88 @@
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import { STORE_TEMPLATES, type StoreTemplateOption } from "@/lib/storeTemplates";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, ArrowRight, Sparkles } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-const TEMPLATE_PREVIEWS: Record<string, { description: string; features: string[] }> = {
+const TEMPLATE_PREVIEWS: Record<string, { features: string[] }> = {
   default: {
-    description: 'The original eSIMLaunch template. Purple gradient hero, card-based destination grid, violet accents throughout. Reliable and familiar.',
-    features: ['Gradient hero section', 'Card-based country grid', 'Violet/purple accent system', 'Accordion FAQ section', 'Standard top navigation'],
+    features: ['Gradient hero', 'Card grid', 'Violet accents', 'FAQ accordion'],
   },
   minimal: {
-    description: 'Inspired by Revolut and Wise. Pure white backgrounds, teal accents, Inter font. Utility-class design system with compact country cards.',
-    features: ['White + teal (#00c9a7) color system', 'Inter font — fintech feel', 'Compact card rows with arrow navigation', 'Stats grid in hero', '"How it works" stepped section'],
+    features: ['Teal accents', 'Inter font', 'Compact cards', 'Stats grid'],
   },
   bold: {
-    description: 'Full dark mode. Deep navy backgrounds, electric blue + teal glow effects, glassmorphism cards. Mobile bottom nav bar for an app-like experience.',
-    features: ['Dark mode (#080b18 navy)', 'Electric blue (#4f7eff) + teal glow', 'Mobile bottom navigation bar', 'Animated radial glow orbs', 'Gradient text headline', 'DM Sans font'],
+    features: ['Full dark mode', 'Electric blue glow', 'Bottom nav', 'DM Sans'],
   },
   travel: {
-    description: 'Apple Store aesthetic. Warm gray (#f5f5f7) canvas, near-black CTAs, Geist font. Editorial typography, full-width section strips.',
-    features: ['Warm gray canvas background', 'Near-black (#1d1d1f) pill buttons', 'Geist font — geometric precision', 'Oversized display typography', 'Full-width alternating sections', 'Frosted glass navbar'],
+    features: ['Warm gray canvas', 'Black pill CTAs', 'Geist font', 'Editorial layout'],
   },
 };
 
 export default function TemplateGallery() {
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold mb-2">Store Templates</h1>
-        <p className="text-muted-foreground">
-          These are the 4 templates available for Easy Way stores. Each one is a completely unique design — different layout, typography, color system, and UX patterns.
-        </p>
-      </div>
+      {/* Hero */}
+      <section className="relative overflow-hidden border-b border-border/50">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
+        <div className="relative mx-auto max-w-5xl px-6 py-16 sm:py-20 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+          >
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-4 py-1.5 text-xs font-medium text-primary mb-6">
+              <Sparkles className="h-3.5 w-3.5" />
+              4 Unique Designs
+            </div>
+            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-4">
+              Store Templates
+            </h1>
+            <p className="text-muted-foreground max-w-2xl mx-auto text-base sm:text-lg leading-relaxed">
+              Each template is a completely unique design — different layout, typography, color system, and UX. Pick one during onboarding and we build your store with it.
+            </p>
+            <div className="mt-8 flex items-center justify-center gap-3">
+              <Button variant="gradient" size="lg" asChild>
+                <Link to="/onboarding" className="gap-2">
+                  Get Started <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      </section>
 
-      {/* Template cards */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {STORE_TEMPLATES.map((tpl, i) => (
-          <TemplateShowcase key={tpl.key} template={tpl} index={i} />
-        ))}
-      </div>
+      {/* Templates grid */}
+      <section className="mx-auto max-w-6xl px-6 py-12 sm:py-16">
+        <div className="grid gap-8 md:grid-cols-2">
+          {STORE_TEMPLATES.map((tpl, i) => (
+            <TemplateShowcase key={tpl.key} template={tpl} index={i} />
+          ))}
+        </div>
 
-      {/* Footer note */}
-      <div className="mt-8 rounded-xl border bg-muted/30 p-5">
-        <p className="text-sm text-muted-foreground">
-          <strong>How it works:</strong> When a merchant signs up for Easy Way, they choose a template and their brand colors during onboarding. Our team then clones the template, applies their branding, fills in their data, and deploys the store.
-        </p>
-      </div>
+        {/* CTA bottom */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="mt-12 text-center rounded-2xl border bg-card/50 p-8 sm:p-10"
+        >
+          <h2 className="text-xl font-semibold mb-2">Ready to launch?</h2>
+          <p className="text-sm text-muted-foreground max-w-md mx-auto mb-6">
+            Choose your template and brand colors during signup. Our team handles the rest — your store goes live within 1–2 business days.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Button variant="gradient" asChild>
+              <Link to="/onboarding" className="gap-2">
+                Create Your Store <ArrowRight className="h-4 w-4" />
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/pricing">View Pricing</Link>
+            </Button>
+          </div>
+        </motion.div>
+      </section>
     </div>
   );
 }
@@ -56,85 +94,91 @@ function TemplateShowcase({ template, index }: { template: StoreTemplateOption; 
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 24 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.1 }}
-      className="overflow-hidden rounded-xl border bg-card"
+      transition={{ delay: index * 0.1, duration: 0.4 }}
+      className="group overflow-hidden rounded-2xl border bg-card transition-all duration-300 hover:shadow-xl hover:shadow-primary/5 hover:border-primary/30"
     >
-      {/* Preview mockup */}
-      <div
-        className="relative h-48 px-6 pt-5 overflow-hidden"
-        style={{ background: ps.bg }}
-      >
-        {/* Simulated navbar */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="h-2.5 w-16 rounded-full" style={{ background: ps.accent, opacity: 0.8 }} />
-          <div className="flex gap-2">
+      {/* Preview mockup — browser chrome */}
+      <div className="relative overflow-hidden" style={{ background: ps.bg }}>
+        {/* Browser bar */}
+        <div className="flex items-center gap-1.5 px-4 py-2.5" style={{ background: ps.bg === '#080b18' ? '#0f1224' : 'rgba(0,0,0,0.04)' }}>
+          <div className="flex gap-1">
+            <div className="h-2 w-2 rounded-full" style={{ background: '#ff5f57' }} />
+            <div className="h-2 w-2 rounded-full" style={{ background: '#febc2e' }} />
+            <div className="h-2 w-2 rounded-full" style={{ background: '#28c840' }} />
+          </div>
+          <div
+            className="ml-3 h-4 flex-1 max-w-[200px] rounded-full"
+            style={{ background: ps.bg === '#080b18' ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)' }}
+          />
+        </div>
+
+        {/* Page content mockup */}
+        <div className="px-5 pb-5 pt-2 space-y-3">
+          {/* Nav */}
+          <div className="flex items-center justify-between">
+            <div className="h-2 w-12 rounded-full" style={{ background: ps.accent, opacity: 0.9 }} />
+            <div className="flex gap-3">
+              {[1, 2, 3].map(j => (
+                <div key={j} className="h-1.5 w-7 rounded-full" style={{ background: ps.text, opacity: 0.1 }} />
+              ))}
+            </div>
+          </div>
+
+          {/* Hero */}
+          <div className="pt-2 space-y-1.5">
+            <div className="h-4 w-[70%] rounded" style={{ background: ps.text, opacity: 0.6 }} />
+            <div className="h-2.5 w-[50%] rounded" style={{ background: ps.text, opacity: 0.18 }} />
+            <div className="pt-2">
+              <div className="h-5 w-16 rounded-full" style={{ background: ps.accent, opacity: 0.85 }} />
+            </div>
+          </div>
+
+          {/* Cards */}
+          <div className="flex gap-2 pt-1">
             {[1, 2, 3, 4].map(j => (
-              <div key={j} className="h-2 w-8 rounded-full" style={{ background: ps.text, opacity: 0.12 }} />
+              <div
+                key={j}
+                className="h-10 flex-1 rounded-md"
+                style={{
+                  background: ps.card,
+                  boxShadow: ps.bg === '#080b18'
+                    ? '0 1px 2px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.05)'
+                    : '0 1px 3px rgba(0,0,0,0.06)',
+                }}
+              />
             ))}
           </div>
-        </div>
 
-        {/* Simulated hero */}
-        <div className="space-y-2 mb-4">
-          <div className="h-5 w-3/4 rounded" style={{ background: ps.text, opacity: 0.65 }} />
-          <div className="h-3 w-1/2 rounded" style={{ background: ps.text, opacity: 0.2 }} />
-          <div className="mt-3 h-7 w-24 rounded-full" style={{ background: ps.accent, opacity: 0.9 }} />
-        </div>
-
-        {/* Simulated card grid */}
-        <div className="flex gap-3">
-          {[1, 2, 3, 4].map(j => (
-            <div
-              key={j}
-              className="h-14 flex-1 rounded-lg"
-              style={{
-                background: ps.card,
-                boxShadow: ps.bg === '#080b18'
-                  ? '0 1px 3px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)'
-                  : '0 1px 4px rgba(0,0,0,0.08)',
-              }}
-            />
-          ))}
+          {/* Second row */}
+          <div className="flex gap-2">
+            {[1, 2, 3, 4].map(j => (
+              <div
+                key={j}
+                className="h-10 flex-1 rounded-md"
+                style={{
+                  background: ps.card,
+                  boxShadow: ps.bg === '#080b18'
+                    ? '0 1px 2px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.05)'
+                    : '0 1px 3px rgba(0,0,0,0.06)',
+                }}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Info */}
+      {/* Info section */}
       <div className="p-5">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center">
-            <Icon className="h-4.5 w-4.5 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold">{template.name}</h3>
-            <span className="text-xs text-muted-foreground">{template.tagline}</span>
-          </div>
-        </div>
-
-        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
-          {preview?.description}
-        </p>
-
-        {preview?.features && (
-          <div className="flex flex-wrap gap-1.5">
-            {preview.features.map(f => (
-              <span key={f} className="inline-flex rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                {f}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Color swatches + preview link */}
-        <div className="mt-4 pt-4 border-t flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-muted-foreground">Colors:</span>
-            <div className="flex gap-1.5">
-              <div className="h-5 w-5 rounded-full border border-border" style={{ background: ps.bg }} title="Background" />
-              <div className="h-5 w-5 rounded-full border border-border" style={{ background: ps.accent }} title="Accent" />
-              <div className="h-5 w-5 rounded-full border border-border" style={{ background: ps.text }} title="Text" />
-              <div className="h-5 w-5 rounded-full border border-border" style={{ background: ps.card }} title="Card" />
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Icon className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-sm">{template.name}</h3>
+              <span className="text-[11px] text-muted-foreground">{template.tagline}</span>
             </div>
           </div>
           {template.previewUrl && (
@@ -142,12 +186,32 @@ function TemplateShowcase({ template, index }: { template: StoreTemplateOption; 
               href={template.previewUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+              className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/10 transition-colors"
             >
               <ExternalLink className="h-3 w-3" />
               Live Preview
             </a>
           )}
+        </div>
+
+        <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+          {template.description}
+        </p>
+
+        {/* Feature pills + color swatches inline */}
+        <div className="flex items-center justify-between">
+          <div className="flex flex-wrap gap-1">
+            {preview?.features.map(f => (
+              <span key={f} className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {f}
+              </span>
+            ))}
+          </div>
+          <div className="flex gap-1 ml-3 flex-shrink-0">
+            <div className="h-4 w-4 rounded-full border border-border" style={{ background: ps.bg }} />
+            <div className="h-4 w-4 rounded-full border border-border" style={{ background: ps.accent }} />
+            <div className="h-4 w-4 rounded-full border border-border" style={{ background: ps.text }} />
+          </div>
         </div>
       </div>
     </motion.div>
