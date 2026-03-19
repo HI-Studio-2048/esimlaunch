@@ -53,7 +53,7 @@ const EASY_NAV: NavItem[] = [
   { label: "Packages",    icon: Package,         path: "/package-selector" },
   { label: "Buy eSIMs",   icon: Package,         path: "/dashboard/packages" },
   { label: "Pricing",     icon: DollarSign,      path: "/pricing-config" },
-  { label: "Demo Store",  icon: Store,           path: "/demo-store" },
+  { label: "Templates",   icon: Store,           path: "/templates" },
 ];
 
 const EASY_SECTIONS: NavSection[] = [
@@ -84,7 +84,7 @@ const EASY_SECTIONS: NavSection[] = [
       { label: "Affiliates",  icon: Handshake,       path: "/dashboard/affiliates" },
       { label: "Packages",    icon: Package,         path: "/package-selector" },
       { label: "Buy eSIMs",   icon: Package,         path: "/dashboard/packages" },
-      { label: "Demo Store",  icon: Store,           path: "/demo-store" },
+      { label: "Templates",   icon: Store,           path: "/templates" },
     ],
   },
 ];
@@ -148,7 +148,7 @@ function isActive(pathname: string, path: string): boolean {
   if (path === "/settings")  return pathname === "/settings";
   if (path === "/admin") return pathname === "/admin" || pathname.startsWith("/admin/");
   // Exact match for settings sub-pages and standalone pages
-  if (path.startsWith("/settings/") || path === "/package-selector" || path === "/pricing-config" || path === "/demo-store") {
+  if (path.startsWith("/settings/") || path === "/package-selector" || path === "/pricing-config" || path === "/templates") {
     return pathname === path;
   }
   return pathname.startsWith(path);

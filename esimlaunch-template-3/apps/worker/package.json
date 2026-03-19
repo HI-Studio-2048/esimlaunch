@@ -1,0 +1,21 @@
+{
+  "name": "@esimlaunch-template/worker",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@esimlaunch-template/sdk": "*",
+    "@prisma/client": "^5.19.1",
+    "bullmq": "^5.13.2",
+    "ioredis": "^5.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.5",
+    "prisma": "^5.19.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}

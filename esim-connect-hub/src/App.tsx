@@ -82,6 +82,7 @@ import AdminMerchants from "@/pages/AdminMerchants";
 import AdminMerchantDetail from "@/pages/AdminMerchantDetail";
 import AdminStoreDetail from "@/pages/AdminStoreDetail";
 import BlogPost from "./pages/BlogPost";
+import TemplateGallery from "./pages/TemplateGallery";
 import NotFound from "./pages/NotFound";
 import DemoStoreHome from "./pages/demo-store/DemoStoreHome";
 import DemoStoreDestinations from "./pages/demo-store/DemoStoreDestinations";
@@ -107,6 +108,7 @@ const isDashboardPath = (pathname: string) =>
   pathname.startsWith("/settings") ||
   pathname === "/package-selector" ||
   pathname === "/pricing-config" ||
+  pathname === "/templates" ||
   pathname === "/store-preview" ||
   pathname === "/admin" ||
   pathname.startsWith("/admin/") ||
@@ -199,6 +201,7 @@ const MainShell = () => {
                 <Route path="/order-tracking" element={<OrderTracking />} />
                 <Route path="/package-selector" element={<PackageSelector />} />
                 <Route path="/pricing-config" element={<PricingConfig />} />
+                <Route path="/templates" element={<TemplateGallery />} />
                 <Route path="/customer/login" element={<CustomerLogin />} />
                 <Route path="/customer/signup" element={<CustomerSignup />} />
                 <Route path="/support/create" element={<CreateSupportTicket />} />

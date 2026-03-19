@@ -33,13 +33,17 @@ import {
   Sparkles,
   Code2,
 } from "lucide-react";
+import { TemplatePicker, ColorPicker } from "@/components/store/TemplatePicker";
+import { COLOR_PRESETS, STORE_TEMPLATES, type ColorPreset } from "@/lib/storeTemplates";
+import type { TemplateKey } from "@/hooks/usePublicStore";
 
 // Steps for Easy Way (done-for-you store)
 const easyWaySteps = [
   { id: 0, name: "Service Type", icon: Sparkles },
   { id: 1, name: "Business Info", icon: User },
-  { id: 2, name: "Choose Plan", icon: CreditCard },
-  { id: 3, name: "All Set!", icon: Rocket },
+  { id: 2, name: "Design", icon: Palette },
+  { id: 3, name: "Choose Plan", icon: CreditCard },
+  { id: 4, name: "All Set!", icon: Rocket },
 ];
 
 // Steps for Advanced (just service type selection)
@@ -86,6 +90,15 @@ const Onboarding = () => {
 
   const [serviceType, setServiceType] = useState<'EASY' | 'ADVANCED' | null>(null);
 
+  // Design step state
+  const [selectedTemplate, setSelectedTemplate] = useState<TemplateKey | null>('default');
+  const [selectedColorPreset, setSelectedColorPreset] = useState<ColorPreset | null>(COLOR_PRESETS[0]);
+  const [customColors, setCustomColors] = useState({
+    primary: COLOR_PRESETS[0].primary,
+    secondary: COLOR_PRESETS[0].secondary,
+    accent: COLOR_PRESETS[0].accent,
+  });
+
   // Load current service type from user
   useEffect(() => {
     if (user?.serviceType) {
@@ -129,7 +142,7 @@ const Onboarding = () => {
       }
     }
     
-    if (currentStep < 2) {
+    if (currentStep < 3) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -159,12 +172,12 @@ const Onboarding = () => {
         name: profile.businessName || "My Store",
         businessName: profile.businessName,
         subdomain: subdomain || undefined,
-        primaryColor: "#6366f1",
-        secondaryColor: "#8b5cf6",
-        accentColor: "#22c55e",
+        primaryColor: customColors.primary,
+        secondaryColor: customColors.secondary,
+        accentColor: customColors.accent,
         selectedPackages: [],
         pricingMarkup: {},
-        templateKey: "default" as "bold" | "default" | "minimal" | "travel",
+        templateKey: (selectedTemplate || "default") as "bold" | "default" | "minimal" | "travel",
       };
 
       // Create Stripe subscription for the selected plan
@@ -193,14 +206,14 @@ const Onboarding = () => {
       // Save basic config to context
       setConfig({
         businessName: profile.businessName || "Your eSIM Store",
-        primaryColor: "#6366f1",
-        secondaryColor: "#8b5cf6",
-        accentColor: "#22c55e",
+        primaryColor: customColors.primary,
+        secondaryColor: customColors.secondary,
+        accentColor: customColors.accent,
         logo: null,
       });
 
       setIsLoading(false);
-      setCurrentStep(3); // Go to confirmation step
+      setCurrentStep(4); // Go to confirmation step
     } catch (error: any) {
       setIsLoading(false);
       const errorMessage = error?.message || error?.errorMessage || "Failed to submit. Please try again.";
@@ -229,9 +242,20 @@ const Onboarding = () => {
       case 1:
         return <ProfileStep profile={profile} setProfile={setProfile} />;
       case 2:
-        return <PaymentStep payment={payment} setPayment={setPayment} isLoading={isLoading} setIsLoading={setIsLoading} />;
+        return (
+          <DesignStep
+            selectedTemplate={selectedTemplate}
+            setSelectedTemplate={setSelectedTemplate}
+            selectedColorPreset={selectedColorPreset}
+            setSelectedColorPreset={setSelectedColorPreset}
+            customColors={customColors}
+            setCustomColors={setCustomColors}
+          />
+        );
       case 3:
-        return <ConfirmationStep businessName={profile.businessName} />;
+        return <PaymentStep payment={payment} setPayment={setPayment} isLoading={isLoading} setIsLoading={setIsLoading} />;
+      case 4:
+        return <ConfirmationStep businessName={profile.businessName} selectedTemplate={selectedTemplate} />;
       default:
         return null;
     }
@@ -269,7 +293,7 @@ const Onboarding = () => {
                 animate={{
                   width: serviceType === 'ADVANCED'
                     ? "100%"
-                    : `${(Math.min(currentStep, 2) / 2) * 100}%`
+                    : `${(Math.min(currentStep, 3) / 3) * 100}%`
                 }}
                 transition={{ duration: 0.3 }}
               />
@@ -338,15 +362,15 @@ const Onboarding = () => {
           <Button
             variant="outline"
             onClick={handleBack}
-            disabled={currentStep === 0 || currentStep === 3}
-            className={cn("gap-2", currentStep === 3 && "invisible")}
+            disabled={currentStep === 0 || currentStep === 4}
+            className={cn("gap-2", currentStep === 4 && "invisible")}
           >
             <ArrowLeft className="w-4 h-4" />
             Back
           </Button>
 
-          {/* Skip button - only on Easy Way steps 1 and 2 */}
-          {serviceType === "EASY" && currentStep >= 1 && currentStep <= 2 && (
+          {/* Skip button - only on Easy Way steps 1-3 */}
+          {serviceType === "EASY" && currentStep >= 1 && currentStep <= 3 && (
             <Button
               variant="ghost"
               onClick={handleSkip}
@@ -356,7 +380,7 @@ const Onboarding = () => {
             </Button>
           )}
 
-          {currentStep < 2 ? (
+          {currentStep < 3 ? (
             <Button
               variant="gradient"
               onClick={handleNext}
@@ -385,7 +409,7 @@ const Onboarding = () => {
                 </>
               )}
             </Button>
-          ) : currentStep === 2 ? (
+          ) : currentStep === 3 ? (
             <Button
               variant="gradient"
               onClick={handleLaunch}
@@ -406,7 +430,7 @@ const Onboarding = () => {
               )}
             </Button>
           ) : (
-            // Step 3: confirmation — "Go to Dashboard" button
+            // Step 4: confirmation — "Go to Dashboard" button
             <Button
               variant="gradient"
               onClick={() => navigate("/dashboard")}
@@ -1249,8 +1273,52 @@ const LaunchStep = ({
   </div>
 );
 
-// Step 3: Confirmation — shown after request submitted
-const ConfirmationStep = ({ businessName }: { businessName: string }) => (
+// Step 2: Design — template + color selection
+const DesignStep = ({
+  selectedTemplate,
+  setSelectedTemplate,
+  selectedColorPreset,
+  setSelectedColorPreset,
+  customColors,
+  setCustomColors,
+}: {
+  selectedTemplate: TemplateKey | null;
+  setSelectedTemplate: (key: TemplateKey) => void;
+  selectedColorPreset: ColorPreset | null;
+  setSelectedColorPreset: (preset: ColorPreset | null) => void;
+  customColors: { primary: string; secondary: string; accent: string };
+  setCustomColors: React.Dispatch<React.SetStateAction<{ primary: string; secondary: string; accent: string }>>;
+}) => (
+  <div className="space-y-8">
+    <TemplatePicker
+      value={selectedTemplate}
+      onChange={setSelectedTemplate}
+      showScheduleCall={false}
+    />
+
+    <div className="border-t pt-6">
+      <ColorPicker
+        selectedPreset={selectedColorPreset}
+        customPrimary={customColors.primary}
+        customSecondary={customColors.secondary}
+        customAccent={customColors.accent}
+        onPresetSelect={(preset) => {
+          setSelectedColorPreset(preset);
+          setCustomColors({ primary: preset.primary, secondary: preset.secondary, accent: preset.accent });
+        }}
+        onCustomChange={(field, value) => {
+          setSelectedColorPreset(null);
+          setCustomColors((prev) => ({ ...prev, [field]: value }));
+        }}
+      />
+    </div>
+  </div>
+);
+
+// Step 4: Confirmation — shown after request submitted
+const ConfirmationStep = ({ businessName, selectedTemplate }: { businessName: string; selectedTemplate: TemplateKey | null }) => {
+  const templateName = STORE_TEMPLATES.find(t => t.key === selectedTemplate)?.name ?? 'Classic';
+  return (
   <div className="space-y-6 text-center">
     <div className="flex flex-col items-center gap-4">
       <div className="w-20 h-20 rounded-full gradient-bg flex items-center justify-center">
@@ -1259,7 +1327,7 @@ const ConfirmationStep = ({ businessName }: { businessName: string }) => (
       <div>
         <h2 className="text-2xl font-bold mb-2">Request submitted!</h2>
         <p className="text-muted-foreground max-w-md mx-auto">
-          Thanks{businessName ? `, ${businessName}` : ""}! Our team has received your request and will start building your eSIM store. We'll reach out via email within <strong>1–2 business days</strong> to confirm your brand details and provide your store link.
+          Thanks{businessName ? `, ${businessName}` : ""}! Our team has received your request and will build your store using the <strong>{templateName}</strong> template with your chosen colors. We'll reach out via email within <strong>1–2 business days</strong> to confirm details and provide your store link.
         </p>
       </div>
     </div>
@@ -1308,5 +1376,6 @@ const ConfirmationStep = ({ businessName }: { businessName: string }) => (
     </div>
   </div>
 );
+};
 
 export default Onboarding;
