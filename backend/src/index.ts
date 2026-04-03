@@ -7,8 +7,26 @@ const app = express();
 // Trust first proxy (Railway, Vercel, etc.) so req.ip returns the real client IP
 app.set('trust proxy', 1);
 
+/** CORS allowlist: CORS_ORIGIN + FRONTEND_URL + https apex/www for ALLOWED_BASE_DOMAIN (fixes www vs non-www). */
+function buildAllowedCorsOrigins(): string[] {
+  const set = new Set<string>(
+    env.corsOrigin
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+  );
+  const fe = env.frontendUrl?.trim();
+  if (fe) set.add(fe);
+  const base = env.allowedBaseDomain.replace(/^www\./i, '').trim();
+  if (base) {
+    set.add(`https://${base}`);
+    set.add(`https://www.${base}`);
+  }
+  return [...set];
+}
+
 // Middleware
-const allowedOrigins = env.corsOrigin.split(',').map(o => o.trim());
+const allowedOrigins = buildAllowedCorsOrigins();
 
 app.use(cors({
   origin: (origin, callback) => {
