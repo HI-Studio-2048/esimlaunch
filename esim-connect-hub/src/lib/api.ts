@@ -27,10 +27,17 @@ class ApiError extends Error {
   }
 }
 
+type ClerkSyncResponse = {
+  merchant: any & { referralStatus?: 'tracked' | 'invalid' | 'self' | null };
+  token: string;
+};
+
 class ApiClient {
   private baseURL: string;
   private apiKey: string | null = null;
   private jwtToken: string | null = null;
+  /** Coalesces concurrent clerk-sync calls (e.g. Signup + ClerkAuthSync) to avoid duplicate merchant creates. */
+  private clerkSyncInFlight = new Map<string, Promise<ClerkSyncResponse>>();
 
   constructor(baseURL: string = API_BASE_URL) {
     this.baseURL = baseURL;
@@ -297,26 +304,40 @@ class ApiClient {
   }
 
   async clerkSync(sessionToken: string, referralCode?: string) {
-    try {
-      const result = await this.request<{ merchant: any & { referralStatus?: 'tracked' | 'invalid' | 'self' | null }; token: string }>('/api/auth/clerk-sync', {
-        method: 'POST',
-        body: JSON.stringify(referralCode ? { sessionToken, referralCode } : { sessionToken }),
-      });
-      // Store token immediately after sync
-      if (result.token) {
-        this.setJwtToken(result.token);
-      }
-      return result;
-    } catch (error: any) {
-      console.error('clerkSync API error:', {
-        error,
-        message: error?.message,
-        errorCode: error?.errorCode,
-        status: error?.status,
-        sessionToken: sessionToken.substring(0, 20) + '...',
-      });
-      throw error;
+    const ref = referralCode ?? '';
+    const dedupeKey = `${sessionToken}\u0001${ref}`;
+
+    const existing = this.clerkSyncInFlight.get(dedupeKey);
+    if (existing) {
+      return existing;
     }
+
+    const promise = (async (): Promise<ClerkSyncResponse> => {
+      try {
+        const result = await this.request<ClerkSyncResponse>('/api/auth/clerk-sync', {
+          method: 'POST',
+          body: JSON.stringify(ref ? { sessionToken, referralCode: ref } : { sessionToken }),
+        });
+        if (result.token) {
+          this.setJwtToken(result.token);
+        }
+        return result;
+      } catch (error: any) {
+        console.error('clerkSync API error:', {
+          error,
+          message: error?.message,
+          errorCode: error?.errorCode,
+          status: error?.status,
+          sessionToken: sessionToken.substring(0, 20) + '...',
+        });
+        throw error;
+      } finally {
+        this.clerkSyncInFlight.delete(dedupeKey);
+      }
+    })();
+
+    this.clerkSyncInFlight.set(dedupeKey, promise);
+    return promise;
   }
 
   async verifyEmail(token: string) {

@@ -1,9 +1,37 @@
 import { clerkClient } from '@clerk/clerk-sdk-node';
+import { Prisma } from '@prisma/client';
 import { env } from '../config/env';
 import { prisma } from '../lib/prisma';
 import { authService } from './authService';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+
+const MERCHANT_SYNC_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  serviceType: true,
+  isActive: true,
+  createdAt: true,
+} as const;
+
+function normalizeMerchantEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+/** Match legacy rows whose email differs only by case from Clerk’s value. */
+async function findMerchantByEmailFlexible(normalizedEmail: string) {
+  const exact = await prisma.merchant.findUnique({
+    where: { email: normalizedEmail },
+  });
+  if (exact) return exact;
+  return prisma.merchant.findFirst({
+    where: {
+      email: { equals: normalizedEmail, mode: 'insensitive' },
+    },
+  });
+}
 
 class ClerkService {
   /**
@@ -12,6 +40,11 @@ class ClerkService {
    * it's ignored for existing merchants (login, re-sync, email relinking).
    */
   async syncClerkUser(clerkUserId: string, email: string, name?: string, referralCode?: string) {
+    const normalizedEmail = normalizeMerchantEmail(email);
+    if (!normalizedEmail) {
+      throw new Error('Clerk user has no valid email');
+    }
+
     // Check if merchant already exists with this Clerk ID
     let merchant = await prisma.merchant.findUnique({
       where: { clerkUserId },
@@ -22,40 +55,31 @@ class ClerkService {
       return prisma.merchant.update({
         where: { id: merchant.id },
         data: {
-          email,
+          email: normalizedEmail,
           name: name || merchant.name,
         },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          serviceType: true,
-          isActive: true,
-          createdAt: true,
-        },
+        select: MERCHANT_SYNC_SELECT,
       });
     }
 
-    // Check if merchant exists with this email
-    merchant = await prisma.merchant.findUnique({
-      where: { email },
-    });
+    // Check if merchant exists with this email (exact + case-insensitive)
+    merchant = await findMerchantByEmailFlexible(normalizedEmail);
 
     if (merchant) {
-      // Link Clerk ID to existing merchant
+      if (merchant.clerkUserId && merchant.clerkUserId !== clerkUserId) {
+        throw new Error(
+          'This email is already registered to another account. Sign in with your existing method or use a different email.'
+        );
+      }
+      // Link Clerk ID to existing merchant (or refresh same user)
       return prisma.merchant.update({
         where: { id: merchant.id },
-        data: { clerkUserId },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          serviceType: true,
-          isActive: true,
-          createdAt: true,
+        data: {
+          clerkUserId,
+          email: normalizedEmail,
+          name: name || merchant.name,
         },
+        select: MERCHANT_SYNC_SELECT,
       });
     }
 
@@ -64,24 +88,43 @@ class ClerkService {
     const randomPassword = crypto.randomBytes(32).toString('hex');
     const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
-    const created = await prisma.merchant.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        clerkUserId,
-        serviceType: 'ADVANCED',
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        serviceType: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
+    let created;
+    try {
+      created = await prisma.merchant.create({
+        data: {
+          email: normalizedEmail,
+          password: hashedPassword,
+          name,
+          clerkUserId,
+          serviceType: 'ADVANCED',
+        },
+        select: MERCHANT_SYNC_SELECT,
+      });
+    } catch (err) {
+      // Webhook + /clerk-sync (or double client calls) can race; Prisma then hits @unique(email).
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const existing =
+          (await prisma.merchant.findUnique({ where: { clerkUserId } })) ??
+          (await findMerchantByEmailFlexible(normalizedEmail));
+        if (existing) {
+          if (existing.clerkUserId && existing.clerkUserId !== clerkUserId) {
+            throw new Error(
+              'This email is already registered to another account. Sign in with your existing method or use a different email.'
+            );
+          }
+          return prisma.merchant.update({
+            where: { id: existing.id },
+            data: {
+              clerkUserId,
+              email: normalizedEmail,
+              name: name || existing.name,
+            },
+            select: MERCHANT_SYNC_SELECT,
+          });
+        }
+      }
+      throw err;
+    }
 
     // Apply referral tracking for new merchants only. Failure here must not
     // break signup — just log and surface the reason via referralStatus.
