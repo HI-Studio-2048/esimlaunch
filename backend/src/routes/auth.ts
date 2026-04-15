@@ -65,12 +65,16 @@ router.post('/register', authLimiter, async (req, res, next) => {
     const data = registerSchema.parse(req.body);
     const result = await authService.register(data);
     // Track referral if provided
+    let referralStatus: 'tracked' | 'invalid' | 'self' | null = null;
     if (data.referralCode) {
       try {
         const { affiliateService } = await import('../services/affiliateService');
         await affiliateService.trackReferral(result.merchant.id, data.referralCode);
-      } catch (refErr) {
-        console.warn('Referral tracking failed:', refErr);
+        referralStatus = 'tracked';
+      } catch (refErr: any) {
+        const msg = String(refErr?.message || '');
+        referralStatus = msg.includes('Self-referral') ? 'self' : 'invalid';
+        console.warn('Referral tracking failed:', msg);
       }
     }
     // Notify admin of new merchant signup (fire-and-forget)
@@ -97,7 +101,7 @@ router.post('/register', authLimiter, async (req, res, next) => {
     setSessionCookie(res, session.token);
     res.json({
       success: true,
-      data: result,
+      data: { ...result, referralStatus },
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -419,6 +423,7 @@ router.delete('/account', authenticateSessionOrJWT, async (req, res, next) => {
  */
 const clerkSyncSchema = z.object({
   sessionToken: z.string().min(1, 'Clerk session token is required'),
+  referralCode: z.string().min(1).max(32).optional(),
 });
 
 router.post('/clerk-sync', async (req, res, next) => {
@@ -429,7 +434,7 @@ router.post('/clerk-sync', async (req, res, next) => {
     // Verify the session token to get the real Clerk user ID
     const clerkUserId = await clerkService.verifySessionToken(data.sessionToken);
 
-    const merchant = await clerkService.getOrCreateMerchantFromClerk(clerkUserId);
+    const merchant = await clerkService.getOrCreateMerchantFromClerk(clerkUserId, data.referralCode);
     const token = authService.generateToken(merchant.id);
     
     // Create DB session and set cookie (same as login — no localStorage)

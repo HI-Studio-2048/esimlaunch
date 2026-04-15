@@ -19,7 +19,7 @@ interface AuthContextType {
   error: string | null;
   login: (email: string, password: string, rememberMe?: boolean) => Promise<{ merchant: any; token: string; requires2FA?: boolean }>;
   logout: () => void;
-  register: (email: string, password: string, name?: string, serviceType?: 'EASY' | 'ADVANCED', referralCode?: string) => Promise<void>;
+  register: (email: string, password: string, name?: string, serviceType?: 'EASY' | 'ADVANCED', referralCode?: string) => Promise<any>;
   refreshToken: () => Promise<void>;
   clearError: () => void;
   setUser: (user: User | null) => void; // Expose setUser for ClerkAuthSync
@@ -121,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(result.merchant);
       // Server sets httpOnly session cookie (DB). No localStorage.
       apiClient.setJwtToken(result.token);
+      return result;
     } catch (err) {
       const errorMessage = err instanceof ApiError 
         ? err.message 

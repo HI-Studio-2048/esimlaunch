@@ -97,11 +97,14 @@ export default function AffiliateDashboard() {
   const handleRequestPayout = async () => {
     setIsRequestingPayout(true);
     try {
-      await apiClient.requestAffiliatePayout();
-      toast({ title: "Payout Requested", description: "Your payout request has been submitted." });
+      const result: any = await apiClient.requestAffiliatePayout();
+      toast({
+        title: "Commissions credited",
+        description: result?.message || "Your pending commissions have been added to your account balance.",
+      });
       await loadAffiliateData();
     } catch (err: any) {
-      toast({ title: "Error", description: err?.message || "Failed to request payout", variant: "destructive" });
+      toast({ title: "Error", description: err?.message || "Failed to credit commissions", variant: "destructive" });
     } finally {
       setIsRequestingPayout(false);
     }
@@ -121,7 +124,7 @@ export default function AffiliateDashboard() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Affiliate Program</h1>
           <p className="text-muted-foreground">
-            Earn commissions by referring merchants and customers
+            Earn {stats?.commissionRate ?? 10}% on every eSIM sold by merchants you refer. Commissions are credited to your account balance.
           </p>
         </div>
 
@@ -196,25 +199,34 @@ export default function AffiliateDashboard() {
         </div>
 
         {/* Payout Button */}
-        {stats && stats.pendingCommissions > 0 && (
-          <div className="mb-6">
-            <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between">
-              <div>
-                <p className="font-semibold text-amber-900 dark:text-amber-300">You have pending commissions</p>
-                <p className="text-sm text-amber-700 dark:text-amber-400">
-                  {stats.pendingCommissions} commission{stats.pendingCommissions !== 1 ? 's' : ''} are ready for payout
-                </p>
+        {stats && stats.pendingCommissions > 0 && (() => {
+          const pendingAmount = commissions
+            .filter((c: any) => c.status === 'pending')
+            .reduce((sum: number, c: any) => sum + c.amount, 0);
+          const minPayout = (stats.minPayoutCents ?? 1000) / 100;
+          const belowMin = pendingAmount < minPayout;
+          return (
+            <div className="mb-6">
+              <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-amber-900 dark:text-amber-300">You have pending commissions</p>
+                  <p className="text-sm text-amber-700 dark:text-amber-400">
+                    ${pendingAmount.toFixed(2)} across {stats.pendingCommissions} commission{stats.pendingCommissions !== 1 ? 's' : ''}.
+                    {' '}Minimum to credit: ${minPayout.toFixed(2)}.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleRequestPayout}
+                  disabled={isRequestingPayout || belowMin}
+                  className="shrink-0"
+                  title={belowMin ? `Need $${minPayout.toFixed(2)} minimum` : undefined}
+                >
+                  {isRequestingPayout ? "Processing..." : "Credit to Balance"}
+                </Button>
               </div>
-              <Button
-                onClick={handleRequestPayout}
-                disabled={isRequestingPayout}
-                className="shrink-0"
-              >
-                {isRequestingPayout ? "Requesting..." : "Request Payout"}
-              </Button>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Stats */}
         {stats && (
@@ -293,7 +305,9 @@ export default function AffiliateDashboard() {
                         {new Date(commission.createdAt).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        {commission.referredMerchant ? 'Merchant Referral' : 'Order Commission'}
+                        {commission.referredMerchant
+                          ? `Referred merchant sale${commission.referredMerchant.email ? ` — ${commission.referredMerchant.email}` : ''}`
+                          : 'Order commission'}
                       </TableCell>
                       <TableCell>
                         ${commission.amount.toFixed(2)} {commission.currency}

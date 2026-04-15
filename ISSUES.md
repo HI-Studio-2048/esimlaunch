@@ -310,6 +310,27 @@
 
 ---
 
+## Round 9 Review — Affiliate Program Audit
+
+### Critical
+
+| # | Status | Issue | File | Details |
+|---|--------|-------|------|---------|
+| 143 | [x] | Referral code silently dropped in Clerk signup path — affiliate program non-functional in production | `esim-connect-hub/src/pages/Signup.tsx`, `backend/src/routes/auth.ts`, `backend/src/services/clerkService.ts`, `esim-connect-hub/src/components/ClerkAuthSync.tsx`, `esim-connect-hub/src/lib/api.ts` | Fixed: Signup page now persists `?ref=CODE` to sessionStorage (survives Clerk email-verification + OAuth redirect). `clerkSync()` API client accepts optional `referralCode`. Backend `clerkSyncSchema` extended with `referralCode` (optional, 1–32 chars). `getOrCreateMerchantFromClerk` + `syncClerkUser` forward the code; referral is applied only when a brand-new merchant is created (ignored on existing-account relink/login), with invalid-code and self-referral guards. ClerkAuthSync.tsx also reads sessionStorage to cover OAuth round-trip. Both codebases typecheck clean. |
+
+### Important
+
+| # | Status | Issue | File | Details |
+|---|--------|-------|------|---------|
+| 144 | [x] | Invalid referral code at signup fails silently without user feedback | `backend/src/routes/auth.ts`, `backend/src/services/clerkService.ts`, `esim-connect-hub/src/pages/Signup.tsx`, `esim-connect-hub/src/components/ClerkAuthSync.tsx`, `esim-connect-hub/src/contexts/AuthContext.tsx`, `esim-connect-hub/src/lib/api.ts` | Fixed: Both signup paths (`/register` and `/clerk-sync`) now return `referralStatus: 'tracked' \| 'invalid' \| 'self' \| null`. Signup.tsx and ClerkAuthSync.tsx surface it as a toast ("Referral applied" / "Referral code not recognized" / "Self-referral blocked"). AuthContext `register()` now returns the result so the non-Clerk path can inspect it. |
+| 145 | [x] | Commission rate hardcoded at 10% — no admin configurability | `backend/src/services/customerOrderService.ts`, `backend/src/config/env.ts`, `backend/src/routes/affiliates.ts`, `esim-connect-hub/src/pages/AffiliateDashboard.tsx` | Fixed: Introduced `AFFILIATE_COMMISSION_RATE` env var (default 10, validated 0–100). `customerOrderService` reads from `env.affiliateCommissionRate`. `/api/affiliates/stats` now exposes the current rate so the dashboard description shows the live value. |
+| 146 | [x] | No minimum payout threshold | `backend/src/routes/affiliates.ts`, `backend/src/config/env.ts`, `esim-connect-hub/src/pages/AffiliateDashboard.tsx` | Fixed: Introduced `AFFILIATE_MIN_PAYOUT_CENTS` env var (default 1000 = $10). Payout endpoint returns `BELOW_MIN_PAYOUT` error if below threshold, including the min and the pending amount in the response. Dashboard shows threshold and disables button when below. |
+| 147 | [-] | Payout credits internal balance only — no real withdrawal path | `backend/src/routes/affiliates.ts` | Won't fix now: Real bank/Stripe Connect payout is a feature that requires Stripe Connect account onboarding, payout scheduling, tax-form collection (1099), and product decisions. Current behavior is internal-balance credit, which merchants can then spend on eSIM purchases. UI copy updated ("Credit to Balance" instead of "Request Payout") to set accurate expectations. |
+| 148 | [x] | Self-referral not prevented | `backend/src/services/affiliateService.ts`, `backend/src/services/clerkService.ts` | Fixed: `affiliateService.trackReferral` now throws "Self-referral is not allowed" when affiliate.id === referredMerchantId. `clerkService` already had the check from Issue #143 fix. Both paths now symmetric — legacy `/register` returns `referralStatus: 'self'`, Clerk path the same. |
+| 149 | [-] | Customer-driven affiliate commissions unimplemented despite schema support | `backend/src/services/customerOrderService.ts`, `esim-connect-hub/src/pages/AffiliateDashboard.tsx` | Won't fix now: Customer-referral attribution requires checkout-flow changes (per-store referral codes, cookie attribution window, customer-side reward choice — credits vs discount vs payout), a product decision that's out of scope. Misleading UI copy removed — dashboard now clearly states "Earn X% on every eSIM sold by merchants you refer" (merchant-referral only). Commission history shows referred merchant email for clarity. |
+
+---
+
 ## Review Log
 
 | Date | Reviewer | Scope | Notes |
@@ -335,6 +356,8 @@
 | 2026-03-18 | Claude | Round 8 deep correctness & edge case audit | 8 new issues (125-132). Focus: balance calculation, null safety, webhook dedup, state machine, store lifecycle, affiliate payout, exchange rates. |
 | 2026-03-18 | Claude | Round 8 fixes (Issues 125-132) | All 8 fixed. Backend compiles clean. |
 | 2026-03-18 | Claude | Template production readiness audit (Issues 133-142) | Compared template against production Voyage site. 10 issues found: 9 fixed (dedup, chargebacks, email logging, rate limiting, indexes, topup verification, topup email, topup commission, TopUp schema). 1 open: Stripe webhook event registration per deployment. Template backend TypeScript compiles clean. |
+| 2026-04-15 | Claude | Round 9 — Affiliate program audit (Issues 143-149) | Found critical bug: `?ref=CODE` referral links silently dropped in production Clerk signup path. Fixed #143: full wiring of referralCode through Signup → clerkSync → backend → clerkService (new-merchant-only application, invalid/self-referral guards). Backend + frontend TypeScript compile clean. Issues #144-#149 logged as open (invalid-code UX, hardcoded 10%, no min payout, internal-balance-only payout, no self-referral guard on legacy path, unimplemented customer commissions). |
+| 2026-04-15 | Claude | Round 9 fixes (Issues 144-149) | 5 fixed, 2 won't-fix-now. #144 (referral feedback toasts for tracked/invalid/self), #145 (AFFILIATE_COMMISSION_RATE env), #146 (AFFILIATE_MIN_PAYOUT_CENTS env + UI enforcement), #148 (self-referral guard in legacy trackReferral). #147 (Stripe Connect payout) + #149 (customer-driven commissions) documented as feature-requests; UI copy clarified to set accurate expectations. Backend + frontend typecheck clean. |
 
 ---
 

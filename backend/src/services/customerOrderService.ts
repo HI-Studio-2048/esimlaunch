@@ -260,7 +260,7 @@ export const customerOrderService = {
               referredMerchantId: merchantId,
               customerOrderId: customerOrder.id,
               amount: totalAmount,
-              commissionRate: 10,
+              commissionRate: env.affiliateCommissionRate,
             });
           }
         } catch (commissionError) {

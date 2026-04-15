@@ -195,7 +195,7 @@ class ApiClient {
 
   // Authentication endpoints
   async register(email: string, password: string, name?: string, serviceType?: 'EASY' | 'ADVANCED', referralCode?: string) {
-    return this.request<{ merchant: any; token: string }>('/api/auth/register', {
+    return this.request<{ merchant: any; token: string; referralStatus?: 'tracked' | 'invalid' | 'self' | null }>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify({ email, password, name, serviceType, referralCode }),
     });
@@ -296,11 +296,11 @@ class ApiClient {
     });
   }
 
-  async clerkSync(sessionToken: string) {
+  async clerkSync(sessionToken: string, referralCode?: string) {
     try {
-      const result = await this.request<{ merchant: any; token: string }>('/api/auth/clerk-sync', {
+      const result = await this.request<{ merchant: any & { referralStatus?: 'tracked' | 'invalid' | 'self' | null }; token: string }>('/api/auth/clerk-sync', {
         method: 'POST',
-        body: JSON.stringify({ sessionToken }),
+        body: JSON.stringify(referralCode ? { sessionToken, referralCode } : { sessionToken }),
       });
       // Store token immediately after sync
       if (result.token) {

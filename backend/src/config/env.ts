@@ -33,6 +33,8 @@ interface EnvConfig {
   mainDomain: string;
   allowedBaseDomain: string;
   adminEmail: string;
+  affiliateCommissionRate: number;
+  affiliateMinPayoutCents: number;
 }
 
 function getEnvVar(key: string, defaultValue?: string): string {
@@ -74,6 +76,14 @@ export const env: EnvConfig = {
   mainDomain: getEnvVar('MAIN_DOMAIN', 'esimlaunch.com'),
   allowedBaseDomain: getEnvVar('ALLOWED_BASE_DOMAIN', 'esimlaunch.com'),
   adminEmail: getEnvVar('ADMIN_EMAIL', 'admin@esimlaunch.com'),
+  affiliateCommissionRate: (() => {
+    const raw = parseFloat(getEnvVar('AFFILIATE_COMMISSION_RATE', '10'));
+    return Number.isFinite(raw) && raw >= 0 && raw <= 100 ? raw : 10;
+  })(),
+  affiliateMinPayoutCents: (() => {
+    const raw = parseInt(getEnvVar('AFFILIATE_MIN_PAYOUT_CENTS', '1000'), 10);
+    return Number.isFinite(raw) && raw >= 0 ? raw : 1000;
+  })(),
 };
 
 // Warn on startup if critical secrets are missing in production

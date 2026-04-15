@@ -7,9 +7,11 @@ import crypto from 'crypto';
 
 class ClerkService {
   /**
-   * Sync Clerk user to merchant account
+   * Sync Clerk user to merchant account.
+   * `referralCode` is only applied when a brand-new merchant is created —
+   * it's ignored for existing merchants (login, re-sync, email relinking).
    */
-  async syncClerkUser(clerkUserId: string, email: string, name?: string) {
+  async syncClerkUser(clerkUserId: string, email: string, name?: string, referralCode?: string) {
     // Check if merchant already exists with this Clerk ID
     let merchant = await prisma.merchant.findUnique({
       where: { clerkUserId },
@@ -62,7 +64,7 @@ class ClerkService {
     const randomPassword = crypto.randomBytes(32).toString('hex');
     const hashedPassword = await bcrypt.hash(randomPassword, 10);
 
-    return prisma.merchant.create({
+    const created = await prisma.merchant.create({
       data: {
         email,
         password: hashedPassword,
@@ -80,16 +82,48 @@ class ClerkService {
         createdAt: true,
       },
     });
+
+    // Apply referral tracking for new merchants only. Failure here must not
+    // break signup — just log and surface the reason via referralStatus.
+    let referralStatus: 'tracked' | 'invalid' | 'self' | null = null;
+    if (referralCode) {
+      try {
+        const affiliate = await prisma.merchant.findUnique({
+          where: { referralCode },
+          select: { id: true },
+        });
+        if (!affiliate) {
+          referralStatus = 'invalid';
+          console.warn(`Clerk signup: invalid referral code "${referralCode}" — ignored`);
+        } else if (affiliate.id === created.id) {
+          referralStatus = 'self';
+          console.warn(`Clerk signup: self-referral attempt by merchant ${created.id} — ignored`);
+        } else {
+          await prisma.merchant.update({
+            where: { id: created.id },
+            data: { referredBy: affiliate.id },
+          });
+          referralStatus = 'tracked';
+        }
+      } catch (refErr) {
+        referralStatus = 'invalid';
+        console.warn('Clerk signup: referral tracking failed:', refErr);
+      }
+    }
+
+    return Object.assign(created, { referralStatus });
   }
 
   /**
-   * Get or create merchant from Clerk user
+   * Get or create merchant from Clerk user.
+   * `referralCode` forwards to syncClerkUser — only applied if a new merchant
+   * is created. Ignored on login or existing-account relink.
    */
-  async getOrCreateMerchantFromClerk(clerkUserId: string) {
+  async getOrCreateMerchantFromClerk(clerkUserId: string, referralCode?: string) {
     try {
       // Get user from Clerk
       const clerkUser = await clerkClient.users.getUser(clerkUserId);
-      
+
       const email = clerkUser.emailAddresses[0]?.emailAddress;
       if (!email) {
         throw new Error('Clerk user has no email');
@@ -99,7 +133,7 @@ class ClerkService {
         ? `${clerkUser.firstName} ${clerkUser.lastName}`
         : clerkUser.firstName || clerkUser.lastName || undefined;
 
-      return this.syncClerkUser(clerkUserId, email, name);
+      return this.syncClerkUser(clerkUserId, email, name, referralCode);
     } catch (error) {
       console.error('Error syncing Clerk user:', error);
       throw error;

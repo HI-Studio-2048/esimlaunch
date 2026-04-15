@@ -76,7 +76,8 @@ export const affiliateService = {
   },
 
   /**
-   * Track referral (when a new merchant signs up with referral code)
+   * Track referral (when a new merchant signs up with referral code).
+   * Throws on invalid code or self-referral so callers can surface the reason.
    */
   async trackReferral(referredMerchantId: string, referralCode: string) {
     // Find affiliate by referral code
@@ -87,6 +88,10 @@ export const affiliateService = {
 
     if (!affiliate) {
       throw new Error('Invalid referral code');
+    }
+
+    if (affiliate.id === referredMerchantId) {
+      throw new Error('Self-referral is not allowed');
     }
 
     // Update referred merchant

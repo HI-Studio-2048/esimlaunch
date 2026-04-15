@@ -2,6 +2,7 @@ import express from 'express';
 import { z } from 'zod';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { affiliateService } from '../services/affiliateService';
+import { env } from '../config/env';
 
 const router = express.Router();
 
@@ -68,7 +69,11 @@ router.get('/stats', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: stats,
+      data: {
+        ...stats,
+        commissionRate: env.affiliateCommissionRate,
+        minPayoutCents: env.affiliateMinPayoutCents,
+      },
     });
   } catch (error: any) {
     res.status(500).json({
@@ -142,6 +147,17 @@ router.post('/payout-request', async (req, res, next) => {
         success: false,
         errorCode: 'NO_PAYOUT_AMOUNT',
         errorMessage: 'No payout amount to process',
+      });
+    }
+
+    const minPayoutCents = env.affiliateMinPayoutCents;
+    if (totalPayoutCents < minPayoutCents) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'BELOW_MIN_PAYOUT',
+        errorMessage: `Minimum payout is $${(minPayoutCents / 100).toFixed(2)}. You have $${(totalPayoutCents / 100).toFixed(2)} in pending commissions.`,
+        minPayoutCents,
+        pendingAmountCents: totalPayoutCents,
       });
     }
 

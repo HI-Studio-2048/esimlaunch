@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useUser, useClerk } from "@clerk/clerk-react";
 import { apiClient } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import { clearAllOnboardingProgress } from "@/lib/onboardingProgress";
 import { registerClerkSignOut } from "@/lib/clerkBridge";
 import { getPostAuthRedirectPath } from "@/lib/authRedirect";
@@ -23,6 +24,7 @@ export function ClerkAuthSync() {
   const navigate = useNavigate();
   const location = useLocation();
   const { setUser, setAuthLoading } = useAuth();
+  const { toast } = useToast();
   const hasSynced = useRef<string | null>(null);
 
   // Register clerk.signOut on the bridge so Navbar can call it without
@@ -79,12 +81,37 @@ export function ClerkAuthSync() {
             console.error('No Clerk session token available');
             return;
           }
-          const result = await apiClient.clerkSync(sessionToken);
+          // Pick up a pending referral code (stashed by Signup.tsx when the
+          // URL had ?ref=CODE). Only relevant on the very first sync for a
+          // brand-new user — backend ignores it for existing merchants.
+          let pendingRef: string | undefined;
+          try { pendingRef = sessionStorage.getItem('pending_referral_code') || undefined; } catch { /* ignore */ }
+          const result = await apiClient.clerkSync(sessionToken, pendingRef);
+          try { sessionStorage.removeItem('pending_referral_code'); } catch { /* ignore */ }
           apiClient.setJwtToken(result.token);
           setUser(result.merchant);
           hasSynced.current = clerkUser.id;
           sessionStorage.removeItem('explicit_logout');
           localStorage.removeItem('explicit_logout');
+          // If we tried to apply a referral, tell the user how it went.
+          if (pendingRef) {
+            const status = (result?.merchant as any)?.referralStatus as 'tracked' | 'invalid' | 'self' | null | undefined;
+            if (status === 'tracked') {
+              toast({ title: 'Referral applied', description: `You were referred via code ${pendingRef}.` });
+            } else if (status === 'invalid') {
+              toast({
+                title: 'Referral code not recognized',
+                description: `We couldn't find a match for "${pendingRef}" — your account was created without a referral.`,
+                variant: 'destructive',
+              });
+            } else if (status === 'self') {
+              toast({
+                title: 'Self-referral blocked',
+                description: 'You cannot refer yourself — referral ignored.',
+                variant: 'destructive',
+              });
+            }
+          }
           console.log('Clerk user synced successfully', result.merchant);
 
           // First-time or returning: send to onboarding or dashboard (not homepage)
@@ -114,7 +141,7 @@ export function ClerkAuthSync() {
     };
 
     syncClerkUser();
-  }, [clerkUser?.id, isLoaded, setUser, setAuthLoading, clerk, navigate, location.pathname]);
+  }, [clerkUser?.id, isLoaded, setUser, setAuthLoading, clerk, navigate, location.pathname, toast]);
 
   return null;
 }

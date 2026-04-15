@@ -14,6 +14,29 @@ import { getPostAuthRedirectPath } from "@/lib/authRedirect";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
 
+function notifyReferralStatus(
+  status: 'tracked' | 'invalid' | 'self' | null | undefined,
+  code: string | null,
+  toast: (opts: { title: string; description: string; variant?: 'destructive' }) => void
+) {
+  if (!code || !status) return;
+  if (status === 'tracked') {
+    toast({ title: 'Referral applied', description: `You were referred via code ${code}.` });
+  } else if (status === 'invalid') {
+    toast({
+      title: 'Referral code not recognized',
+      description: `We couldn't find a match for "${code}" — your account was created without a referral.`,
+      variant: 'destructive',
+    });
+  } else if (status === 'self') {
+    toast({
+      title: 'Self-referral blocked',
+      description: 'You cannot refer yourself — referral ignored.',
+      variant: 'destructive',
+    });
+  }
+}
+
 const Signup = () => {
   const [formData, setFormData] = useState({
     fullName: "",
@@ -23,9 +46,19 @@ const Signup = () => {
     confirmPassword: "",
   });
 
-  // Read referral code from URL ?ref=CODE
+  // Read referral code from URL ?ref=CODE and persist to sessionStorage so it
+  // survives Clerk email-verification and OAuth redirect round-trips.
   const referralCode = useRef<string | null>(
-    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('ref') : null
+    typeof window !== 'undefined'
+      ? (() => {
+          const fromUrl = new URLSearchParams(window.location.search).get('ref');
+          if (fromUrl) {
+            try { sessionStorage.setItem('pending_referral_code', fromUrl); } catch { /* ignore */ }
+            return fromUrl;
+          }
+          try { return sessionStorage.getItem('pending_referral_code'); } catch { return null; }
+        })()
+      : null
   );
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -88,11 +121,13 @@ const Signup = () => {
         if (updated.status === "complete" && updated.createdSessionId && updated.createdUserId) {
           await setActive({ session: updated.createdSessionId });
           const token = await clerk?.session?.getToken();
-          const result = await apiClient.clerkSync(token!);
+          const result = await apiClient.clerkSync(token!, referralCode.current || undefined);
           if (result?.merchant) {
             setUser(result.merchant);
             if (result.token) apiClient.setJwtToken(result.token);
           }
+          try { sessionStorage.removeItem('pending_referral_code'); } catch { /* ignore */ }
+          notifyReferralStatus(result?.merchant?.referralStatus, referralCode.current, toast);
           toast({
             title: "Email verified!",
             description: "Your account is ready. Welcome to eSIMLaunch.",
@@ -165,11 +200,13 @@ const Signup = () => {
         if (created.status === "complete" && created.createdSessionId && created.createdUserId) {
           await setActive({ session: created.createdSessionId });
           const token = await clerk?.session?.getToken();
-          const result = await apiClient.clerkSync(token!);
+          const result = await apiClient.clerkSync(token!, referralCode.current || undefined);
           if (result?.merchant) {
             setUser(result.merchant);
             if (result.token) apiClient.setJwtToken(result.token);
           }
+          try { sessionStorage.removeItem('pending_referral_code'); } catch { /* ignore */ }
+          notifyReferralStatus(result?.merchant?.referralStatus, referralCode.current, toast);
           toast({
             title: "Account created!",
             description: "Welcome to eSIMLaunch. You're signed in.",
@@ -202,13 +239,15 @@ const Signup = () => {
       }
 
       // No Clerk: use backend-only registration (session cookie + Merchant in DB)
-      await register(
+      const regResult = await register(
         formData.email,
         formData.password,
         formData.fullName || undefined,
         "ADVANCED",
         referralCode.current || undefined
       );
+      try { sessionStorage.removeItem('pending_referral_code'); } catch { /* ignore */ }
+      notifyReferralStatus(regResult?.referralStatus, referralCode.current, toast);
       toast({
         title: "Account created!",
         description: "Welcome to eSIMLaunch. Let's get started.",
