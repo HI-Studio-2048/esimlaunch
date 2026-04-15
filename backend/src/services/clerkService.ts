@@ -35,9 +35,54 @@ async function findMerchantByEmailFlexible(normalizedEmail: string) {
 
 class ClerkService {
   /**
+   * Apply a referral code to the given merchant if and only if they don't
+   * already have a referrer. Returns a status describing what happened so
+   * callers can surface feedback to the UI.
+   *
+   * This runs on every sync (create OR find) to survive the race where the
+   * Clerk `user.created` webhook creates the merchant before `/clerk-sync`
+   * arrives with the referral code. As long as `referredBy` is still null,
+   * whichever request carries the referralCode will win.
+   */
+  private async applyReferralIfEligible(
+    merchantId: string,
+    referralCode: string
+  ): Promise<'tracked' | 'invalid' | 'self' | null> {
+    try {
+      const current = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { referredBy: true },
+      });
+      if (!current) return null;
+      if (current.referredBy) return null; // already attributed — don't overwrite
+
+      const affiliate = await prisma.merchant.findUnique({
+        where: { referralCode },
+        select: { id: true },
+      });
+      if (!affiliate) {
+        console.warn(`Clerk sync: invalid referral code "${referralCode}" — ignored`);
+        return 'invalid';
+      }
+      if (affiliate.id === merchantId) {
+        console.warn(`Clerk sync: self-referral attempt by merchant ${merchantId} — ignored`);
+        return 'self';
+      }
+      await prisma.merchant.update({
+        where: { id: merchantId },
+        data: { referredBy: affiliate.id },
+      });
+      return 'tracked';
+    } catch (err) {
+      console.warn('Clerk sync: referral tracking failed:', err);
+      return 'invalid';
+    }
+  }
+
+  /**
    * Sync Clerk user to merchant account.
-   * `referralCode` is only applied when a brand-new merchant is created —
-   * it's ignored for existing merchants (login, re-sync, email relinking).
+   * `referralCode` attaches only if the merchant has no referrer yet — this
+   * makes application idempotent and safe against the webhook/clerk-sync race.
    */
   async syncClerkUser(clerkUserId: string, email: string, name?: string, referralCode?: string) {
     const normalizedEmail = normalizeMerchantEmail(email);
@@ -52,7 +97,7 @@ class ClerkService {
 
     if (merchant) {
       // Update email/name if changed
-      return prisma.merchant.update({
+      const updated = await prisma.merchant.update({
         where: { id: merchant.id },
         data: {
           email: normalizedEmail,
@@ -60,6 +105,10 @@ class ClerkService {
         },
         select: MERCHANT_SYNC_SELECT,
       });
+      const referralStatus = referralCode
+        ? await this.applyReferralIfEligible(updated.id, referralCode)
+        : null;
+      return Object.assign(updated, { referralStatus });
     }
 
     // Check if merchant exists with this email (exact + case-insensitive)
@@ -72,7 +121,7 @@ class ClerkService {
         );
       }
       // Link Clerk ID to existing merchant (or refresh same user)
-      return prisma.merchant.update({
+      const linked = await prisma.merchant.update({
         where: { id: merchant.id },
         data: {
           clerkUserId,
@@ -81,6 +130,10 @@ class ClerkService {
         },
         select: MERCHANT_SYNC_SELECT,
       });
+      const referralStatus = referralCode
+        ? await this.applyReferralIfEligible(linked.id, referralCode)
+        : null;
+      return Object.assign(linked, { referralStatus });
     }
 
     // Create new merchant account
@@ -112,7 +165,7 @@ class ClerkService {
               'This email is already registered to another account. Sign in with your existing method or use a different email.'
             );
           }
-          return prisma.merchant.update({
+          const relinked = await prisma.merchant.update({
             where: { id: existing.id },
             data: {
               clerkUserId,
@@ -121,39 +174,18 @@ class ClerkService {
             },
             select: MERCHANT_SYNC_SELECT,
           });
+          const referralStatus = referralCode
+            ? await this.applyReferralIfEligible(relinked.id, referralCode)
+            : null;
+          return Object.assign(relinked, { referralStatus });
         }
       }
       throw err;
     }
 
-    // Apply referral tracking for new merchants only. Failure here must not
-    // break signup — just log and surface the reason via referralStatus.
-    let referralStatus: 'tracked' | 'invalid' | 'self' | null = null;
-    if (referralCode) {
-      try {
-        const affiliate = await prisma.merchant.findUnique({
-          where: { referralCode },
-          select: { id: true },
-        });
-        if (!affiliate) {
-          referralStatus = 'invalid';
-          console.warn(`Clerk signup: invalid referral code "${referralCode}" — ignored`);
-        } else if (affiliate.id === created.id) {
-          referralStatus = 'self';
-          console.warn(`Clerk signup: self-referral attempt by merchant ${created.id} — ignored`);
-        } else {
-          await prisma.merchant.update({
-            where: { id: created.id },
-            data: { referredBy: affiliate.id },
-          });
-          referralStatus = 'tracked';
-        }
-      } catch (refErr) {
-        referralStatus = 'invalid';
-        console.warn('Clerk signup: referral tracking failed:', refErr);
-      }
-    }
-
+    const referralStatus = referralCode
+      ? await this.applyReferralIfEligible(created.id, referralCode)
+      : null;
     return Object.assign(created, { referralStatus });
   }
 
