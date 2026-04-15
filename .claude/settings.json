@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(printf \"y\\\\n\")",
+      "Read(//c/Users/Ezza/esimlaunch/esimlaunch-template-3/apps/web/**)"
+    ]
+  }
+}

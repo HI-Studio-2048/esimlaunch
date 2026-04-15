@@ -8,7 +8,18 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(node -e \"const c = require\\(''''@clerk/clerk-sdk-node''''\\); const cl = c.createClerkClient\\({secretKey:''''test''''}\\); console.log\\(typeof cl, Object.keys\\(cl\\).slice\\(0,20\\)\\)\")",
       "Bash(node -e \"const c = require\\(''''@clerk/clerk-sdk-node''''\\); console.log\\(''''ClerkClient'''' in c\\)\")",
-      "Bash(find /c/Users/Ezza/esimlaunch/esimlaunch-template/libs -type f -name *.ts -o -name *.tsx)"
+      "Bash(find /c/Users/Ezza/esimlaunch/esimlaunch-template/libs -type f -name *.ts -o -name *.tsx)",
+      "Bash(xargs grep:*)",
+      "Bash(vercel --version)",
+      "Bash(vercel whoami:*)",
+      "Bash(cat /c/Users/Ezza/esimlaunch/esimlaunch-template/apps/web/.env*)",
+      "Bash(grep NEXT_PUBLIC /c/Users/Ezza/esimlaunch/esimlaunch-template/apps/web/.env*)",
+      "Bash(vercel deploy:*)",
+      "Bash(printf \"https://api.esimlaunch.com/api\\\\nN\\\\n\")",
+      "Bash(vercel env:*)",
+      "Bash(printf \"pk_test_ZGl2ZXJzZS1zd2FuLTAuY2xlcmsuYWNjb3VudHMuZGV2JA\\\\nN\\\\n\")",
+      "Bash(printf \"N\\\\nezza-wans-projects\\\\n\")",
+      "Bash(vercel link:*)"
     ]
   }
 }
