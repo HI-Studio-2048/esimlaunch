@@ -195,9 +195,19 @@ async function start() {
         .catch((err) => logger.error({ err }, 'scheduled cleanup failed'));
     }, 24 * 60 * 60 * 1000);
 
+    // Run monthly challenge evaluation every 6 hours; internal idempotency makes this safe.
+    const { runMonthlyChallengeJob } = await import('./jobs/monthlyChallengeJob');
+    const challengeInterval = setInterval(() => {
+      runMonthlyChallengeJob().catch((err) => logger.error({ err }, 'monthly challenge job failed'));
+    }, 6 * 60 * 60 * 1000);
+
+    // Also run once on startup so missed months get paid out after a deploy
+    runMonthlyChallengeJob().catch((err) => logger.error({ err }, 'monthly challenge initial run failed'));
+
     const shutdown = (signal: string) => {
       logger.info({ signal }, 'shutting down gracefully');
       clearInterval(cleanupInterval);
+      clearInterval(challengeInterval);
       server.close(() => process.exit(0));
       // Force exit if close hangs
       setTimeout(() => process.exit(0), 10_000).unref();
