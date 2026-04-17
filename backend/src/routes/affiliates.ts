@@ -84,6 +84,23 @@ router.get('/stats', async (req, res, next) => {
   }
 });
 
+router.get('/leaderboard', async (req, res) => {
+  try {
+    const merchantId = (req as any).merchant!.id;
+    const rangeRaw = (req.query.range as string) || 'all';
+    const range = (['all', 'month', 'week'].includes(rangeRaw) ? rangeRaw : 'all') as 'all' | 'month' | 'week';
+    const { getLeaderboard } = await import('../services/affiliateLeaderboardService');
+    const data = await getLeaderboard(range, merchantId);
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'LEADERBOARD_FAILED',
+      errorMessage: error.message || 'Failed to fetch leaderboard',
+    });
+  }
+});
+
 /**
  * GET /api/affiliates/commissions
  * Get commissions
