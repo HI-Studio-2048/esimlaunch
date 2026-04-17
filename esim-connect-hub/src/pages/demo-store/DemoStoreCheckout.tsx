@@ -27,6 +27,10 @@ interface CheckoutFormInternalProps extends CheckoutFormProps {
 }
 
 const CheckoutForm = ({ paymentIntentClientSecret, amount, onSuccess, customerEmail, setCustomerEmail, packageInfo }: CheckoutFormInternalProps) => {
+  // Pulled into the inner component so `customer?.name` / `customer?.id` at the
+  // confirmPayment call below don't throw ReferenceError — the outer component
+  // also reads the same context, this just scopes it correctly here.
+  const { customer } = useCustomerAuth();
   const stripe = useStripe();
   const elements = useElements();
   const [isProcessing, setIsProcessing] = useState(false);

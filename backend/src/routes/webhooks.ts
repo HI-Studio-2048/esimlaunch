@@ -83,19 +83,34 @@ router.post('/esimaccess', verifyESIMAccessIP, async (req, res, next) => {
     }
     recentWebhooks.set(dedupeKey, Date.now());
 
-    // Process webhook asynchronously
-    setImmediate(async () => {
+    // Process synchronously with in-process retry so transient failures
+    // (DB hiccup, provider blip) don't silently drop merchant eSIM orders.
+    // If all retries fail, remove the dedup key and return 500 so eSIM Access
+    // retries from its side, and log loudly for alerting.
+    const MAX_ATTEMPTS = 3;
+    const BACKOFF_MS = [500, 2000, 5000];
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       try {
         await webhookService.processESIMAccessWebhook(webhook);
+        return res.json({ success: true, message: 'Webhook processed' });
       } catch (error) {
-        console.error('Error processing webhook:', error);
+        lastError = error;
+        console.error(
+          `eSIM Access webhook processing attempt ${attempt + 1}/${MAX_ATTEMPTS} failed:`,
+          error
+        );
+        if (attempt < MAX_ATTEMPTS - 1) {
+          await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt]));
+        }
       }
-    });
-
-    // Respond immediately to eSIM Access
-    res.json({
-      success: true,
-      message: 'Webhook received',
+    }
+    // All retries exhausted — release dedup so provider re-delivery can retry
+    recentWebhooks.delete(dedupeKey);
+    console.error('eSIM Access webhook permanently failed after retries:', lastError);
+    return res.status(500).json({
+      success: false,
+      errorMessage: 'Webhook processing failed after retries',
     });
   } catch (error: any) {
     console.error('Webhook error:', error);

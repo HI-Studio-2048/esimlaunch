@@ -23,7 +23,7 @@
 ## Key Directories
 
 - `backend/` — Express API, Prisma schema, auth, eSIM proxy, webhooks, Stripe
-- `esim-connect-hub/` — React frontend (has own git repo for Lovable)
+- `esim-connect-hub/` — React frontend
 - `docs/` — Project documentation (guides, deployment, testing)
 - `esimaccess docs/` — eSIM Access API documentation (external reference)
 - `esimlaunch-template/` — Template project (apps/libs structure)
@@ -80,7 +80,6 @@
 ---
 
 ## Do Not
-- Edit files in `esim-connect-hub/.git/` or `.lovable/` without explicit instruction
 - Commit directly to main — use branches for feature work
 - Leave placeholder code or TODOs
 - Make changes outside the scope of the task
@@ -128,17 +127,9 @@ A task is complete when:
 
 ---
 
-## Dual Repository Setup
+## Repository
 
-This project uses **two separate Git repos**:
-
-1. **Monorepo** (`esimlaunch`) — backend, frontend, docs. Push here for most changes.
-2. **Frontend-only** (`esim-connect-hub`) — Lovable repo. Push here when syncing frontend to Lovable.
-
-- `esim-connect-hub/.git/` is gitignored in the monorepo
-- For backend-only changes: push to monorepo only
-- For frontend-only + Lovable: push to frontend repo (or both)
-- See `docs/GIT_WORKFLOW.md` for details
+Single monorepo: `HI-Studio-2048/esimlaunch` on GitHub. Push all changes (backend, frontend, docs) here. The Lovable `esim-connect-hub` repo is no longer used — ignore any references to a dual-repo workflow in older docs.
 
 ---
 
@@ -188,7 +179,6 @@ This project uses **two separate Git repos**:
 |-----|---------|
 | `docs/PROJECT_OVERVIEW.md` | Architecture, features, schema, roadmap |
 | `docs/DEPLOYMENT_GUIDE.md` | Vercel, Railway, VPS, env vars |
-| `docs/GIT_WORKFLOW.md` | Dual-repo push workflow |
 | `docs/CLERK_INTEGRATION.md` | Clerk setup |
 | `docs/STRIPE_WEBHOOK_SETUP.md` | Stripe webhooks |
 | `backend/IMPLEMENTATION_SUMMARY.md` | Backend implementation details |
@@ -207,6 +197,6 @@ This project uses **two separate Git repos**:
 
 ## Notes
 
-- Last updated: 2026-03-18
+- Last updated: 2026-04-15
 - Core features implemented; Easy Way is a manual concierge process (team deploys stores using esimlaunch-template)
 - Health check: `GET /health` on backend

@@ -168,21 +168,21 @@ router.post('/orders', async (req, res, next) => {
       });
     }
 
-    // Resolve order amount and enrich packageInfoList with packageCode (eSIM Access may require it)
-    let orderAmountApi = data.amount;
-    let packageInfoList = data.packageInfoList;
-    if (orderAmountApi == null) {
-      try {
-        const resolved = await esimAccessService.resolveOrderFromPackages(data.packageInfoList);
-        orderAmountApi = resolved.amount;
-        packageInfoList = resolved.enrichedPackageInfoList;
-      } catch (err: any) {
-        return res.status(400).json({
-          success: false,
-          errorCode: 'VALIDATION_ERROR',
-          errorMessage: err?.message || 'Could not resolve order amount from packages',
-        });
-      }
+    // Always resolve the order amount server-side from the eSIM Access catalog.
+    // Client-supplied `data.amount` is ignored — trusting it would let a
+    // merchant order packages at below-cost prices.
+    let orderAmountApi: number;
+    let packageInfoList;
+    try {
+      const resolved = await esimAccessService.resolveOrderFromPackages(data.packageInfoList);
+      orderAmountApi = resolved.amount;
+      packageInfoList = resolved.enrichedPackageInfoList;
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        errorCode: 'VALIDATION_ERROR',
+        errorMessage: err?.message || 'Could not resolve order amount from packages',
+      });
     }
 
     // eSIM Access expects wholesale amount (1/10000 USD). Charge merchant marked-up amount for platform margin.

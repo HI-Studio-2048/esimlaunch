@@ -49,13 +49,6 @@ class ClerkService {
     referralCode: string
   ): Promise<'tracked' | 'invalid' | 'self' | null> {
     try {
-      const current = await prisma.merchant.findUnique({
-        where: { id: merchantId },
-        select: { referredBy: true },
-      });
-      if (!current) return null;
-      if (current.referredBy) return null; // already attributed — don't overwrite
-
       const affiliate = await prisma.merchant.findUnique({
         where: { referralCode },
         select: { id: true },
@@ -68,10 +61,19 @@ class ClerkService {
         console.warn(`Clerk sync: self-referral attempt by merchant ${merchantId} — ignored`);
         return 'self';
       }
-      await prisma.merchant.update({
-        where: { id: merchantId },
-        data: { referredBy: affiliate.id },
-      });
+
+      // Atomic compare-and-set: only update if referredBy is still null.
+      // Eliminates the SELECT→UPDATE race where two concurrent syncs both see
+      // referredBy=null and the second overwrites the first.
+      const rowsAffected = await prisma.$executeRaw`
+        UPDATE "Merchant"
+        SET "referredBy" = ${affiliate.id}
+        WHERE "id" = ${merchantId} AND "referredBy" IS NULL
+      `;
+      if (rowsAffected === 0) {
+        // Already attributed by a concurrent request (or merchant not found).
+        return null;
+      }
       return 'tracked';
     } catch (err) {
       console.warn('Clerk sync: referral tracking failed:', err);

@@ -86,16 +86,36 @@ export const env: EnvConfig = {
   })(),
 };
 
+/**
+ * Stripe API version pinned once and reused across every Stripe client instance
+ * (payments, subscriptions, etc.) to avoid response-shape drift between callsites.
+ */
+export const STRIPE_API_VERSION = '2026-01-28.clover' as const;
+
 // Warn on startup if critical secrets are missing in production
 if (env.nodeEnv === 'production') {
   const criticalSecrets: Array<[string, string]> = [
     ['STRIPE_SECRET_KEY', env.stripeSecretKey],
     ['STRIPE_WEBHOOK_SECRET', env.stripeWebhookSecret],
     ['RESEND_API_KEY', env.resendApiKey],
+    ['CLERK_SECRET_KEY', env.clerkSecretKey],
+    ['CLERK_WEBHOOK_SECRET', env.clerkWebhookSecret],
+    ['ESIM_ACCESS_SECRET_KEY', env.esimAccessSecretKey],
+    ['ESIM_ACCESS_ACCESS_CODE', env.esimAccessAccessCode],
   ];
   for (const [name, value] of criticalSecrets) {
     if (!value) {
       console.warn(`⚠️  WARNING: ${name} is not set. Related features will not work in production.`);
     }
+  }
+
+  const devCorsOrigins = env.corsOrigin
+    .split(',')
+    .map((o) => o.trim())
+    .filter((o) => /localhost|127\.0\.0\.1/.test(o));
+  if (devCorsOrigins.length) {
+    console.warn(
+      `⚠️  WARNING: CORS_ORIGIN contains dev/localhost entries in production: ${devCorsOrigins.join(', ')}`
+    );
   }
 }

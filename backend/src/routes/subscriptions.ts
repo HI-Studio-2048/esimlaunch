@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
 import { subscriptionService } from '../services/subscriptionService';
 import { emailService } from '../services/emailService';
-import { env } from '../config/env';
+import { env, STRIPE_API_VERSION } from '../config/env';
 
 const router = express.Router();
 
@@ -222,7 +222,7 @@ router.post('/apply-coupon', async (req, res, next) => {
 
     const Stripe = (await import('stripe')).default;
     const { env } = await import('../config/env');
-    const stripe = new Stripe(env.stripeSecretKey, { apiVersion: '2026-01-28.clover' as any });
+    const stripe = new Stripe(env.stripeSecretKey, { apiVersion: STRIPE_API_VERSION as any });
 
     // Try promotion code first, then legacy coupon
     let discount: string | undefined;

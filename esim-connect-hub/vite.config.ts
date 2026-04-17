@@ -21,4 +21,53 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Raise the warn threshold since we split large vendor libs below.
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Keep React core together so Suspense/hydration never splits.
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          // Clerk pulls in a big runtime; isolate so it's cached separately
+          // and not re-downloaded when app code changes.
+          'clerk': ['@clerk/clerk-react'],
+          // Radix UI primitives are numerous but rarely change; bundling them
+          // together yields a long-cached chunk.
+          'radix': [
+            '@radix-ui/react-accordion',
+            '@radix-ui/react-alert-dialog',
+            '@radix-ui/react-aspect-ratio',
+            '@radix-ui/react-avatar',
+            '@radix-ui/react-checkbox',
+            '@radix-ui/react-collapsible',
+            '@radix-ui/react-context-menu',
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-hover-card',
+            '@radix-ui/react-label',
+            '@radix-ui/react-menubar',
+            '@radix-ui/react-navigation-menu',
+            '@radix-ui/react-popover',
+            '@radix-ui/react-progress',
+            '@radix-ui/react-radio-group',
+            '@radix-ui/react-scroll-area',
+            '@radix-ui/react-select',
+            '@radix-ui/react-separator',
+            '@radix-ui/react-slider',
+            '@radix-ui/react-slot',
+            '@radix-ui/react-switch',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-toast',
+            '@radix-ui/react-toggle',
+            '@radix-ui/react-toggle-group',
+            '@radix-ui/react-tooltip',
+          ],
+          // Charting + animation libs are only used on a handful of pages.
+          'charts': ['recharts'],
+          'motion': ['framer-motion'],
+        },
+      },
+    },
+  },
 }));

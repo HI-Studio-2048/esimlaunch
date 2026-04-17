@@ -160,15 +160,25 @@ Plan prices from the provider are in **1/10000 USD** units. Divide by 10000 to g
 
 1. In Stripe dashboard → Developers → Webhooks → Add endpoint.
 2. URL: `https://your-backend.com/api/webhooks/stripe`
-3. Events to listen for:
-   - `checkout.session.completed`
-   - `charge.refunded`
-   - `payment_intent.payment_failed`
+3. Events to listen for — **all six are required**:
+   - `checkout.session.completed` — creates the order after successful checkout
+   - `charge.refunded` — reverses the order and refunds V-Cash + commissions
+   - `payment_intent.payment_failed` — marks the order as failed
+   - `payment_intent.succeeded` — retriggers stuck pending orders (added in Round 8)
+   - `charge.dispute.created` — flags disputed orders + reverses affiliate commissions
+   - `charge.dispute.updated` — tracks dispute-state changes from Stripe
 4. Copy the signing secret to `STRIPE_WEBHOOK_SECRET`.
+
+> ⚠️ **Upgrading from an older deployment?** If your Stripe webhook only has
+> `checkout.session.completed` and `charge.refunded`, you must add the other
+> four events above or disputes and stuck payment intents will go unhandled.
+> The backend handler expects all six.
 
 For local development, use the [Stripe CLI](https://stripe.com/docs/stripe-cli):
 ```bash
-stripe listen --forward-to localhost:3001/api/webhooks/stripe
+stripe listen \
+  --events checkout.session.completed,charge.refunded,payment_intent.payment_failed,payment_intent.succeeded,charge.dispute.created,charge.dispute.updated \
+  --forward-to localhost:3001/api/webhooks/stripe
 ```
 
 ---

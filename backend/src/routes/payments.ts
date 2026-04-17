@@ -6,11 +6,26 @@ import { customerOrderService } from '../services/customerOrderService';
 import { prisma } from '../lib/prisma';
 import { preferencesService } from '../services/preferencesService';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
-import { env } from '../config/env';
+import { env, STRIPE_API_VERSION } from '../config/env';
 import Stripe from 'stripe';
 import rateLimit from 'express-rate-limit';
 
 const router = express.Router();
+
+/**
+ * In-memory deduplication of Stripe webhook events by event.id.
+ * Stripe retries events on timeout; without this, refund/subscription/invoice
+ * handlers could double-process. 10-minute window matches Stripe's typical
+ * retry cadence; periodic cleanup bounds memory.
+ */
+const recentStripeEventIds = new Map<string, number>();
+const STRIPE_WEBHOOK_DEDUP_WINDOW_MS = 10 * 60_000;
+setInterval(() => {
+  const cutoff = Date.now() - STRIPE_WEBHOOK_DEDUP_WINDOW_MS;
+  for (const [id, ts] of recentStripeEventIds) {
+    if (ts < cutoff) recentStripeEventIds.delete(id);
+  }
+}, 5 * 60_000).unref?.();
 
 const storeCheckoutLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -55,7 +70,7 @@ const refundPaymentSchema = z.object({
 router.get('/methods', authenticateSessionOrJWT, async (req, res) => {
   try {
     const merchantId = (req as any).merchant!.id;
-    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2026-01-28.clover' as any });
+    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: STRIPE_API_VERSION as any });
     const { prisma } = await import('../lib/prisma');
     const sub = await prisma.subscription.findUnique({
       where: { merchantId },
@@ -100,7 +115,7 @@ router.delete('/methods/:methodId', authenticateSessionOrJWT, async (req, res) =
       });
     }
 
-    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2026-01-28.clover' as any });
+    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: STRIPE_API_VERSION as any });
     const { prisma } = await import('../lib/prisma');
     const sub = await prisma.subscription.findUnique({
       where: { merchantId },
@@ -148,7 +163,7 @@ router.delete('/methods/:methodId', authenticateSessionOrJWT, async (req, res) =
 router.post('/setup-intent', authenticateSessionOrJWT, async (req, res) => {
   try {
     const merchantId = (req as any).merchant!.id;
-    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: '2026-01-28.clover' as any });
+    const stripe = new Stripe(env.stripeSecretKey || '', { apiVersion: STRIPE_API_VERSION as any });
     const { prisma } = await import('../lib/prisma');
 
     // Get or create Stripe customer
@@ -442,14 +457,22 @@ router.post('/webhook', async (req, res, next) => {
     return res.status(400).json({
       success: false,
       errorCode: 'INVALID_SIGNATURE',
-      errorMessage: `Webhook signature verification failed: ${err.message}`,
+      errorMessage: 'Webhook signature verification failed',
     });
   }
+
+  // Idempotency: skip if we've already processed this Stripe event.id.
+  if (recentStripeEventIds.has(event.id)) {
+    return res.json({ received: true, deduplicated: true });
+  }
+  recentStripeEventIds.set(event.id, Date.now());
 
   try {
     await paymentService.handleWebhook(event);
     res.json({ received: true });
   } catch (error: any) {
+    // On failure, remove from dedup cache so Stripe's retry can re-enter.
+    recentStripeEventIds.delete(event.id);
     console.error('Error handling webhook:', error);
     res.status(500).json({
       success: false,

@@ -15,12 +15,17 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Linting */
+    /* Linting.
+     * strict: true surfaces ~65 legitimate issues across pages/Dashboard,
+     * components/shared, pages/Developer, etc. Many are real bugs
+     * (undefined variables, wrong API-client method names, missing types).
+     * Flipping strict true requires a dedicated sprint — tracked in
+     * ISSUES.md #164. In the meantime we keep the safe subset enabled. */
     "strict": false,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noImplicitAny": false,
-    "noFallthroughCasesInSwitch": false,
+    "noFallthroughCasesInSwitch": true,
 
     "baseUrl": ".",
     "paths": {

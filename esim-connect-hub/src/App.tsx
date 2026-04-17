@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 // ClerkProvider moved to main.tsx per Clerk's React (Vite) guidelines
 import { cn } from "@/lib/utils";
 import { Navbar } from "@/components/layout/Navbar";
@@ -19,86 +20,99 @@ import { CustomerAuthProvider } from "@/contexts/CustomerAuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ClerkAuthSync } from "@/components/ClerkAuthSync";
 import { ScrollToTop } from "@/components/ScrollToTop";
-import Index from "./pages/Index";
-import Pricing from "./pages/Pricing";
-import Features from "./pages/Features";
-import Dashboard from "./pages/Dashboard";
-import FAQ from "./pages/FAQ";
-import Blog from "./pages/Blog";
-import Terms from "./pages/Terms";
-import Privacy from "./pages/Privacy";
-import Cookies from "./pages/Cookies";
-import Contact from "./pages/Contact";
-import About from "./pages/About";
-import APIDocs from "./pages/APIDocs";
-import HelpCenter from "./pages/HelpCenter";
-import Status from "./pages/Status";
-import ROICalculator from "./pages/ROICalculator";
-import CurrentPrices from "./pages/CurrentPrices";
-import Demo from "./pages/Demo";
-import CaseStudies from "./pages/CaseStudies";
-import Changelog from "./pages/Changelog";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import Checkout from "./pages/Checkout";
-import OrderTracking from "./pages/OrderTracking";
-import PackageSelector from "./pages/PackageSelector";
-import PricingConfig from "./pages/PricingConfig";
-import WebhookSettings from "./pages/WebhookSettings";
-import DomainVerification from "./pages/DomainVerification";
-import CustomerLogin from "./pages/customer/Login";
-import CustomerSignup from "./pages/customer/Signup";
-import CustomerDashboard from "./pages/customer/Dashboard";
-import Billing from "./pages/Billing";
-import CreateSupportTicket from "./pages/CreateSupportTicket";
-import SupportTicket from "./pages/SupportTicket";
-import SupportDashboard from "./pages/SupportDashboard";
-import Analytics from "./pages/Analytics";
-import CurrencySettings from "./pages/CurrencySettings";
-import SEOSettings from "./pages/SEOSettings";
-import EmailTemplates from "./pages/EmailTemplates";
-import AffiliateDashboard from "./pages/AffiliateDashboard";
-import VerifyEmail from "./pages/VerifyEmail";
-import TwoFactorSetup from "./pages/TwoFactorSetup";
-import Settings from "./pages/Settings";
-import Onboarding from "./pages/Onboarding";
-import Subscribe from "./pages/Subscribe";
-import SSOCallback from "./pages/SSOCallback";
-import StorePreview from "./pages/StorePreview";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import Index from "./pages/Index"; // eager: hero / first paint
+import Login from "./pages/Login"; // eager: frequently the entry point
+import Signup from "./pages/Signup"; // eager: referral deep-links land here
+import NotFound from "./pages/NotFound"; // eager: tiny + default fallback
+
+// All other routes are code-split via React.lazy so the main bundle only
+// contains the landing/auth shell. Each lazy import becomes its own JS chunk
+// that downloads on first navigation to that route.
+const Pricing = lazy(() => import("./pages/Pricing"));
+const Features = lazy(() => import("./pages/Features"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const FAQ = lazy(() => import("./pages/FAQ"));
+const Blog = lazy(() => import("./pages/Blog"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
+const Cookies = lazy(() => import("./pages/Cookies"));
+const Contact = lazy(() => import("./pages/Contact"));
+const About = lazy(() => import("./pages/About"));
+const APIDocs = lazy(() => import("./pages/APIDocs"));
+const HelpCenter = lazy(() => import("./pages/HelpCenter"));
+const Status = lazy(() => import("./pages/Status"));
+const ROICalculator = lazy(() => import("./pages/ROICalculator"));
+const CurrentPrices = lazy(() => import("./pages/CurrentPrices"));
+const Demo = lazy(() => import("./pages/Demo"));
+const CaseStudies = lazy(() => import("./pages/CaseStudies"));
+const Changelog = lazy(() => import("./pages/Changelog"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Checkout = lazy(() => import("./pages/Checkout"));
+const OrderTracking = lazy(() => import("./pages/OrderTracking"));
+const PackageSelector = lazy(() => import("./pages/PackageSelector"));
+const PricingConfig = lazy(() => import("./pages/PricingConfig"));
+const WebhookSettings = lazy(() => import("./pages/WebhookSettings"));
+const DomainVerification = lazy(() => import("./pages/DomainVerification"));
+const CustomerLogin = lazy(() => import("./pages/customer/Login"));
+const CustomerSignup = lazy(() => import("./pages/customer/Signup"));
+const CustomerDashboard = lazy(() => import("./pages/customer/Dashboard"));
+const Billing = lazy(() => import("./pages/Billing"));
+const CreateSupportTicket = lazy(() => import("./pages/CreateSupportTicket"));
+const SupportTicket = lazy(() => import("./pages/SupportTicket"));
+const SupportDashboard = lazy(() => import("./pages/SupportDashboard"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const CurrencySettings = lazy(() => import("./pages/CurrencySettings"));
+const SEOSettings = lazy(() => import("./pages/SEOSettings"));
+const EmailTemplates = lazy(() => import("./pages/EmailTemplates"));
+const AffiliateDashboard = lazy(() => import("./pages/AffiliateDashboard"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
+const TwoFactorSetup = lazy(() => import("./pages/TwoFactorSetup"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Subscribe = lazy(() => import("./pages/Subscribe"));
+const SSOCallback = lazy(() => import("./pages/SSOCallback"));
+const StorePreview = lazy(() => import("./pages/StorePreview"));
 import { PublicStoreInvalidationProvider } from "@/contexts/PublicStoreInvalidationContext";
-import PackageBrowser from "./pages/PackageBrowser";
-import CreateOrder from "./pages/CreateOrder";
-import ProfileManagement from "./pages/ProfileManagement";
-import Balance from "./pages/Balance";
-import OrderHistory from "./pages/OrderHistory";
-import CustomersPage from "./pages/CustomersPage";
-import TopUpsPage from "./pages/TopUpsPage";
-import PaymentSettings from "./pages/PaymentSettings";
-import Developer from "./pages/Developer";
-import Admin from "./pages/Admin";
-import AdminMerchants from "@/pages/AdminMerchants";
-import AdminMerchantDetail from "@/pages/AdminMerchantDetail";
-import AdminStoreDetail from "@/pages/AdminStoreDetail";
-import BlogPost from "./pages/BlogPost";
-import TemplateGallery from "./pages/TemplateGallery";
-import NotFound from "./pages/NotFound";
-import DemoStoreHome from "./pages/demo-store/DemoStoreHome";
-import DemoStoreDestinations from "./pages/demo-store/DemoStoreDestinations";
-import DemoStoreCountry from "./pages/demo-store/DemoStoreCountry";
-import DemoStoreCheckout from "./pages/demo-store/DemoStoreCheckout";
-import DemoStoreAbout from "./pages/demo-store/DemoStoreAbout";
-import DemoStoreContact from "./pages/demo-store/DemoStoreContact";
-import DemoStoreHelpCenter from "./pages/demo-store/DemoStoreHelpCenter";
-import DemoStoreSetupGuide from "./pages/demo-store/DemoStoreSetupGuide";
-import DemoStoreFAQ from "./pages/demo-store/DemoStoreFAQ";
-import DemoStorePress from "./pages/demo-store/DemoStorePress";
-import DemoStorePartners from "./pages/demo-store/DemoStorePartners";
-import DemoStoreTerms from "./pages/demo-store/DemoStoreTerms";
-import DemoStorePrivacy from "./pages/demo-store/DemoStorePrivacy";
-import DemoStoreCookies from "./pages/demo-store/DemoStoreCookies";
-import DemoStoreRefundPolicy from "./pages/demo-store/DemoStoreRefundPolicy";
+const PackageBrowser = lazy(() => import("./pages/PackageBrowser"));
+const CreateOrder = lazy(() => import("./pages/CreateOrder"));
+const ProfileManagement = lazy(() => import("./pages/ProfileManagement"));
+const Balance = lazy(() => import("./pages/Balance"));
+const OrderHistory = lazy(() => import("./pages/OrderHistory"));
+const CustomersPage = lazy(() => import("./pages/CustomersPage"));
+const TopUpsPage = lazy(() => import("./pages/TopUpsPage"));
+const PaymentSettings = lazy(() => import("./pages/PaymentSettings"));
+const Developer = lazy(() => import("./pages/Developer"));
+const Admin = lazy(() => import("./pages/Admin"));
+const AdminMerchants = lazy(() => import("@/pages/AdminMerchants"));
+const AdminMerchantDetail = lazy(() => import("@/pages/AdminMerchantDetail"));
+const AdminStoreDetail = lazy(() => import("@/pages/AdminStoreDetail"));
+const BlogPost = lazy(() => import("./pages/BlogPost"));
+const TemplateGallery = lazy(() => import("./pages/TemplateGallery"));
+const DemoStoreHome = lazy(() => import("./pages/demo-store/DemoStoreHome"));
+const DemoStoreDestinations = lazy(() => import("./pages/demo-store/DemoStoreDestinations"));
+const DemoStoreCountry = lazy(() => import("./pages/demo-store/DemoStoreCountry"));
+const DemoStoreCheckout = lazy(() => import("./pages/demo-store/DemoStoreCheckout"));
+const DemoStoreAbout = lazy(() => import("./pages/demo-store/DemoStoreAbout"));
+const DemoStoreContact = lazy(() => import("./pages/demo-store/DemoStoreContact"));
+const DemoStoreHelpCenter = lazy(() => import("./pages/demo-store/DemoStoreHelpCenter"));
+const DemoStoreSetupGuide = lazy(() => import("./pages/demo-store/DemoStoreSetupGuide"));
+const DemoStoreFAQ = lazy(() => import("./pages/demo-store/DemoStoreFAQ"));
+const DemoStorePress = lazy(() => import("./pages/demo-store/DemoStorePress"));
+const DemoStorePartners = lazy(() => import("./pages/demo-store/DemoStorePartners"));
+const DemoStoreTerms = lazy(() => import("./pages/demo-store/DemoStoreTerms"));
+const DemoStorePrivacy = lazy(() => import("./pages/demo-store/DemoStorePrivacy"));
+const DemoStoreCookies = lazy(() => import("./pages/demo-store/DemoStoreCookies"));
+const DemoStoreRefundPolicy = lazy(() => import("./pages/demo-store/DemoStoreRefundPolicy"));
+
+// Minimal fallback while a route chunk is downloading. Keeps the viewport
+// height so there's no layout collapse mid-navigation.
+const RouteFallback = () => (
+  <div className="flex min-h-[60vh] items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -431,6 +445,7 @@ const AppRoutes = () => (
   <>
     <SubdomainRedirect />
     <ScrollToTop />
+    <Suspense fallback={<RouteFallback />}>
     <Routes>
       {/* Demo Store Routes - load store from API when storeId exists, then show layout */}
       <Route path="/demo-store" element={<DemoStoreByIdLoader />}>
@@ -473,6 +488,7 @@ const AppRoutes = () => (
       {/* Main App Routes (with Navbar, optional sidebar, optional footer) */}
       <Route path="*" element={<MainShell />} />
     </Routes>
+    </Suspense>
   </>
 );
 
@@ -481,31 +497,33 @@ const App = () => {
   const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '';
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-        <TooltipProvider>
-          <BrowserRouter
-            future={{
-              v7_startTransition: true,
-              v7_relativeSplatPath: true,
-            }}
-          >
-            <AuthProvider>
-              {clerkPubKey && <ClerkAuthSync />}
-              <CustomerAuthProvider>
-                <DemoStoreProvider>
-                  <PublicStoreInvalidationProvider>
-                    <Toaster />
-                    <Sonner />
-                    <AppRoutes />
-                  </PublicStoreInvalidationProvider>
-                </DemoStoreProvider>
-              </CustomerAuthProvider>
-            </AuthProvider>
-          </BrowserRouter>
-        </TooltipProvider>
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <TooltipProvider>
+            <BrowserRouter
+              future={{
+                v7_startTransition: true,
+                v7_relativeSplatPath: true,
+              }}
+            >
+              <AuthProvider>
+                {clerkPubKey && <ClerkAuthSync />}
+                <CustomerAuthProvider>
+                  <DemoStoreProvider>
+                    <PublicStoreInvalidationProvider>
+                      <Toaster />
+                      <Sonner />
+                      <AppRoutes />
+                    </PublicStoreInvalidationProvider>
+                  </DemoStoreProvider>
+                </CustomerAuthProvider>
+              </AuthProvider>
+            </BrowserRouter>
+          </TooltipProvider>
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 };
 

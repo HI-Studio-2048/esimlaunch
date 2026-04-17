@@ -34,6 +34,26 @@ export default function CreateSupportTicket() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Client-side validation. HTML5 `required` catches empty strings but not
+    // whitespace-only input — trim and check explicitly for clearer feedback.
+    const subject = formData.subject.trim();
+    const description = formData.description.trim();
+    const customerEmail = formData.customerEmail.trim();
+
+    if (!customerEmail) {
+      toast({ title: "Email required", description: "Please enter your email address.", variant: "destructive" });
+      return;
+    }
+    if (!subject) {
+      toast({ title: "Subject required", description: "Please enter a subject for your ticket.", variant: "destructive" });
+      return;
+    }
+    if (description.length < 10) {
+      toast({ title: "Description too short", description: "Please provide at least 10 characters of detail.", variant: "destructive" });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -48,8 +68,14 @@ export default function CreateSupportTicket() {
       const response = await fetch(`${API_BASE_URL}/api/support/tickets`, {
         method: 'POST',
         headers,
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, subject, description, customerEmail }),
       });
+
+      // If the customer token expired, clear it so subsequent requests don't
+      // keep failing with the same stale token.
+      if (response.status === 401 && token) {
+        localStorage.removeItem('customer_token');
+      }
 
       const result = await response.json();
       if (result.success) {

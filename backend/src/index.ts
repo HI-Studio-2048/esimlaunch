@@ -1,11 +1,31 @@
 import express from 'express';
 import cors from 'cors';
 import { env } from './config/env';
+import { prisma } from './lib/prisma';
+import { logger } from './lib/logger';
+
+// Global safety net: async errors in webhooks, cron, and background tasks
+// would otherwise kill the Node process without a stack trace.
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'unhandled promise rejection');
+});
+process.on('uncaughtException', (err) => {
+  logger.error({ err }, 'uncaught exception');
+});
 
 const app = express();
 
 // Trust first proxy (Railway, Vercel, etc.) so req.ip returns the real client IP
 app.set('trust proxy', 1);
+
+// HSTS: tell browsers to always use HTTPS. Prod-only so local dev on
+// http://localhost keeps working.
+if (env.nodeEnv === 'production') {
+  app.use((_req, res, next) => {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+  });
+}
 
 /** CORS allowlist: CORS_ORIGIN + FRONTEND_URL + https apex/www for ALLOWED_BASE_DOMAIN (fixes www vs non-www). */
 function buildAllowedCorsOrigins(): string[] {
@@ -124,7 +144,7 @@ app.get('/', (req, res) => {
 
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
+  logger.error({ err, path: req.path, method: req.method }, 'request error');
   
   // If it's a CORS error, send proper CORS headers
   if (err.message === 'Not allowed by CORS') {
@@ -145,29 +165,50 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
 
 const PORT = env.port;
 
-app.listen(PORT, async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📚 Environment: ${env.nodeEnv}`);
-  console.log(`🌐 API Base URL: ${env.apiBaseUrl}`);
-  console.log(`🔒 CORS Allowed Origins: ${allowedOrigins.join(', ')}`);
+async function start() {
+  // Fail fast if the DB is unreachable — otherwise /health returns 200 while
+  // every real request crashes on first Prisma call.
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (err) {
+    logger.fatal({ err }, 'database connection check failed on startup');
+    process.exit(1);
+  }
 
-  // Run cleanup on startup and every 24 hours
-  const { sessionService } = await import('./services/sessionService');
-  sessionService.cleanupExpired().catch(err => console.error('Initial cleanup failed:', err));
-  const cleanupInterval = setInterval(() => {
-    sessionService.cleanupExpired().catch(err => console.error('Scheduled cleanup failed:', err));
-  }, 24 * 60 * 60 * 1000);
+  const server = app.listen(PORT, async () => {
+    logger.info(
+      {
+        port: PORT,
+        env: env.nodeEnv,
+        apiBaseUrl: env.apiBaseUrl,
+        corsAllowedOrigins: allowedOrigins,
+      },
+      'server started'
+    );
 
-  // Graceful shutdown
-  process.on('SIGTERM', () => {
-    console.log('SIGTERM received. Shutting down gracefully...');
-    clearInterval(cleanupInterval);
-    process.exit(0);
+    // Run cleanup on startup and every 24 hours
+    const { sessionService } = await import('./services/sessionService');
+    sessionService.cleanupExpired().catch((err) => logger.error({ err }, 'initial cleanup failed'));
+    const cleanupInterval = setInterval(() => {
+      sessionService
+        .cleanupExpired()
+        .catch((err) => logger.error({ err }, 'scheduled cleanup failed'));
+    }, 24 * 60 * 60 * 1000);
+
+    const shutdown = (signal: string) => {
+      logger.info({ signal }, 'shutting down gracefully');
+      clearInterval(cleanupInterval);
+      server.close(() => process.exit(0));
+      // Force exit if close hangs
+      setTimeout(() => process.exit(0), 10_000).unref();
+    };
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
   });
-  process.on('SIGINT', () => {
-    console.log('SIGINT received. Shutting down gracefully...');
-    clearInterval(cleanupInterval);
-    process.exit(0);
-  });
+}
+
+start().catch((err) => {
+  logger.fatal({ err }, 'fatal startup error');
+  process.exit(1);
 });
 

@@ -1,10 +1,10 @@
 import Stripe from 'stripe';
-import { env } from '../config/env';
+import { env, STRIPE_API_VERSION } from '../config/env';
 import { prisma } from '../lib/prisma';
 import { BalanceTransactionType } from '@prisma/client';
 
 const stripe = new Stripe(env.stripeSecretKey, {
-  apiVersion: '2026-01-28.clover' as any,
+  apiVersion: STRIPE_API_VERSION as any,
 });
 
 export interface CreatePaymentIntentParams {
