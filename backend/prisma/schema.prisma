@@ -41,6 +41,8 @@ model Merchant {
   affiliateCode            String?               @unique // Unique affiliate code
   referredBy               String? // Merchant ID who referred this merchant
   referralCode             String?               @unique // Referral code for this merchant
+  affiliateHandle          String?               @unique
+  affiliateTier            String                @default("bronze") // bronze, silver, gold, platinum
   smtpHost                 String?
   smtpPort                 Int?
   smtpUser                 String?
@@ -49,6 +51,8 @@ model Merchant {
   smtpFromEmail            String?
   affiliateCommissions     AffiliateCommission[] @relation("AffiliateCommissions")
   referredMerchants        AffiliateCommission[] @relation("ReferredBy")
+  bountyClaims             AffiliateBountyClaim[]
+  weeklyProgress           AffiliateWeeklyProgress[]
   emailTemplates           EmailTemplate[]
   preferences              MerchantPreference[]
   esimProfiles             EsimProfile[]
@@ -427,21 +431,25 @@ model TicketMessage {
 
 model AffiliateCommission {
   id                 String    @id @default(uuid())
-  affiliateId        String // Merchant ID who referred
-  referredMerchantId String? // Merchant who was referred (if applicable)
-  orderId            String? // Order that generated commission
-  customerOrderId    String? // Customer order that generated commission
-  amount             BigInt // Commission amount in cents
+  affiliateId        String
+  referredMerchantId String?
+  orderId            String?
+  customerOrderId    String?
+  amount             BigInt
   currency           String    @default("USD")
   status             String    @default("pending") // pending, paid, cancelled
-  commissionRate     Float // Percentage or fixed amount
+  commissionRate     Float
+  type               String    @default("order") // order, subscription, bounty, weekly_goal
+  metadata           Json?
+  stripeInvoiceId    String?   // only for type='subscription'
   createdAt          DateTime  @default(now())
   paidAt             DateTime?
 
-  // Relations
   affiliate        Merchant       @relation("AffiliateCommissions", fields: [affiliateId], references: [id], onDelete: Cascade)
   referredMerchant Merchant?      @relation("ReferredBy", fields: [referredMerchantId], references: [id], onDelete: SetNull)
   customerOrder    CustomerOrder? @relation(fields: [customerOrderId], references: [id], onDelete: SetNull)
+
+  bountyClaim AffiliateBountyClaim?
 
   @@index([affiliateId])
   @@index([referredMerchantId])
@@ -449,6 +457,8 @@ model AffiliateCommission {
   @@index([customerOrderId])
   @@index([status])
   @@index([createdAt])
+  @@index([type])
+  @@index([stripeInvoiceId])
 }
 
 // EsimProfile stores eSIM profile data in our DB.
@@ -534,4 +544,44 @@ model EmailTemplate {
   @@unique([merchantId, templateId])
   @@index([merchantId])
   @@index([templateId])
+}
+
+model AffiliateBountyClaim {
+  id           String    @id @default(uuid())
+  merchantId   String
+  bountyKey    String
+  claimedAt    DateTime  @default(now())
+  commissionId String?   @unique
+
+  merchant   Merchant             @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  commission AffiliateCommission? @relation(fields: [commissionId], references: [id], onDelete: SetNull)
+
+  @@unique([merchantId, bountyKey])
+  @@index([merchantId])
+}
+
+model AffiliateWeeklyProgress {
+  id            String   @id @default(uuid())
+  merchantId    String
+  isoWeek       String   // e.g., "2026-W16"
+  referralCount Int      @default(0)
+  bronzePaid    Boolean  @default(false)
+  silverPaid    Boolean  @default(false)
+  goldPaid      Boolean  @default(false)
+  updatedAt     DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, isoWeek])
+  @@index([merchantId])
+  @@index([isoWeek])
+}
+
+model AffiliateLeaderboardMock {
+  id              String @id @default(uuid())
+  handle          String @unique
+  tier            String
+  earningsAllTime BigInt
+  earningsMonth   BigInt
+  earningsWeek    BigInt
 }
