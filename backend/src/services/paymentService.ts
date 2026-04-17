@@ -303,8 +303,8 @@ export const paymentService = {
    */
   async handleRefund(charge: Stripe.Charge): Promise<void> {
     if (charge.payment_intent) {
-      const paymentIntentId = typeof charge.payment_intent === 'string' 
-        ? charge.payment_intent 
+      const paymentIntentId = typeof charge.payment_intent === 'string'
+        ? charge.payment_intent
         : charge.payment_intent.id;
 
       // Update payment intent status
@@ -343,6 +343,14 @@ export const paymentService = {
           }),
         ]);
       }
+    }
+
+    // Clawback affiliate commission if the charge was for a subscription invoice
+    const chargeAny = charge as any;
+    if (chargeAny.invoice) {
+      const invoiceId = typeof chargeAny.invoice === 'string' ? chargeAny.invoice : chargeAny.invoice.id;
+      const { subscriptionService } = await import('./subscriptionService');
+      await subscriptionService.handleSubscriptionInvoiceRefunded({ stripeInvoiceId: invoiceId });
     }
   },
 

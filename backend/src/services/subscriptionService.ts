@@ -514,7 +514,95 @@ export const subscriptionService = {
       });
     }
   },
+
+  /**
+   * Clawback when a subscription invoice is refunded.
+   * - Marks the subscription commission as cancelled
+   * - Recalculates referrer's tier (may demote)
+   * - Cancels bounty claims that were earned in the past 30 days if threshold no longer met
+   * - Decrements weekly progress; cancels any paid weekly_goal commissions that are no longer valid
+   */
+  async handleSubscriptionInvoiceRefunded(params: { stripeInvoiceId: string }): Promise<void> {
+    const commission = await prisma.affiliateCommission.findFirst({
+      where: { stripeInvoiceId: params.stripeInvoiceId, type: 'subscription' },
+    });
+    if (!commission || commission.status === 'cancelled') return;
+
+    await prisma.affiliateCommission.update({
+      where: { id: commission.id },
+      data: { status: 'cancelled' },
+    });
+
+    const referrerId = commission.affiliateId;
+    const referredId = commission.referredMerchantId;
+
+    const { countActiveReferrals, recalculateTier } = await import('./affiliateTierService');
+    const { MILESTONE_BOUNTIES, WEEKLY_GOALS, isoWeekUTC } = await import('../config/affiliate');
+
+    // Recompute referrer's active-referral count
+    const activeCount = await countActiveReferrals(referrerId);
+    await recalculateTier(referrerId);
+
+    // Clawback milestone bounties claimed within last 30 days that are now above the threshold
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recentClaims = await prisma.affiliateBountyClaim.findMany({
+      where: { merchantId: referrerId, claimedAt: { gte: cutoff } },
+      include: { commission: true },
+    });
+    for (const claim of recentClaims) {
+      const milestone = MILESTONE_BOUNTIES.find(m => m.key === claim.bountyKey);
+      if (!milestone) continue;
+      if (activeCount < milestone.threshold) {
+        await prisma.$transaction(async (tx) => {
+          if (claim.commissionId) {
+            await tx.affiliateCommission.update({
+              where: { id: claim.commissionId },
+              data: { status: 'cancelled' },
+            });
+          }
+          await tx.affiliateBountyClaim.delete({ where: { id: claim.id } });
+        });
+      }
+    }
+
+    // Decrement this week's progress if the referral counted this week
+    if (referredId && commission.createdAt) {
+      const week = isoWeekUTC(commission.createdAt);
+      const progress = await prisma.affiliateWeeklyProgress.findUnique({
+        where: { merchantId_isoWeek: { merchantId: referrerId, isoWeek: week } },
+      });
+      if (progress && progress.referralCount > 0) {
+        const newCount = progress.referralCount - 1;
+        const updates: any = { referralCount: newCount };
+        for (const tier of WEEKLY_GOALS) {
+          const paidField = `${tier.key}Paid` as 'bronzePaid' | 'silverPaid' | 'goldPaid';
+          if ((progress as any)[paidField] && newCount < tier.target) {
+            updates[paidField] = false;
+            const goalCommission = await prisma.affiliateCommission.findFirst({
+              where: {
+                affiliateId: referrerId,
+                type: 'weekly_goal',
+                status: 'paid',
+                metadata: { path: ['isoWeek'], equals: week },
+              },
+            });
+            if (goalCommission && (goalCommission.metadata as any)?.goalKey === tier.key) {
+              await prisma.affiliateCommission.update({
+                where: { id: goalCommission.id },
+                data: { status: 'cancelled' },
+              });
+            }
+          }
+        }
+        await prisma.affiliateWeeklyProgress.update({
+          where: { merchantId_isoWeek: { merchantId: referrerId, isoWeek: week } },
+          data: updates,
+        });
+      }
+    }
+  },
 };
 
 export const handleSubscriptionInvoicePaid = subscriptionService.handleSubscriptionInvoicePaid.bind(subscriptionService);
+export const handleSubscriptionInvoiceRefunded = subscriptionService.handleSubscriptionInvoiceRefunded.bind(subscriptionService);
 
