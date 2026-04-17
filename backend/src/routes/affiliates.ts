@@ -247,6 +247,137 @@ router.post('/track-referral', async (req, res, next) => {
   }
 });
 
+router.get('/me/gamification', async (req, res) => {
+  try {
+    const merchantId = (req as any).merchant!.id;
+    const { prisma } = await import('../lib/prisma');
+    const {
+      AFFILIATE_TIERS,
+      SUBSCRIPTION_COMMISSION_RATE,
+      MILESTONE_BOUNTIES,
+      WEEKLY_GOALS,
+      MONTHLY_CHALLENGE,
+      isoWeekUTC,
+    } = await import('../config/affiliate');
+    const { countActiveReferrals } = await import('../services/affiliateTierService');
+
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { affiliateTier: true, affiliateHandle: true },
+    });
+
+    const activeReferrals = await countActiveReferrals(merchantId);
+    const currentTierIdx = AFFILIATE_TIERS.findIndex(t => t.key === (merchant?.affiliateTier ?? 'bronze'));
+    const nextTier = AFFILIATE_TIERS[currentTierIdx + 1] ?? null;
+
+    // Recurring estimate: sum of last 30 days paid subscription commissions
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const recent = await prisma.affiliateCommission.aggregate({
+      where: { affiliateId: merchantId, type: 'subscription', status: { not: 'cancelled' }, createdAt: { gte: thirtyDaysAgo } },
+      _sum: { amount: true },
+    });
+    const activeRecurring = await prisma.affiliateCommission.findMany({
+      where: { affiliateId: merchantId, type: 'subscription', status: { not: 'cancelled' } },
+      distinct: ['referredMerchantId'],
+      select: { referredMerchantId: true },
+    });
+
+    const claims = await prisma.affiliateBountyClaim.findMany({ where: { merchantId } });
+    const claimMap = new Map(claims.map(c => [c.bountyKey, c]));
+
+    const milestones = MILESTONE_BOUNTIES.map(m => ({
+      key: m.key,
+      threshold: m.threshold,
+      reward: m.amountCents / 100,
+      claimedAt: claimMap.get(m.key)?.claimedAt ?? null,
+      progress: activeReferrals,
+    }));
+
+    const isoWeek = isoWeekUTC();
+    const weekly = await prisma.affiliateWeeklyProgress.findUnique({
+      where: { merchantId_isoWeek: { merchantId, isoWeek } },
+    });
+    const weekly_ = {
+      isoWeek,
+      resetsAt: (() => {
+        const d = new Date();
+        const day = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + (8 - day));
+        d.setUTCHours(0, 0, 0, 0);
+        return d.toISOString();
+      })(),
+      referralCount: weekly?.referralCount ?? 0,
+      tiers: WEEKLY_GOALS.map(t => ({
+        key: t.key,
+        target: t.target,
+        reward: t.amountCents / 100,
+        paid: !!(weekly && (weekly as any)[`${t.key}Paid`]),
+      })),
+    };
+
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const monthlyCount = await prisma.affiliateCommission.findMany({
+      where: { affiliateId: merchantId, type: 'subscription', status: { not: 'cancelled' }, createdAt: { gte: monthStart } },
+      distinct: ['referredMerchantId'],
+      select: { referredMerchantId: true },
+    });
+
+    res.json({
+      success: true,
+      data: {
+        tier: {
+          current: merchant?.affiliateTier ?? 'bronze',
+          next: nextTier?.key ?? null,
+          activeReferrals,
+          nextThreshold: nextTier?.minActiveReferrals ?? null,
+        },
+        recurring: {
+          rate: SUBSCRIPTION_COMMISSION_RATE,
+          activeRecurring: activeRecurring.length,
+          monthlyEstimate: Number(recent._sum.amount ?? 0n) / 100,
+        },
+        milestones,
+        weekly: weekly_,
+        monthly: {
+          month: `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`,
+          target: MONTHLY_CHALLENGE.target,
+          reward: MONTHLY_CHALLENGE.amountCents / 100,
+          progress: monthlyCount.length,
+        },
+        handle: merchant?.affiliateHandle ?? null,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorCode: 'GAMIFICATION_FAILED', errorMessage: error.message });
+  }
+});
+
+router.patch('/me/handle', async (req, res) => {
+  try {
+    const merchantId = (req as any).merchant!.id;
+    const { HANDLE_REGEX } = await import('../config/affiliate');
+    const schema = z.object({ handle: z.string().regex(HANDLE_REGEX, 'Handle must be 3–20 chars, letters/numbers/underscore only') });
+    const { handle } = schema.parse(req.body);
+
+    const { prisma } = await import('../lib/prisma');
+    const existing = await prisma.merchant.findFirst({
+      where: { affiliateHandle: { equals: handle, mode: 'insensitive' }, NOT: { id: merchantId } },
+      select: { id: true },
+    });
+    if (existing) {
+      return res.status(409).json({ success: false, errorCode: 'HANDLE_TAKEN', errorMessage: 'That handle is already taken' });
+    }
+    await prisma.merchant.update({ where: { id: merchantId }, data: { affiliateHandle: handle } });
+    res.json({ success: true, data: { handle } });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ success: false, errorCode: 'VALIDATION_ERROR', errorMessage: error.errors[0].message });
+    }
+    res.status(500).json({ success: false, errorCode: 'HANDLE_UPDATE_FAILED', errorMessage: error.message });
+  }
+});
+
 export default router;
 
 
