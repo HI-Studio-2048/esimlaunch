@@ -110,35 +110,67 @@ export const affiliateService = {
     affiliateId: string;
     referredMerchantId?: string;
     customerOrderId?: string;
-    amount: number; // Amount in cents
-    commissionRate: number; // Percentage (e.g., 10 for 10%)
+    amount: number; // cents — for order/subscription, this is the gross; for bounty/weekly_goal, this is the reward itself
+    type: 'order' | 'subscription' | 'bounty' | 'weekly_goal';
+    commissionRate?: number; // override; otherwise derived from tier (order) or config (subscription) or 0 (bounty/goal)
     currency?: string;
+    status?: 'pending' | 'paid' | 'cancelled';
+    metadata?: Record<string, any>;
+    stripeInvoiceId?: string;
   }) {
     const {
       affiliateId,
       referredMerchantId,
       customerOrderId,
       amount,
-      commissionRate,
+      type,
       currency = 'USD',
+      metadata,
+      stripeInvoiceId,
     } = params;
 
-    // Calculate commission amount
-    const commissionAmount = Math.round(amount * (commissionRate / 100));
+    let rate = params.commissionRate;
+    let commissionAmount: number;
 
-    const commission = await prisma.affiliateCommission.create({
+    if (type === 'order') {
+      if (rate === undefined) {
+        const { perOrderRateForTier } = await import('../config/affiliate');
+        const merchant = await prisma.merchant.findUnique({
+          where: { id: affiliateId },
+          select: { affiliateTier: true },
+        });
+        rate = perOrderRateForTier((merchant?.affiliateTier as any) || 'bronze');
+      }
+      commissionAmount = Math.round(amount * (rate / 100));
+    } else if (type === 'subscription') {
+      if (rate === undefined) {
+        const { SUBSCRIPTION_COMMISSION_RATE } = await import('../config/affiliate');
+        rate = SUBSCRIPTION_COMMISSION_RATE;
+      }
+      commissionAmount = Math.round(amount * (rate / 100));
+    } else {
+      // bounty / weekly_goal — amount is the literal reward
+      rate = rate ?? 0;
+      commissionAmount = amount;
+    }
+
+    const status = params.status ?? (type === 'bounty' || type === 'weekly_goal' ? 'paid' : 'pending');
+
+    return prisma.affiliateCommission.create({
       data: {
         affiliateId,
-        referredMerchantId: referredMerchantId || null,
-        customerOrderId: customerOrderId || null,
+        referredMerchantId: referredMerchantId ?? null,
+        customerOrderId: customerOrderId ?? null,
         amount: BigInt(commissionAmount),
         currency,
-        commissionRate,
-        status: 'pending',
+        commissionRate: rate,
+        status,
+        paidAt: status === 'paid' ? new Date() : null,
+        type,
+        metadata: metadata ?? undefined,
+        stripeInvoiceId: stripeInvoiceId ?? null,
       },
     });
-
-    return commission;
   },
 
   /**

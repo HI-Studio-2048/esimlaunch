@@ -260,7 +260,8 @@ export const customerOrderService = {
               referredMerchantId: merchantId,
               customerOrderId: customerOrder.id,
               amount: totalAmount,
-              commissionRate: env.affiliateCommissionRate,
+              type: 'order',
+              // commissionRate omitted — derived from tier
             });
           }
         } catch (commissionError) {
