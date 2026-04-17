@@ -2,6 +2,8 @@ import Stripe from 'stripe';
 import { env, STRIPE_API_VERSION } from '../config/env';
 import { prisma } from '../lib/prisma';
 import { preferencesService } from './preferencesService';
+import { affiliateService } from './affiliateService';
+import { handleActiveReferral } from './affiliateTierService';
 
 const stripe = new Stripe(env.stripeSecretKey, {
   apiVersion: STRIPE_API_VERSION as any,
@@ -410,6 +412,54 @@ export const subscriptionService = {
   },
 
   /**
+   * Create a lifetime 40% commission for the referrer when a subscription invoice is paid.
+   * Idempotent on stripeInvoiceId. Triggers tier/bounty/goal recalc only on the merchant's
+   * FIRST ever subscription invoice (transition from inactive → active referral).
+   */
+  async handleSubscriptionInvoicePaid(params: {
+    merchantId: string;
+    stripeInvoiceId: string;
+    amountPaidCents: number;
+  }): Promise<void> {
+    const { merchantId, stripeInvoiceId, amountPaidCents } = params;
+    if (amountPaidCents <= 0) return;
+
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: { referredBy: true },
+    });
+    if (!merchant?.referredBy) return;
+
+    const existing = await prisma.affiliateCommission.findFirst({
+      where: { stripeInvoiceId, type: 'subscription' },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const priorActive = await prisma.affiliateCommission.count({
+      where: {
+        affiliateId: merchant.referredBy,
+        referredMerchantId: merchantId,
+        type: 'subscription',
+        status: { not: 'cancelled' },
+      },
+    });
+
+    await affiliateService.createCommission({
+      affiliateId: merchant.referredBy,
+      referredMerchantId: merchantId,
+      amount: amountPaidCents,
+      type: 'subscription',
+      stripeInvoiceId,
+      metadata: { stripeInvoiceId },
+    });
+
+    if (priorActive === 0) {
+      await handleActiveReferral(merchant.referredBy);
+    }
+  },
+
+  /**
    * Handle invoice webhook
    */
   async handleInvoiceWebhook(event: Stripe.Event): Promise<void> {
@@ -455,6 +505,16 @@ export const subscriptionService = {
         hostedInvoiceUrl: invoice.hosted_invoice_url || null,
       },
     });
+
+    if (invoice.status === 'paid' && invoice.amount_paid > 0) {
+      await subscriptionService.handleSubscriptionInvoicePaid({
+        merchantId: dbSubscription.merchantId,
+        stripeInvoiceId: invoice.id!,
+        amountPaidCents: invoice.amount_paid,
+      });
+    }
   },
 };
+
+export const handleSubscriptionInvoicePaid = subscriptionService.handleSubscriptionInvoicePaid.bind(subscriptionService);
 
