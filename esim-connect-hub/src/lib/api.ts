@@ -1093,6 +1093,25 @@ class ApiClient {
     }>('/api/affiliates/stats');
   }
 
+  async getAffiliateLeaderboard(range: 'all' | 'month' | 'week' = 'all') {
+    return this.request<{
+      range: string;
+      top: Array<{ rank: number; handle: string; tier: string; earnings: number; avatarSeed: string; isMe?: boolean }>;
+      me: { rank: number; handle: string; tier: string; earnings: number; avatarSeed: string; isMe: boolean } | null;
+    }>(`/api/affiliates/leaderboard?range=${range}`);
+  }
+
+  async getAffiliateGamification() {
+    return this.request<any>('/api/affiliates/me/gamification');
+  }
+
+  async updateAffiliateHandle(handle: string) {
+    return this.request<{ handle: string }>('/api/affiliates/me/handle', {
+      method: 'PATCH',
+      body: JSON.stringify({ handle }),
+    });
+  }
+
   async getAffiliateCommissions(params?: {
     status?: string;
     startDate?: string;
