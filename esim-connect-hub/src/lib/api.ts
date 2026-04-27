@@ -794,6 +794,13 @@ class ApiClient {
     }>>(`/api/admin/affiliates${query}`);
   }
 
+  async deleteAdminMerchant(merchantId: string) {
+    return this.request<{ message: string; report: { stripe: string; clerk: string } }>(
+      `/api/admin/merchants/${merchantId}`,
+      { method: 'DELETE' }
+    );
+  }
+
   async getAdminAffiliateReferrals(merchantId: string) {
     return this.request<Array<{
       id: string;

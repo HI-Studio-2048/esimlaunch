@@ -1,6 +1,6 @@
 import express from 'express';
 import { authenticateSessionOrJWT } from '../middleware/jwtAuth';
-import { env } from '../config/env';
+import { env, STRIPE_API_VERSION } from '../config/env';
 import { prisma } from '../lib/prisma';
 
 const router = express.Router();
@@ -655,6 +655,101 @@ router.get('/affiliates', async (req, res) => {
       success: false,
       errorCode: 'FETCH_FAILED',
       errorMessage: error?.message || 'Failed to fetch affiliate stats',
+    });
+  }
+});
+
+/**
+ * DELETE /api/admin/merchants/:merchantId
+ * Hard-delete a merchant: cancel Stripe subscription, delete Stripe customer,
+ * delete Clerk user, then delete the DB row. Prisma cascades clean up the rest.
+ *
+ * External-system failures (Stripe/Clerk) are logged and reported but do NOT
+ * block the DB delete — admin can follow up manually if needed.
+ */
+router.delete('/merchants/:merchantId', async (req, res) => {
+  try {
+    const { merchantId } = req.params;
+    const adminId = (req as any).merchant!.id;
+
+    if (merchantId === adminId) {
+      res.status(400).json({
+        success: false,
+        errorCode: 'CANNOT_DELETE_SELF',
+        errorMessage: 'You cannot delete your own admin account.',
+      });
+      return;
+    }
+
+    const merchant = await prisma.merchant.findUnique({
+      where: { id: merchantId },
+      select: {
+        id: true,
+        email: true,
+        clerkUserId: true,
+        subscription: { select: { stripeSubscriptionId: true, stripeCustomerId: true } },
+      },
+    });
+
+    if (!merchant) {
+      res.status(404).json({ success: false, errorCode: 'MERCHANT_NOT_FOUND', errorMessage: 'Merchant not found' });
+      return;
+    }
+
+    const report: { stripe: string; clerk: string } = { stripe: 'skipped', clerk: 'skipped' };
+    const { logger } = await import('../lib/logger');
+
+    // 1. Stripe — cancel sub + delete customer
+    if (merchant.subscription?.stripeSubscriptionId || merchant.subscription?.stripeCustomerId) {
+      try {
+        const Stripe = (await import('stripe')).default;
+        const stripe = new Stripe(env.stripeSecretKey, { apiVersion: STRIPE_API_VERSION as any });
+
+        if (merchant.subscription.stripeSubscriptionId) {
+          try {
+            await stripe.subscriptions.cancel(merchant.subscription.stripeSubscriptionId);
+          } catch (err: any) {
+            // Sub may already be cancelled / not exist — non-fatal
+            logger.warn({ err, merchantId }, 'stripe sub cancel failed during delete');
+          }
+        }
+        if (merchant.subscription.stripeCustomerId) {
+          await stripe.customers.del(merchant.subscription.stripeCustomerId);
+        }
+        report.stripe = 'cleaned';
+      } catch (err: any) {
+        logger.error({ err, merchantId }, 'stripe cleanup failed during merchant delete');
+        report.stripe = `failed: ${err?.message || 'unknown error'}`;
+      }
+    }
+
+    // 2. Clerk — delete user
+    if (merchant.clerkUserId) {
+      try {
+        const { clerkClient } = await import('@clerk/clerk-sdk-node');
+        await clerkClient.users.deleteUser(merchant.clerkUserId);
+        report.clerk = 'deleted';
+      } catch (err: any) {
+        logger.error({ err, merchantId }, 'clerk delete failed during merchant delete');
+        report.clerk = `failed: ${err?.message || 'unknown error'}`;
+      }
+    }
+
+    // 3. DB — cascades wipe stores, orders, commissions, clicks, etc.
+    await prisma.merchant.delete({ where: { id: merchantId } });
+
+    logger.info({ merchantId, email: merchant.email, adminId, report }, 'merchant deleted by admin');
+
+    res.json({
+      success: true,
+      message: `Merchant ${merchant.email} deleted.`,
+      report,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'DELETE_FAILED',
+      errorMessage: error?.message || 'Failed to delete merchant',
     });
   }
 });

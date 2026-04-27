@@ -4,6 +4,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   User,
   Mail,
@@ -20,6 +32,7 @@ import {
   ChevronRight,
   Users,
   UserPlus,
+  Trash2,
 } from "lucide-react";
 
 const ADMIN_EMAIL = "admin@esimlaunch.com";
@@ -45,6 +58,8 @@ export default function AdminMerchantDetail() {
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { merchantId } = useParams<{ merchantId: string }>();
+  const { toast } = useToast();
+  const [deleting, setDeleting] = useState(false);
 
   const isAdmin =
     user?.role === "ADMIN" ||
@@ -104,6 +119,28 @@ export default function AdminMerchantDetail() {
 
   const sub = merchant.subscription;
 
+  const handleDelete = async () => {
+    if (!merchantId) return;
+    setDeleting(true);
+    try {
+      const result: any = await apiClient.deleteAdminMerchant(merchantId);
+      const stripe = result?.report?.stripe ?? "skipped";
+      const clerk = result?.report?.clerk ?? "skipped";
+      toast({
+        title: "Merchant deleted",
+        description: `Stripe: ${stripe}. Clerk: ${clerk}.`,
+      });
+      navigate("/admin/merchants", { replace: true });
+    } catch (err: any) {
+      toast({
+        title: "Delete failed",
+        description: err?.message || "Could not delete merchant",
+        variant: "destructive",
+      });
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Back */}
@@ -118,7 +155,7 @@ export default function AdminMerchantDetail() {
         <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
           <User className="w-6 h-6 text-primary" />
         </div>
-        <div>
+        <div className="flex-1">
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold">{merchant.name || merchant.email}</h1>
             {merchant.role === "ADMIN" && (
@@ -133,6 +170,50 @@ export default function AdminMerchantDetail() {
           <p className="text-muted-foreground text-sm">{merchant.email}</p>
           <p className="text-xs text-muted-foreground mt-1">ID: {merchant.id}</p>
         </div>
+        {merchant.role !== "ADMIN" && merchant.id !== user?.id && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" disabled={deleting}>
+                {deleting ? (
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4 mr-1.5" />
+                )}
+                Delete merchant
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {merchant.email}?</AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm">
+                    <p>This permanently removes the merchant. The action will:</p>
+                    <ul className="list-disc pl-5 space-y-1">
+                      <li>Cancel and delete their Stripe customer + subscription{sub?.stripeSubscriptionId ? "" : " (none on file)"}</li>
+                      <li>Delete their Clerk account{merchant.clerkUserId ? "" : " (none on file)"}</li>
+                      <li>
+                        Delete <strong>{merchant.stores?.length ?? 0} store(s)</strong>,{" "}
+                        <strong>{merchant.referrals?.length ?? 0} referral record(s)</strong>,
+                        and all their orders, API keys, commissions, and clicks
+                      </li>
+                    </ul>
+                    <p className="text-destructive font-medium pt-2">This cannot be undone.</p>
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {deleting ? "Deleting…" : "Delete permanently"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
 
       {/* Profile */}
