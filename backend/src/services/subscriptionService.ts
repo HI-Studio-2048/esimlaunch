@@ -20,13 +20,21 @@ function stripeTimestampToDate(v: unknown): Date {
   return new Date();
 }
 
-/** Get period dates from Stripe subscription. Checks top-level, items.data[0], and trial_start/trial_end. */
+/** Get period dates from Stripe subscription. Checks top-level, items.data[0], and trial_start/trial_end.
+ *  When the sub is in `trialing` status we surface the trial window (start = trial_start, end = trial_end)
+ *  so the UI shows the 7-day trial period instead of the full billing cycle.
+ */
 function getSubscriptionPeriodDates(sub: any): { start: Date; end: Date } {
+  if (sub.status === 'trialing' && sub.trial_start && sub.trial_end) {
+    return {
+      start: stripeTimestampToDate(sub.trial_start),
+      end: stripeTimestampToDate(sub.trial_end),
+    };
+  }
   const startVal = sub.current_period_start ?? sub.items?.data?.[0]?.current_period_start ?? sub.trial_start ?? sub.created;
   const endVal = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end ?? sub.trial_end;
   const start = stripeTimestampToDate(startVal);
   let end = stripeTimestampToDate(endVal);
-  // If end still invalid/same-day but we have trial_end, use it (trialing subs)
   if (sub.trial_end && (end.getTime() <= start.getTime() || isNaN(end.getTime()))) {
     end = stripeTimestampToDate(sub.trial_end);
   }
@@ -339,28 +347,36 @@ export const subscriptionService = {
       },
     });
 
-    // Self-heal: if we have a Stripe sub but period dates look wrong (same day = 0 trial), sync from Stripe
+    // Self-heal: re-sync from Stripe when local state looks stale.
+    // Triggers: (a) period dates collapsed to same-day, (b) currentPeriodEnd already in the past
+    // (e.g. trial expired but webhook never landed so status is stuck on `trialing`).
     if (subscription?.stripeSubscriptionId) {
       const start = subscription.currentPeriodStart.getTime();
       const end = subscription.currentPeriodEnd.getTime();
+      const now = Date.now();
       const sameDay = start === end || (end - start) < 24 * 60 * 60 * 1000;
-      if (sameDay && subscription.status === 'trialing') {
+      const expired = end < now;
+      const isOpen = subscription.status === 'trialing' || subscription.status === 'active' || subscription.status === 'past_due';
+      if (isOpen && (sameDay || expired)) {
         try {
           const stripeSub = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId, {
             expand: ['items.data'],
           });
           const { start: correctStart, end: correctEnd } = getSubscriptionPeriodDates(stripeSub as any);
-          if (correctEnd.getTime() - correctStart.getTime() > 24 * 60 * 60 * 1000) {
-            subscription = await prisma.subscription.update({
-              where: { merchantId },
-              data: { currentPeriodStart: correctStart, currentPeriodEnd: correctEnd },
-              include: {
-                invoices: { orderBy: { createdAt: 'desc' as const }, take: 10 },
-              },
-            });
-          }
+          subscription = await prisma.subscription.update({
+            where: { merchantId },
+            data: {
+              status: stripeSub.status as SubscriptionStatus,
+              currentPeriodStart: correctStart,
+              currentPeriodEnd: correctEnd,
+              cancelAtPeriodEnd: stripeSub.cancel_at_period_end || false,
+            },
+            include: {
+              invoices: { orderBy: { createdAt: 'desc' as const }, take: 10 },
+            },
+          });
         } catch (e) {
-          console.warn('Could not sync subscription dates from Stripe:', (e as Error).message);
+          console.warn('Could not sync subscription from Stripe:', (e as Error).message);
         }
       }
     }
