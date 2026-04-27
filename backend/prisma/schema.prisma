@@ -53,6 +53,7 @@ model Merchant {
   referredMerchants        AffiliateCommission[] @relation("ReferredBy")
   bountyClaims             AffiliateBountyClaim[]
   weeklyProgress           AffiliateWeeklyProgress[]
+  affiliateClicks          AffiliateClick[]
   emailTemplates           EmailTemplate[]
   preferences              MerchantPreference[]
   esimProfiles             EsimProfile[]
@@ -575,6 +576,22 @@ model AffiliateWeeklyProgress {
   @@unique([merchantId, isoWeek])
   @@index([merchantId])
   @@index([isoWeek])
+}
+
+model AffiliateClick {
+  id           String   @id @default(uuid())
+  merchantId   String
+  referralCode String
+  ipHash       String?
+  userAgent    String?
+  referer      String?
+  country      String?
+  createdAt    DateTime @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId, createdAt])
+  @@index([referralCode])
 }
 
 model AffiliateLeaderboardMock {

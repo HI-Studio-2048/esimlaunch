@@ -772,6 +772,28 @@ class ApiClient {
     return this.request<any>(`/api/admin/subscriptions${query}`);
   }
 
+  async getAdminAffiliates(params?: { sort?: 'clicks' | 'clicks30' | 'signups' | 'conversion' | 'earnings'; search?: string; limit?: number }) {
+    const qs = new URLSearchParams();
+    if (params?.sort) qs.set('sort', params.sort);
+    if (params?.search) qs.set('search', params.search);
+    if (params?.limit) qs.set('limit', String(params.limit));
+    const query = qs.toString() ? `?${qs}` : '';
+    return this.request<Array<{
+      id: string;
+      email: string;
+      name: string | null;
+      handle: string | null;
+      tier: string;
+      referralCode: string;
+      joinedAt: string;
+      clicksAllTime: number;
+      clicks30d: number;
+      referredMerchants: number;
+      conversionRate: number;
+      totalEarnings: number;
+    }>>(`/api/admin/affiliates${query}`);
+  }
+
   async getAdminSupport(params?: { status?: string; priority?: string; page?: number; limit?: number }) {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);
@@ -1090,6 +1112,9 @@ class ApiClient {
       pendingCommissions: number;
       paidCommissions: number;
       referredMerchants: number;
+      clicksAllTime: number;
+      clicks30d: number;
+      conversionRate: number;
     }>('/api/affiliates/stats');
   }
 

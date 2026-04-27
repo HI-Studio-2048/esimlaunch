@@ -493,6 +493,122 @@ router.get('/subscriptions', async (req, res) => {
   }
 });
 
+/* ─── Affiliates (clicks + conversions) ─────────────────────── */
+
+/**
+ * GET /api/admin/affiliates
+ * Per-affiliate breakdown of link clicks, signups, and earnings.
+ * Sorted by total clicks desc by default. Only includes merchants who
+ * have a referralCode (i.e. could have generated traffic).
+ */
+router.get('/affiliates', async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 100), 500);
+    const sort = (req.query.sort as string) || 'clicks';
+    const search = (req.query.search as string)?.trim().toLowerCase();
+
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    const merchantWhere: any = { referralCode: { not: null } };
+    if (search) {
+      merchantWhere.OR = [
+        { email: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search, mode: 'insensitive' } },
+        { affiliateHandle: { contains: search, mode: 'insensitive' } },
+        { referralCode: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    const merchants = await prisma.merchant.findMany({
+      where: merchantWhere,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        referralCode: true,
+        affiliateHandle: true,
+        affiliateTier: true,
+        createdAt: true,
+      },
+    });
+
+    if (merchants.length === 0) {
+      return res.json({ success: true, data: [], meta: { total: 0 } });
+    }
+
+    const merchantIds = merchants.map((m) => m.id);
+
+    const [clicksAll, clicks30, signupCounts, earnings] = await Promise.all([
+      prisma.affiliateClick.groupBy({
+        by: ['merchantId'],
+        where: { merchantId: { in: merchantIds } },
+        _count: { _all: true },
+      }),
+      prisma.affiliateClick.groupBy({
+        by: ['merchantId'],
+        where: { merchantId: { in: merchantIds }, createdAt: { gte: thirtyDaysAgo } },
+        _count: { _all: true },
+      }),
+      prisma.merchant.groupBy({
+        by: ['referredBy'],
+        where: { referredBy: { in: merchantIds } },
+        _count: { _all: true },
+      }),
+      prisma.affiliateCommission.groupBy({
+        by: ['affiliateId'],
+        where: { affiliateId: { in: merchantIds }, status: 'paid' },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const clicksAllMap = new Map(clicksAll.map((r) => [r.merchantId, r._count._all]));
+    const clicks30Map = new Map(clicks30.map((r) => [r.merchantId, r._count._all]));
+    const signupMap = new Map(signupCounts.map((r) => [r.referredBy!, r._count._all]));
+    const earningsMap = new Map(earnings.map((r) => [r.affiliateId, Number(r._sum.amount ?? 0n) / 100]));
+
+    const rows = merchants.map((m) => {
+      const clicksAllTime = clicksAllMap.get(m.id) ?? 0;
+      const referredMerchants = signupMap.get(m.id) ?? 0;
+      return {
+        id: m.id,
+        email: m.email,
+        name: m.name,
+        handle: m.affiliateHandle,
+        tier: m.affiliateTier,
+        referralCode: m.referralCode,
+        joinedAt: m.createdAt,
+        clicksAllTime,
+        clicks30d: clicks30Map.get(m.id) ?? 0,
+        referredMerchants,
+        conversionRate: clicksAllTime > 0
+          ? Number(((referredMerchants / clicksAllTime) * 100).toFixed(2))
+          : 0,
+        totalEarnings: earningsMap.get(m.id) ?? 0,
+      };
+    });
+
+    const sortKey =
+      sort === 'signups' ? 'referredMerchants'
+      : sort === 'earnings' ? 'totalEarnings'
+      : sort === 'conversion' ? 'conversionRate'
+      : sort === 'clicks30' ? 'clicks30d'
+      : 'clicksAllTime';
+    rows.sort((a, b) => (b as any)[sortKey] - (a as any)[sortKey]);
+
+    res.json({
+      success: true,
+      data: rows.slice(0, limit),
+      meta: { total: rows.length },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'FETCH_FAILED',
+      errorMessage: error?.message || 'Failed to fetch affiliate stats',
+    });
+  }
+});
+
 /* ─── Support tickets (overview) ────────────────────────────── */
 
 /**

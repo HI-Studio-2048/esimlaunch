@@ -187,7 +187,8 @@ export const affiliateService = {
       }),
     ]);
 
-    const [referredMerchants, recentCommissions] = await Promise.all([
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const [referredMerchants, recentCommissions, clicksAllTime, clicks30d] = await Promise.all([
       prisma.merchant.count({ where: { referredBy: merchantId } }),
       prisma.affiliateCommission.findMany({
         where: { affiliateId: merchantId },
@@ -203,7 +204,13 @@ export const affiliateService = {
           },
         },
       }),
+      prisma.affiliateClick.count({ where: { merchantId } }),
+      prisma.affiliateClick.count({ where: { merchantId, createdAt: { gte: thirtyDaysAgo } } }),
     ]);
+
+    const conversionRate = clicksAllTime > 0
+      ? Number(((referredMerchants / clicksAllTime) * 100).toFixed(2))
+      : 0;
 
     return {
       totalCommissions,
@@ -211,6 +218,9 @@ export const affiliateService = {
       paidCommissions,
       totalEarnings: Number(totalEarnings._sum.amount || 0) / 100,
       referredMerchants,
+      clicksAllTime,
+      clicks30d,
+      conversionRate,
       recentCommissions: recentCommissions.map(c => ({
         ...c,
         amount: Number(c.amount) / 100,

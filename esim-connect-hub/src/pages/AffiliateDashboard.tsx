@@ -101,7 +101,8 @@ function OverviewTab() {
   };
 
   const getReferralLink = (code: string) => {
-    return `${window.location.origin}/signup?ref=${code}`;
+    if (!code) return "";
+    return `${window.location.origin}/r/${code}`;
   };
 
   const handleRequestPayout = async () => {
@@ -248,7 +249,7 @@ function OverviewTab() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid md:grid-cols-4 gap-6">
+        <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-6">
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
@@ -274,6 +275,24 @@ function OverviewTab() {
                 <p className="text-sm text-muted-foreground">Paid</p>
                 <p className="text-2xl font-bold text-green-600">${stats.totalEarnings.toFixed(2)}</p>
                 <p className="text-xs text-muted-foreground mt-1">{stats.paidCommissions} commissions</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">Link Clicks</p>
+                <p className="text-2xl font-bold">{stats.clicksAllTime ?? 0}</p>
+                <p className="text-xs text-muted-foreground mt-1">{stats.clicks30d ?? 0} in last 30d</p>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <p className="text-sm text-muted-foreground">Conversion</p>
+                <p className="text-2xl font-bold">{(stats.conversionRate ?? 0).toFixed(2)}%</p>
+                <p className="text-xs text-muted-foreground mt-1">signups / clicks</p>
               </div>
             </CardContent>
           </Card>

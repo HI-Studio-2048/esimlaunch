@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/r/:code", "destination": "https://api.esimlaunch.com/r/:code" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

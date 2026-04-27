@@ -109,7 +109,14 @@ export default function Admin() {
   const [subsLoading, setSubsLoading] = useState(true);
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<"overview" | "stores" | "merchants" | "subscriptions">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "stores" | "merchants" | "subscriptions" | "affiliates">("overview");
+
+  // Affiliates
+  const [affiliates, setAffiliates] = useState<any[]>([]);
+  const [affiliatesLoading, setAffiliatesLoading] = useState(false);
+  const [affiliateSort, setAffiliateSort] = useState<"clicks" | "clicks30" | "signups" | "conversion" | "earnings">("clicks");
+  const [affiliateSearch, setAffiliateSearch] = useState("");
+  const [affiliateSearchInput, setAffiliateSearchInput] = useState("");
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -164,9 +171,27 @@ export default function Admin() {
     }
   }, [isAdmin]);
 
+  const fetchAffiliates = useCallback(async () => {
+    if (!isAdmin) return;
+    try {
+      setAffiliatesLoading(true);
+      const res = await apiClient.getAdminAffiliates({
+        sort: affiliateSort,
+        search: affiliateSearch || undefined,
+        limit: 200,
+      });
+      setAffiliates(res ?? []);
+    } catch (_) {
+      setAffiliates([]);
+    } finally {
+      setAffiliatesLoading(false);
+    }
+  }, [isAdmin, affiliateSort, affiliateSearch]);
+
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
   useEffect(() => { fetchStores(); }, [fetchStores]);
   useEffect(() => { fetchSubscriptions(); }, [fetchSubscriptions]);
+  useEffect(() => { fetchAffiliates(); }, [fetchAffiliates]);
 
   const handleStatusChange = async (storeId: string, newStatus: string) => {
     setUpdatingStore(storeId);
@@ -204,6 +229,7 @@ export default function Admin() {
     { id: "stores", label: "Store requests" },
     { id: "merchants", label: "Merchants" },
     { id: "subscriptions", label: "Subscriptions" },
+    { id: "affiliates", label: "Affiliates" },
   ] as const;
 
   return (
@@ -224,7 +250,7 @@ export default function Admin() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => { fetchSummary(); fetchStores(); fetchSubscriptions(); }}
+          onClick={() => { fetchSummary(); fetchStores(); fetchSubscriptions(); fetchAffiliates(); }}
         >
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
@@ -576,6 +602,95 @@ export default function Admin() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Affiliates tab ── */}
+      {activeTab === "affiliates" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex gap-2 flex-1 min-w-60">
+              <Input
+                placeholder="Search by email, name, handle, or code..."
+                value={affiliateSearchInput}
+                onChange={(e) => setAffiliateSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && setAffiliateSearch(affiliateSearchInput.trim())}
+                className="max-w-sm"
+              />
+              <Button variant="outline" size="sm" onClick={() => setAffiliateSearch(affiliateSearchInput.trim())}>
+                <Search className="w-4 h-4" />
+              </Button>
+            </div>
+            <Select value={affiliateSort} onValueChange={(v) => setAffiliateSort(v as any)}>
+              <SelectTrigger className="w-52">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="clicks">Sort: Clicks (all time)</SelectItem>
+                <SelectItem value="clicks30">Sort: Clicks (30d)</SelectItem>
+                <SelectItem value="signups">Sort: Signups</SelectItem>
+                <SelectItem value="conversion">Sort: Conversion %</SelectItem>
+                <SelectItem value="earnings">Sort: Earnings</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {affiliatesLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            </div>
+          ) : affiliates.length === 0 ? (
+            <div className="bg-card border rounded-xl p-8 text-center text-sm text-muted-foreground">
+              No affiliates yet.
+            </div>
+          ) : (
+            <div className="bg-card border rounded-xl overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                    <tr>
+                      <th className="text-left px-4 py-2.5 font-medium">Affiliate</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Code</th>
+                      <th className="text-left px-4 py-2.5 font-medium">Tier</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Clicks</th>
+                      <th className="text-right px-4 py-2.5 font-medium">30d</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Signups</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Conv. %</th>
+                      <th className="text-right px-4 py-2.5 font-medium">Earnings</th>
+                      <th className="px-4 py-2.5"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {affiliates.map((a) => (
+                      <tr key={a.id} className="hover:bg-muted/30">
+                        <td className="px-4 py-2.5">
+                          <div className="font-medium">{a.handle ?? a.name ?? a.email}</div>
+                          <div className="text-xs text-muted-foreground">{a.email}</div>
+                        </td>
+                        <td className="px-4 py-2.5 font-mono text-xs">{a.referralCode}</td>
+                        <td className="px-4 py-2.5">
+                          <Badge variant="outline" className="capitalize">{a.tier}</Badge>
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{a.clicksAllTime}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{a.clicks30d}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{a.referredMerchants}</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">{a.conversionRate.toFixed(2)}%</td>
+                        <td className="px-4 py-2.5 text-right tabular-nums">${a.totalEarnings.toFixed(2)}</td>
+                        <td className="px-4 py-2.5">
+                          <Link
+                            to={`/admin/merchants/${a.id}`}
+                            className="text-muted-foreground hover:text-primary flex items-center gap-1 text-xs"
+                          >
+                            View <ChevronRight className="w-3.5 h-3.5" />
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
