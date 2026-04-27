@@ -794,6 +794,16 @@ class ApiClient {
     }>>(`/api/admin/affiliates${query}`);
   }
 
+  async getAdminAffiliateReferrals(merchantId: string) {
+    return this.request<Array<{
+      id: string;
+      email: string;
+      name: string | null;
+      signedUpAt: string;
+      active: boolean;
+    }>>(`/api/admin/affiliates/${merchantId}/referrals`);
+  }
+
   async getAdminSupport(params?: { status?: string; priority?: string; page?: number; limit?: number }) {
     const qs = new URLSearchParams();
     if (params?.status) qs.set('status', params.status);

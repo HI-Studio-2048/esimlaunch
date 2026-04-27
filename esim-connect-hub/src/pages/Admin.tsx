@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiClient } from "@/lib/api";
@@ -117,6 +117,25 @@ export default function Admin() {
   const [affiliateSort, setAffiliateSort] = useState<"clicks" | "clicks30" | "signups" | "conversion" | "earnings">("clicks");
   const [affiliateSearch, setAffiliateSearch] = useState("");
   const [affiliateSearchInput, setAffiliateSearchInput] = useState("");
+  const [expandedAffiliateId, setExpandedAffiliateId] = useState<string | null>(null);
+  const [affiliateReferrals, setAffiliateReferrals] = useState<Record<string, any[] | "loading">>({});
+
+  const toggleAffiliateRow = async (id: string) => {
+    if (expandedAffiliateId === id) {
+      setExpandedAffiliateId(null);
+      return;
+    }
+    setExpandedAffiliateId(id);
+    if (!affiliateReferrals[id]) {
+      setAffiliateReferrals((p) => ({ ...p, [id]: "loading" }));
+      try {
+        const data = await apiClient.getAdminAffiliateReferrals(id);
+        setAffiliateReferrals((p) => ({ ...p, [id]: data ?? [] }));
+      } catch {
+        setAffiliateReferrals((p) => ({ ...p, [id]: [] }));
+      }
+    }
+  };
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
@@ -661,31 +680,92 @@ export default function Admin() {
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {affiliates.map((a) => (
-                      <tr key={a.id} className="hover:bg-muted/30">
-                        <td className="px-4 py-2.5">
-                          <div className="font-medium">{a.handle ?? a.name ?? a.email}</div>
-                          <div className="text-xs text-muted-foreground">{a.email}</div>
-                        </td>
-                        <td className="px-4 py-2.5 font-mono text-xs">{a.referralCode}</td>
-                        <td className="px-4 py-2.5">
-                          <Badge variant="outline" className="capitalize">{a.tier}</Badge>
-                        </td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{a.clicksAllTime}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{a.clicks30d}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{a.referredMerchants}</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">{a.conversionRate.toFixed(2)}%</td>
-                        <td className="px-4 py-2.5 text-right tabular-nums">${a.totalEarnings.toFixed(2)}</td>
-                        <td className="px-4 py-2.5">
-                          <Link
-                            to={`/admin/merchants/${a.id}`}
-                            className="text-muted-foreground hover:text-primary flex items-center gap-1 text-xs"
+                    {affiliates.map((a) => {
+                      const isExpanded = expandedAffiliateId === a.id;
+                      const refs = affiliateReferrals[a.id];
+                      return (
+                        <Fragment key={a.id}>
+                          <tr
+                            className="hover:bg-muted/30 cursor-pointer"
+                            onClick={() => toggleAffiliateRow(a.id)}
                           >
-                            View <ChevronRight className="w-3.5 h-3.5" />
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center gap-1.5">
+                                <ChevronRight
+                                  className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                                />
+                                <div>
+                                  <div className="font-medium">{a.handle ?? a.name ?? a.email}</div>
+                                  <div className="text-xs text-muted-foreground">{a.email}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-2.5 font-mono text-xs">{a.referralCode}</td>
+                            <td className="px-4 py-2.5">
+                              <Badge variant="outline" className="capitalize">{a.tier}</Badge>
+                            </td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">{a.clicksAllTime}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums text-muted-foreground">{a.clicks30d}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">{a.referredMerchants}</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">{a.conversionRate.toFixed(2)}%</td>
+                            <td className="px-4 py-2.5 text-right tabular-nums">${a.totalEarnings.toFixed(2)}</td>
+                            <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                              <Link
+                                to={`/admin/merchants/${a.id}`}
+                                className="text-muted-foreground hover:text-primary flex items-center gap-1 text-xs"
+                              >
+                                View <ChevronRight className="w-3.5 h-3.5" />
+                              </Link>
+                            </td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className="bg-muted/20">
+                              <td colSpan={9} className="px-4 py-3">
+                                {refs === "loading" ? (
+                                  <div className="flex items-center justify-center py-4">
+                                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                                  </div>
+                                ) : !refs || refs.length === 0 ? (
+                                  <p className="text-xs text-muted-foreground py-2">No signups from this affiliate yet.</p>
+                                ) : (
+                                  <div className="space-y-1.5">
+                                    <p className="text-xs font-medium text-muted-foreground uppercase mb-2">
+                                      Signed up via {a.handle ?? a.email} ({refs.length})
+                                    </p>
+                                    {refs.map((r: any) => (
+                                      <div key={r.id} className="flex items-center justify-between text-sm bg-background border rounded-lg px-3 py-2">
+                                        <div className="flex items-center gap-3">
+                                          <div>
+                                            <div className="font-medium">{r.name || r.email}</div>
+                                            <div className="text-xs text-muted-foreground">{r.email}</div>
+                                          </div>
+                                          {r.active ? (
+                                            <Badge className="bg-green-600 hover:bg-green-600 text-xs">Active</Badge>
+                                          ) : (
+                                            <Badge variant="secondary" className="text-xs">Signed up</Badge>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-xs text-muted-foreground">
+                                            {new Date(r.signedUpAt).toLocaleDateString()}
+                                          </span>
+                                          <Link
+                                            to={`/admin/merchants/${r.id}`}
+                                            className="text-muted-foreground hover:text-primary text-xs flex items-center gap-1"
+                                          >
+                                            View <ChevronRight className="w-3 h-3" />
+                                          </Link>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

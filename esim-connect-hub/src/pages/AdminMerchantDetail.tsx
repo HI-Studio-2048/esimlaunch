@@ -18,6 +18,8 @@ import {
   XCircle,
   ExternalLink,
   ChevronRight,
+  Users,
+  UserPlus,
 } from "lucide-react";
 
 const ADMIN_EMAIL = "admin@esimlaunch.com";
@@ -163,6 +165,74 @@ export default function AdminMerchantDetail() {
           </InfoRow>
           <InfoRow label="Joined"><span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5 text-muted-foreground" />{formatDate(merchant.createdAt)}</span></InfoRow>
           <InfoRow label="Referral code">{merchant.referralCode || <span className="text-muted-foreground">—</span>}</InfoRow>
+          <InfoRow label="Referred by">
+            {merchant.referredByMerchant ? (
+              <Link
+                to={`/admin/merchants/${merchant.referredByMerchant.id}`}
+                className="text-primary hover:underline flex items-center gap-1"
+              >
+                {merchant.referredByMerchant.affiliateHandle ?? merchant.referredByMerchant.name ?? merchant.referredByMerchant.email}
+                <span className="text-muted-foreground text-xs">({merchant.referredByMerchant.email})</span>
+              </Link>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </InfoRow>
+        </div>
+      </section>
+
+      {/* Referrals */}
+      <section className="bg-card border rounded-xl shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b flex items-center gap-2">
+          <Users className="w-4 h-4 text-muted-foreground" />
+          <h2 className="font-semibold">
+            Referrals ({merchant.referrals?.length ?? 0})
+          </h2>
+          {merchant.referrals?.length > 0 && (
+            <span className="text-xs text-muted-foreground ml-auto">
+              {merchant.referrals.filter((r: any) => r.active).length} active
+            </span>
+          )}
+        </div>
+        <div className="px-6 py-4">
+          {!merchant.referrals || merchant.referrals.length === 0 ? (
+            <p className="py-2 text-sm text-muted-foreground">
+              This merchant hasn't referred anyone yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {merchant.referrals.map((r: any) => (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between text-sm bg-muted/30 border rounded-lg px-3 py-2"
+                >
+                  <div className="flex items-center gap-3">
+                    <UserPlus className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <div>
+                      <div className="font-medium">{r.name || r.email}</div>
+                      <div className="text-xs text-muted-foreground">{r.email}</div>
+                    </div>
+                    {r.active ? (
+                      <Badge className="bg-green-600 hover:bg-green-600 text-xs">Active</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs">Signed up</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-muted-foreground">
+                      {formatDate(r.signedUpAt)}
+                    </span>
+                    <Link
+                      to={`/admin/merchants/${r.id}`}
+                      className="text-muted-foreground hover:text-primary text-xs flex items-center gap-1"
+                    >
+                      View <ChevronRight className="w-3 h-3" />
+                    </Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

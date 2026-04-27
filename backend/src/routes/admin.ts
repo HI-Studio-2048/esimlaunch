@@ -310,6 +310,9 @@ router.get('/merchants/:merchantId', async (req, res) => {
         createdAt: true,
         updatedAt: true,
         referralCode: true,
+        referredBy: true,
+        affiliateHandle: true,
+        affiliateTier: true,
         subscription: {
           select: {
             plan: true,
@@ -376,12 +379,59 @@ router.get('/merchants/:merchantId', async (req, res) => {
     // Extract onboarding progress from preferences
     const onboardingPref = merchant.preferences.find((p) => p.key === 'onboarding_progress');
 
+    // Resolve who referred this merchant (if any)
+    const referredByMerchant = merchant.referredBy
+      ? await prisma.merchant.findUnique({
+          where: { id: merchant.referredBy },
+          select: { id: true, email: true, name: true, affiliateHandle: true },
+        })
+      : null;
+
+    // Find merchants this person referred + their active status
+    const referredList = await prisma.merchant.findMany({
+      where: { referredBy: merchant.id },
+      select: { id: true, email: true, name: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    let referrals: Array<{
+      id: string;
+      email: string;
+      name: string | null;
+      signedUpAt: Date;
+      active: boolean;
+    }> = [];
+
+    if (referredList.length > 0) {
+      const referredIds = referredList.map((m) => m.id);
+      const activeRows = await prisma.affiliateCommission.findMany({
+        where: {
+          affiliateId: merchant.id,
+          type: 'subscription',
+          status: { not: 'cancelled' },
+          referredMerchantId: { in: referredIds },
+        },
+        select: { referredMerchantId: true },
+        distinct: ['referredMerchantId'],
+      });
+      const activeSet = new Set(activeRows.map((r) => r.referredMerchantId));
+      referrals = referredList.map((m) => ({
+        id: m.id,
+        email: m.email,
+        name: m.name,
+        signedUpAt: m.createdAt,
+        active: activeSet.has(m.id),
+      }));
+    }
+
     res.json({
       success: true,
       data: {
         ...merchant,
         stores: storesWithUrls,
         onboardingProgress: onboardingPref?.value ?? null,
+        referredByMerchant,
+        referrals,
       },
     });
   } catch (error: any) {
@@ -605,6 +655,56 @@ router.get('/affiliates', async (req, res) => {
       success: false,
       errorCode: 'FETCH_FAILED',
       errorMessage: error?.message || 'Failed to fetch affiliate stats',
+    });
+  }
+});
+
+/**
+ * GET /api/admin/affiliates/:merchantId/referrals
+ * List of merchants referred by a specific affiliate (admin view).
+ */
+router.get('/affiliates/:merchantId/referrals', async (req, res) => {
+  try {
+    const { merchantId } = req.params;
+
+    const referred = await prisma.merchant.findMany({
+      where: { referredBy: merchantId },
+      select: { id: true, email: true, name: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (referred.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const referredIds = referred.map((r) => r.id);
+    const activeRows = await prisma.affiliateCommission.findMany({
+      where: {
+        affiliateId: merchantId,
+        type: 'subscription',
+        status: { not: 'cancelled' },
+        referredMerchantId: { in: referredIds },
+      },
+      select: { referredMerchantId: true },
+      distinct: ['referredMerchantId'],
+    });
+    const activeSet = new Set(activeRows.map((r) => r.referredMerchantId));
+
+    res.json({
+      success: true,
+      data: referred.map((m) => ({
+        id: m.id,
+        email: m.email,
+        name: m.name,
+        signedUpAt: m.createdAt,
+        active: activeSet.has(m.id),
+      })),
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'FETCH_FAILED',
+      errorMessage: error?.message || 'Failed to fetch affiliate referrals',
     });
   }
 });
