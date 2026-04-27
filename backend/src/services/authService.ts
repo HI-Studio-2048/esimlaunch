@@ -374,7 +374,7 @@ class AuthService {
   /**
    * Reset password with token
    */
-  async resetPassword(token: string, newPassword: string): Promise<void> {
+  async resetPassword(token: string, newPassword: string): Promise<{ email: string; name: string | null }> {
     // Find valid reset token
     const resetToken = await prisma.passwordResetToken.findUnique({
       where: { token },
@@ -410,6 +410,8 @@ class AuthService {
         where: { merchantId: resetToken.merchantId },
       }),
     ]);
+
+    return { email: resetToken.merchant.email, name: resetToken.merchant.name };
   }
 
   /**

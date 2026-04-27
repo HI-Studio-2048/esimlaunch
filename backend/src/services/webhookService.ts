@@ -421,6 +421,7 @@ class WebhookService {
         })),
         customerName: customerOrder.customerName || undefined,
         storeName: customerOrder.store.businessName || customerOrder.store.name,
+        merchantId: customerOrder.store.merchantId,
       });
       console.log(`eSIM delivery email sent for order ${customerOrder.id}`);
       return { statusUpdated };

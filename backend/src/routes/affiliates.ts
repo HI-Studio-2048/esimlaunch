@@ -201,6 +201,24 @@ router.post('/payout-request', async (req, res, next) => {
       });
     });
 
+    // Notify merchant via email (fire-and-forget)
+    try {
+      const merchant = await prisma.merchant.findUnique({
+        where: { id: merchantId },
+        select: { email: true, name: true },
+      });
+      if (merchant?.email) {
+        const { emailService } = await import('../services/emailService');
+        emailService.sendAffiliatePayoutEmail({
+          email: merchant.email,
+          name: merchant.name || undefined,
+          amountCents: totalPayoutCents,
+        }).catch((err) => console.error('Affiliate payout email failed:', err));
+      }
+    } catch (err) {
+      console.error('Failed to look up merchant for payout email:', err);
+    }
+
     res.json({
       success: true,
       message: `$${(totalPayoutCents / 100).toFixed(2)} in commissions credited to your balance.`,

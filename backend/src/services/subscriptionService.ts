@@ -529,6 +529,27 @@ export const subscriptionService = {
         amountPaidCents: invoice.amount_paid,
       });
     }
+
+    if (event.type === 'invoice.payment_failed') {
+      try {
+        const merchant = await prisma.merchant.findUnique({
+          where: { id: dbSubscription.merchantId },
+          select: { email: true, name: true },
+        });
+        if (merchant?.email) {
+          const { emailService } = await import('./emailService');
+          await emailService.sendPaymentFailedEmail({
+            email: merchant.email,
+            name: merchant.name || undefined,
+            amountCents: invoice.amount_due || invoice.amount_remaining || 0,
+            currency: invoice.currency,
+            hostedInvoiceUrl: invoice.hosted_invoice_url,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to send payment-failed email:', err);
+      }
+    }
   },
 
   /**

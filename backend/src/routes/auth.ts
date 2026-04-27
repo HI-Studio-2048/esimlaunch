@@ -77,6 +77,11 @@ router.post('/register', authLimiter, async (req, res, next) => {
         console.warn('Referral tracking failed:', msg);
       }
     }
+    // Send welcome email to merchant (fire-and-forget)
+    emailService.sendMerchantWelcomeEmail({
+      email: result.merchant.email,
+      name: result.merchant.name || undefined,
+    }).catch((err) => console.error('Welcome email failed:', err));
     // Notify admin of new merchant signup (fire-and-forget)
     emailService.sendAdminNotification({
       subject: `[eSIMLaunch] New merchant signed up: ${result.merchant.email}`,
@@ -263,7 +268,13 @@ const resetPasswordSchema = z.object({
 router.post('/reset-password', async (req, res, next) => {
   try {
     const data = resetPasswordSchema.parse(req.body);
-    await authService.resetPassword(data.token, data.password);
+    const merchant = await authService.resetPassword(data.token, data.password);
+    if (merchant?.email) {
+      emailService.sendPasswordChangedEmail({
+        email: merchant.email,
+        name: merchant.name || undefined,
+      }).catch((err) => console.error('Password-changed email failed:', err));
+    }
     res.json({
       success: true,
       message: 'Password has been reset successfully',
@@ -376,6 +387,17 @@ router.put('/change-password', authenticateSessionOrJWT, async (req, res, next) 
   try {
     const data = changePasswordSchema.parse(req.body);
     await authService.changePassword(req.merchant!.id, data.currentPassword, data.newPassword);
+    try {
+      const merchant = await authService.getMerchantById(req.merchant!.id);
+      if (merchant?.email) {
+        emailService.sendPasswordChangedEmail({
+          email: merchant.email,
+          name: merchant.name || undefined,
+        }).catch((err) => console.error('Password-changed email failed:', err));
+      }
+    } catch (e) {
+      console.error('Failed to fetch merchant for password-changed email:', e);
+    }
     res.json({
       success: true,
       message: 'Password changed successfully',

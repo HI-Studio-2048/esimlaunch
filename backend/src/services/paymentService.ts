@@ -148,6 +148,9 @@ export const paymentService = {
       case 'customer.subscription.deleted':
         await this.handleSubscriptionEvent(event);
         break;
+      case 'customer.subscription.trial_will_end':
+        await this.handleTrialWillEnd(event.data.object as Stripe.Subscription);
+        break;
       case 'invoice.paid':
       case 'invoice.payment_failed':
         await this.handleInvoiceEvent(event);
@@ -171,6 +174,28 @@ export const paymentService = {
   async handleInvoiceEvent(event: Stripe.Event): Promise<void> {
     const { subscriptionService } = await import('./subscriptionService');
     await subscriptionService.handleInvoiceWebhook(event);
+  },
+
+  /**
+   * Stripe sends `customer.subscription.trial_will_end` ~3 days before the trial ends.
+   * One-shot per subscription, so we just email the merchant.
+   */
+  async handleTrialWillEnd(subscription: Stripe.Subscription): Promise<void> {
+    try {
+      const dbSub = await prisma.subscription.findUnique({
+        where: { stripeSubscriptionId: subscription.id },
+        include: { merchant: { select: { email: true, name: true } } },
+      });
+      if (!dbSub?.merchant?.email || !subscription.trial_end) return;
+      const { emailService } = await import('./emailService');
+      await emailService.sendTrialEndingEmail({
+        email: dbSub.merchant.email,
+        name: dbSub.merchant.name || undefined,
+        trialEndsAt: new Date(subscription.trial_end * 1000),
+      });
+    } catch (err) {
+      console.error('Failed to send trial-ending email:', err);
+    }
   },
 
   /**

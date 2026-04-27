@@ -328,6 +328,7 @@ export const emailService = {
     profiles,
     customerName,
     storeName,
+    merchantId,
   }: {
     email: string;
     order: { id: string; totalAmount: number; esimAccessOrderNo?: string };
@@ -341,8 +342,10 @@ export const emailService = {
     }>;
     customerName?: string;
     storeName?: string;
+    merchantId?: string;
   }): Promise<void> {
     const orderTrackingUrl = `${env.frontendUrl}/order-tracking?orderId=${order.id}`;
+    const merchantSmtp = merchantId ? await getMerchantSmtp(merchantId) : null;
 
     // Build QR code images HTML
     const qrCodeImages = qrCodes.map((qrCode, index) => {
@@ -403,7 +406,7 @@ export const emailService = {
               </div>
             </body>
           </html>`;
-      await sendEmail({ to: email, subject: 'Your eSIM is Ready! - QR Code Delivery', html: esimHtml });
+      await sendEmail({ to: email, subject: 'Your eSIM is Ready! - QR Code Delivery', html: esimHtml, merchantSmtp });
     } catch (error) {
       console.error('Failed to send eSIM delivery email:', error);
       throw new Error('Failed to send eSIM delivery email');
@@ -567,6 +570,246 @@ export const emailService = {
     } catch (error) {
       console.error('Failed to send ticket reply notification email:', error);
       throw error;
+    }
+  },
+
+  /**
+   * Send merchant welcome email after successful signup.
+   */
+  async sendMerchantWelcomeEmail({ email, name }: { email: string; name?: string }): Promise<void> {
+    if (!env.resendApiKey) {
+      console.warn('RESEND_API_KEY not configured, skipping email send');
+      return;
+    }
+    const dashboardUrl = `${env.frontendUrl}/dashboard`;
+    try {
+      await resend.emails.send({
+        from: env.resendFromEmail,
+        to: email,
+        subject: 'Welcome to eSIM Launch 🚀',
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+              <div style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+                <h1 style="color:#fff;margin:0;font-size:24px;">eSIM Launch</h1>
+              </div>
+              <div style="background:#fff;padding:40px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;">
+                <h2 style="color:#1f2937;margin-top:0;">Welcome aboard${name ? `, ${name}` : ''}!</h2>
+                <p style="color:#6b7280;">Your eSIM Launch account is ready. You can now start building your eSIM business — pick packages, configure your store, and go live.</p>
+                <div style="background:#f0fdf4;border:2px solid #22c55e;border-radius:8px;padding:20px;margin:20px 0;">
+                  <h3 style="color:#15803d;margin-top:0;">Next steps:</h3>
+                  <ol style="color:#166534;padding-left:20px;margin:10px 0;">
+                    <li style="margin:5px 0;">Pick the eSIM packages you want to resell</li>
+                    <li style="margin:5px 0;">Set your pricing and markup</li>
+                    <li style="margin:5px 0;">Connect your store domain</li>
+                    <li style="margin:5px 0;">Start a 7-day free trial of any plan</li>
+                  </ol>
+                </div>
+                <div style="text-align:center;margin:30px 0;">
+                  <a href="${dashboardUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);color:#fff;padding:12px 30px;text-decoration:none;border-radius:6px;font-weight:600;">Open Dashboard</a>
+                </div>
+                <p style="color:#6b7280;font-size:14px;">Questions? Reply to this email — we read every one.</p>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0;">
+                <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">© ${new Date().getFullYear()} eSIM Launch. All rights reserved.</p>
+              </div>
+            </body>
+          </html>`,
+      });
+    } catch (error) {
+      console.error('Failed to send welcome email:', error);
+    }
+  },
+
+  /**
+   * Confirm to user that their password was changed (security best-practice).
+   */
+  async sendPasswordChangedEmail({ email, name }: { email: string; name?: string }): Promise<void> {
+    if (!env.resendApiKey) {
+      console.warn('RESEND_API_KEY not configured, skipping email send');
+      return;
+    }
+    const supportUrl = `${env.frontendUrl}/support`;
+    try {
+      await resend.emails.send({
+        from: env.resendFromEmail,
+        to: email,
+        subject: 'Your password was changed',
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+              <div style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+                <h1 style="color:#fff;margin:0;font-size:24px;">eSIM Launch</h1>
+              </div>
+              <div style="background:#fff;padding:40px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;">
+                <h2 style="color:#1f2937;margin-top:0;">Password changed</h2>
+                <p style="color:#6b7280;">Hello${name ? ` ${name}` : ''},</p>
+                <p style="color:#6b7280;">The password for your eSIM Launch account was just changed at ${new Date().toUTCString()}.</p>
+                <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:8px;padding:15px;margin:20px 0;">
+                  <p style="color:#92400e;margin:0;font-size:14px;"><strong>Didn't make this change?</strong> Reset your password immediately and contact support — your account may be compromised.</p>
+                </div>
+                <div style="text-align:center;margin:30px 0;">
+                  <a href="${supportUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);color:#fff;padding:12px 30px;text-decoration:none;border-radius:6px;font-weight:600;">Contact Support</a>
+                </div>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0;">
+                <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">© ${new Date().getFullYear()} eSIM Launch. All rights reserved.</p>
+              </div>
+            </body>
+          </html>`,
+      });
+    } catch (error) {
+      console.error('Failed to send password-changed email:', error);
+    }
+  },
+
+  /**
+   * Notify merchant that a subscription invoice payment failed.
+   */
+  async sendPaymentFailedEmail({
+    email,
+    name,
+    amountCents,
+    currency,
+    hostedInvoiceUrl,
+  }: {
+    email: string;
+    name?: string;
+    amountCents: number;
+    currency: string;
+    hostedInvoiceUrl?: string | null;
+  }): Promise<void> {
+    if (!env.resendApiKey) {
+      console.warn('RESEND_API_KEY not configured, skipping email send');
+      return;
+    }
+    const billingUrl = `${env.frontendUrl}/dashboard/billing`;
+    const amountStr = `${currency.toUpperCase()} ${(amountCents / 100).toFixed(2)}`;
+    try {
+      await resend.emails.send({
+        from: env.resendFromEmail,
+        to: email,
+        subject: 'Action required: payment failed',
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+              <div style="background:linear-gradient(135deg,#ef4444 0%,#f97316 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+                <h1 style="color:#fff;margin:0;font-size:24px;">eSIM Launch</h1>
+              </div>
+              <div style="background:#fff;padding:40px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;">
+                <h2 style="color:#1f2937;margin-top:0;">Your payment didn't go through</h2>
+                <p style="color:#6b7280;">Hello${name ? ` ${name}` : ''},</p>
+                <p style="color:#6b7280;">We weren't able to charge your payment method for ${amountStr}. Stripe will automatically retry over the next few days, but to avoid any service interruption, please update your card.</p>
+                <div style="text-align:center;margin:30px 0;">
+                  <a href="${hostedInvoiceUrl || billingUrl}" style="display:inline-block;background:linear-gradient(135deg,#ef4444 0%,#f97316 100%);color:#fff;padding:12px 30px;text-decoration:none;border-radius:6px;font-weight:600;">Update Payment Method</a>
+                </div>
+                <p style="color:#6b7280;font-size:14px;">If your subscription stays unpaid, your store may be paused until the issue is resolved.</p>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0;">
+                <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">© ${new Date().getFullYear()} eSIM Launch. All rights reserved.</p>
+              </div>
+            </body>
+          </html>`,
+      });
+    } catch (error) {
+      console.error('Failed to send payment-failed email:', error);
+    }
+  },
+
+  /**
+   * Notify merchant that their free trial is ending soon.
+   * Triggered by Stripe `customer.subscription.trial_will_end` (~3 days before).
+   */
+  async sendTrialEndingEmail({
+    email,
+    name,
+    trialEndsAt,
+  }: {
+    email: string;
+    name?: string;
+    trialEndsAt: Date;
+  }): Promise<void> {
+    if (!env.resendApiKey) {
+      console.warn('RESEND_API_KEY not configured, skipping email send');
+      return;
+    }
+    const billingUrl = `${env.frontendUrl}/dashboard/billing`;
+    try {
+      await resend.emails.send({
+        from: env.resendFromEmail,
+        to: email,
+        subject: 'Your eSIM Launch trial ends soon',
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+              <div style="background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+                <h1 style="color:#fff;margin:0;font-size:24px;">eSIM Launch</h1>
+              </div>
+              <div style="background:#fff;padding:40px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;">
+                <h2 style="color:#1f2937;margin-top:0;">Your trial ends in 3 days</h2>
+                <p style="color:#6b7280;">Hello${name ? ` ${name}` : ''},</p>
+                <p style="color:#6b7280;">Your free trial ends on <strong>${trialEndsAt.toUTCString()}</strong>. After that, your card will be charged and your subscription becomes active.</p>
+                <p style="color:#6b7280;">If you don't want to continue, cancel anytime from the billing page — you won't be charged.</p>
+                <div style="text-align:center;margin:30px 0;">
+                  <a href="${billingUrl}" style="display:inline-block;background:linear-gradient(135deg,#6366f1 0%,#8b5cf6 100%);color:#fff;padding:12px 30px;text-decoration:none;border-radius:6px;font-weight:600;">Manage Subscription</a>
+                </div>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0;">
+                <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">© ${new Date().getFullYear()} eSIM Launch. All rights reserved.</p>
+              </div>
+            </body>
+          </html>`,
+      });
+    } catch (error) {
+      console.error('Failed to send trial-ending email:', error);
+    }
+  },
+
+  /**
+   * Notify affiliate that a payout has been credited to their balance.
+   */
+  async sendAffiliatePayoutEmail({
+    email,
+    name,
+    amountCents,
+  }: {
+    email: string;
+    name?: string;
+    amountCents: number;
+  }): Promise<void> {
+    if (!env.resendApiKey) {
+      console.warn('RESEND_API_KEY not configured, skipping email send');
+      return;
+    }
+    const dashboardUrl = `${env.frontendUrl}/dashboard/affiliates`;
+    const amountStr = `$${(amountCents / 100).toFixed(2)}`;
+    try {
+      await resend.emails.send({
+        from: env.resendFromEmail,
+        to: email,
+        subject: `Affiliate payout: ${amountStr} credited`,
+        html: `
+          <!DOCTYPE html>
+          <html>
+            <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;">
+              <div style="background:linear-gradient(135deg,#22c55e 0%,#10b981 100%);padding:30px;text-align:center;border-radius:10px 10px 0 0;">
+                <h1 style="color:#fff;margin:0;font-size:24px;">eSIM Launch</h1>
+              </div>
+              <div style="background:#fff;padding:40px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 10px 10px;">
+                <h2 style="color:#1f2937;margin-top:0;">Payout credited 💸</h2>
+                <p style="color:#6b7280;">Hello${name ? ` ${name}` : ''},</p>
+                <p style="color:#6b7280;">Great news — <strong>${amountStr}</strong> in affiliate commissions has been credited to your eSIM Launch balance. You can use it to fund eSIM purchases or request a withdrawal.</p>
+                <div style="text-align:center;margin:30px 0;">
+                  <a href="${dashboardUrl}" style="display:inline-block;background:linear-gradient(135deg,#22c55e 0%,#10b981 100%);color:#fff;padding:12px 30px;text-decoration:none;border-radius:6px;font-weight:600;">View Affiliate Dashboard</a>
+                </div>
+                <hr style="border:none;border-top:1px solid #e5e7eb;margin:30px 0;">
+                <p style="color:#9ca3af;font-size:12px;text-align:center;margin:0;">© ${new Date().getFullYear()} eSIM Launch. All rights reserved.</p>
+              </div>
+            </body>
+          </html>`,
+      });
+    } catch (error) {
+      console.error('Failed to send affiliate payout email:', error);
     }
   },
 
