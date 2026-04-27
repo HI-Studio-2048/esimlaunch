@@ -19,11 +19,11 @@ export const MILESTONE_BOUNTIES: ReadonlyArray<{
   threshold: number;
   amountCents: number;
 }> = [
-  { key: 'milestone_1',  threshold: 1,  amountCents: 2500 },
-  { key: 'milestone_5',  threshold: 5,  amountCents: 10000 },
-  { key: 'milestone_10', threshold: 10, amountCents: 25000 },
-  { key: 'milestone_25', threshold: 25, amountCents: 75000 },
-  { key: 'milestone_50', threshold: 50, amountCents: 200000 },
+  { key: 'milestone_1',  threshold: 1,  amountCents: 1000 },
+  { key: 'milestone_5',  threshold: 5,  amountCents: 5000 },
+  { key: 'milestone_10', threshold: 10, amountCents: 12500 },
+  { key: 'milestone_25', threshold: 25, amountCents: 30000 },
+  { key: 'milestone_50', threshold: 50, amountCents: 75000 },
 ] as const;
 
 export const WEEKLY_GOALS: ReadonlyArray<{
@@ -31,14 +31,14 @@ export const WEEKLY_GOALS: ReadonlyArray<{
   target: number;
   amountCents: number;
 }> = [
-  { key: 'bronze', target: 1, amountCents: 2000 },
-  { key: 'silver', target: 3, amountCents: 7500 },
-  { key: 'gold',   target: 5, amountCents: 15000 },
+  { key: 'bronze', target: 1, amountCents: 1000 },
+  { key: 'silver', target: 3, amountCents: 3000 },
+  { key: 'gold',   target: 5, amountCents: 6000 },
 ] as const;
 
 export const MONTHLY_CHALLENGE = {
   target: 3,
-  amountCents: 15000,
+  amountCents: 5000,
 } as const;
 
 export const HANDLE_REGEX = /^[a-zA-Z0-9_]{3,20}$/;

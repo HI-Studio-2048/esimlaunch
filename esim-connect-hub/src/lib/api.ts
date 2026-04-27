@@ -1112,10 +1112,23 @@ class ApiClient {
       pendingCommissions: number;
       paidCommissions: number;
       referredMerchants: number;
+      activeReferredMerchants: number;
       clicksAllTime: number;
       clicks30d: number;
       conversionRate: number;
     }>('/api/affiliates/stats');
+  }
+
+  async getAffiliateReferrals() {
+    return this.request<Array<{
+      id: string;
+      email: string;
+      name: string | null;
+      handle: string | null;
+      signedUpAt: string;
+      active: boolean;
+      activeSince: string | null;
+    }>>('/api/affiliates/referrals');
   }
 
   async getAffiliateLeaderboard(range: 'all' | 'month' | 'week' = 'all') {

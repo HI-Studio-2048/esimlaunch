@@ -38,7 +38,7 @@ export function HandleEditor({ initialHandle }: { initialHandle: string | null }
     <div className="flex items-end gap-2">
       <div className="flex-1">
         <Label>Public handle (shown on the leaderboard)</Label>
-        <Input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="ezza_w" />
+        <Input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="your_handle" />
         {!valid && handle.length > 0 && (
           <div className="text-xs text-red-600 mt-1">3–20 characters, letters/numbers/underscore only.</div>
         )}

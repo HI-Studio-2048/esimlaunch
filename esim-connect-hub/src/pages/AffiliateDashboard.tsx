@@ -6,7 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Copy, DollarSign, Link as LinkIcon } from "lucide-react";
+import { Loader2, Copy, DollarSign, Link as LinkIcon, Users, CheckCircle2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiClient } from "@/lib/api";
@@ -42,6 +49,31 @@ function OverviewTab() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRequestingPayout, setIsRequestingPayout] = useState(false);
   const [typeFilter, setTypeFilter] = useState<CommissionTypeFilter>("all");
+  const [referralsOpen, setReferralsOpen] = useState<null | "all" | "active">(null);
+  const [referrals, setReferrals] = useState<any[]>([]);
+  const [referralsLoading, setReferralsLoading] = useState(false);
+
+  const openReferrals = async (mode: "all" | "active") => {
+    setReferralsOpen(mode);
+    if (referrals.length > 0) return;
+    setReferralsLoading(true);
+    try {
+      const data = await apiClient.getAffiliateReferrals();
+      setReferrals(data || []);
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err?.message || "Failed to load referrals",
+        variant: "destructive",
+      });
+    } finally {
+      setReferralsLoading(false);
+    }
+  };
+
+  const visibleReferrals = referralsOpen === "active"
+    ? referrals.filter((r) => r.active)
+    : referrals;
 
   useEffect(() => {
     loadAffiliateData();
@@ -249,7 +281,7 @@ function OverviewTab() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid md:grid-cols-3 lg:grid-cols-6 gap-6">
+        <div className="grid md:grid-cols-3 lg:grid-cols-7 gap-6">
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
@@ -296,16 +328,102 @@ function OverviewTab() {
               </div>
             </CardContent>
           </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">Referred Merchants</p>
-                <p className="text-2xl font-bold">{stats.referredMerchants}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <button
+            type="button"
+            onClick={() => openReferrals("all")}
+            className="text-left"
+          >
+            <Card className="hover:bg-muted/40 transition-colors cursor-pointer h-full">
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                    <Users className="h-3.5 w-3.5" /> Referred Merchants
+                  </p>
+                  <p className="text-2xl font-bold">{stats.referredMerchants}</p>
+                  <p className="text-xs text-muted-foreground mt-1">click to view</p>
+                </div>
+              </CardContent>
+            </Card>
+          </button>
+          <button
+            type="button"
+            onClick={() => openReferrals("active")}
+            className="text-left"
+          >
+            <Card className="hover:bg-muted/40 transition-colors cursor-pointer h-full border-green-500/30">
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground flex items-center justify-center gap-1">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-green-600" /> Active Referrals
+                  </p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {stats.activeReferredMerchants ?? 0}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">subscribed &amp; counting</p>
+                </div>
+              </CardContent>
+            </Card>
+          </button>
         </div>
       )}
+
+      <Dialog open={referralsOpen !== null} onOpenChange={(open) => !open && setReferralsOpen(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {referralsOpen === "active" ? "Active Referred Merchants" : "Referred Merchants"}
+            </DialogTitle>
+            <DialogDescription>
+              {referralsOpen === "active"
+                ? "Merchants from your referrals who are currently subscribed. Only active referrals count toward bounties, weekly goals, and tier progress."
+                : "Everyone who signed up with your referral code. Active = subscribed; only active referrals count toward bounties and goals."}
+            </DialogDescription>
+          </DialogHeader>
+          {referralsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : visibleReferrals.length === 0 ? (
+            <div className="text-center py-10 text-sm text-muted-foreground">
+              {referralsOpen === "active"
+                ? "No active referrals yet. They become active once they start a paid subscription."
+                : "No referrals yet. Share your link to start!"}
+            </div>
+          ) : (
+            <div className="max-h-[60vh] overflow-y-auto -mx-1">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Merchant</TableHead>
+                    <TableHead>Signed up</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleReferrals.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>
+                        <div className="font-medium">{r.name || r.email}</div>
+                        <div className="text-xs text-muted-foreground">{r.email}</div>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {new Date(r.signedUpAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell>
+                        {r.active ? (
+                          <Badge className="bg-green-600 hover:bg-green-600">Active</Badge>
+                        ) : (
+                          <Badge variant="secondary">Signed up</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Commissions */}
       <Card>

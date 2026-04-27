@@ -247,6 +247,72 @@ router.post('/track-referral', async (req, res, next) => {
   }
 });
 
+/**
+ * GET /api/affiliates/referrals
+ * List all merchants who signed up with this affiliate's referral code.
+ * Marks each as `active` if they have at least one non-cancelled subscription
+ * commission (same definition used by tier/bounty calculations).
+ */
+router.get('/referrals', async (req, res) => {
+  try {
+    const merchantId = (req as any).merchant!.id;
+    const { prisma } = await import('../lib/prisma');
+
+    const referred = await prisma.merchant.findMany({
+      where: { referredBy: merchantId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        createdAt: true,
+        affiliateHandle: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (referred.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const referredIds = referred.map((r) => r.id);
+    const activeCommissions = await prisma.affiliateCommission.findMany({
+      where: {
+        affiliateId: merchantId,
+        type: 'subscription',
+        status: { not: 'cancelled' },
+        referredMerchantId: { in: referredIds },
+      },
+      select: { referredMerchantId: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const activeMap = new Map<string, Date>();
+    for (const c of activeCommissions) {
+      if (c.referredMerchantId && !activeMap.has(c.referredMerchantId)) {
+        activeMap.set(c.referredMerchantId, c.createdAt);
+      }
+    }
+
+    const data = referred.map((r) => ({
+      id: r.id,
+      email: r.email,
+      name: r.name,
+      handle: r.affiliateHandle,
+      signedUpAt: r.createdAt,
+      active: activeMap.has(r.id),
+      activeSince: activeMap.get(r.id) ?? null,
+    }));
+
+    res.json({ success: true, data });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      errorCode: 'FETCH_FAILED',
+      errorMessage: error.message || 'Failed to fetch referrals',
+    });
+  }
+});
+
 router.get('/me/gamification', async (req, res) => {
   try {
     const merchantId = (req as any).merchant!.id;
