@@ -1,8 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import Globe from "react-globe.gl";
-import { ChevronDown, Globe as GlobeIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Globe as GlobeIcon } from "lucide-react";
 
 const CITIES = [
   { lat: 51.5074, lng: -0.1278, name: "London" },
@@ -45,7 +43,6 @@ const COVERAGE_STATS = [
 ];
 
 export function LiveGlobeView() {
-  const [expanded, setExpanded] = useState(false);
   const [arcsData] = useState(() => generateArcs());
 
   const pointsData = useMemo(
@@ -58,11 +55,7 @@ export function LiveGlobeView() {
 
   return (
     <div className="rounded-2xl border border-border overflow-hidden bg-[#0a0a12]">
-      {/* Clickable header — always visible */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center justify-between w-full px-5 py-3 border-b border-white/10 bg-black/30 hover:bg-white/5 transition-colors text-left"
-      >
+      <div className="flex items-center w-full px-5 py-3 border-b border-white/10 bg-black/30">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-lg bg-primary/20 flex items-center justify-center">
             <GlobeIcon className="w-3.5 h-3.5 text-primary" />
@@ -74,64 +67,47 @@ export function LiveGlobeView() {
             </p>
           </div>
         </div>
-        <motion.div animate={{ rotate: expanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-        </motion.div>
-      </button>
+      </div>
 
-      {/* Collapsible content */}
-      <AnimatePresence>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <div className="relative h-[260px] w-full">
-              <Globe
-                width={undefined}
-                height={260}
-                globeImageUrl="/earth-blue-marble.jpg"
-                bumpImageUrl="/earth-topology.png"
-                backgroundColor="#0a0a12"
-                backgroundImageUrl="/night-sky.png"
-                showAtmosphere={true}
-                atmosphereColor="#22d3ee"
-                atmosphereAltitude={0.2}
-                pointsData={pointsData}
-                pointLat="lat"
-                pointLng="lng"
-                pointLabel={pointLabel}
-                pointColor={() => "#22d3ee"}
-                pointAltitude={0.015}
-                pointRadius={0.35}
-                arcsData={arcsData}
-                arcStartLat="startLat"
-                arcStartLng="startLng"
-                arcEndLat="endLat"
-                arcEndLng="endLng"
-                arcColor={arcColor}
-                arcStroke={0.2}
-                arcDashLength={0.4}
-                arcDashGap={0.2}
-                arcDashAnimateTime={2000}
-              />
-            </div>
+      <div className="relative h-[260px] w-full">
+        <Globe
+          width={undefined}
+          height={260}
+          globeImageUrl="/earth-blue-marble.jpg"
+          bumpImageUrl="/earth-topology.png"
+          backgroundColor="#0a0a12"
+          backgroundImageUrl="/night-sky.png"
+          showAtmosphere={true}
+          atmosphereColor="#22d3ee"
+          atmosphereAltitude={0.2}
+          pointsData={pointsData}
+          pointLat="lat"
+          pointLng="lng"
+          pointLabel={pointLabel}
+          pointColor={() => "#22d3ee"}
+          pointAltitude={0.015}
+          pointRadius={0.35}
+          arcsData={arcsData}
+          arcStartLat="startLat"
+          arcStartLng="startLng"
+          arcEndLat="endLat"
+          arcEndLng="endLng"
+          arcColor={arcColor}
+          arcStroke={0.2}
+          arcDashLength={0.4}
+          arcDashGap={0.2}
+          arcDashAnimateTime={2000}
+        />
+      </div>
 
-            {/* Coverage stats — honest, factual */}
-            <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
-              {COVERAGE_STATS.map((s) => (
-                <div key={s.label} className="px-4 py-3 text-center">
-                  <p className="text-lg font-bold gradient-text">{s.value}</p>
-                  <p className="text-[11px] text-muted-foreground">{s.label}</p>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className="grid grid-cols-3 divide-x divide-white/10 border-t border-white/10">
+        {COVERAGE_STATS.map((s) => (
+          <div key={s.label} className="px-4 py-3 text-center">
+            <p className="text-lg font-bold gradient-text">{s.value}</p>
+            <p className="text-[11px] text-muted-foreground">{s.label}</p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

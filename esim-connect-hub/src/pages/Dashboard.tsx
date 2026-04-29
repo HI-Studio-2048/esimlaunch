@@ -369,6 +369,10 @@ export default function Dashboard() {
       </div>
 
       <div className="container-custom py-8 relative z-10">
+        <div className="mb-8">
+          <LiveGlobeView />
+        </div>
+
         {/* Balance top-up indicator (visible for Easy + Advanced) */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -743,11 +747,6 @@ export default function Dashboard() {
             </div>
           </motion.div>
         )}
-
-        {/* Network Globe — collapsed by default, below stats/actions */}
-        <div className="mb-8">
-          <LiveGlobeView />
-        </div>
 
 {/* Recent Orders */}
         <motion.div
